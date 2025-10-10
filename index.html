@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transform Warranty Service - FeedbackNFC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .gradient-bg::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, transparent 50%, rgba(255,255,255,0.05) 100%);
+            pointer-events: none;
+        }
+        
+        .gradient-bg::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: float 20s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        .stat-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .feature-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .challenge-card {
+            border-left: 4px solid #ef4444;
+            transition: all 0.3s ease;
+        }
+
+        .challenge-card:hover {
+            border-left-color: #dc2626;
+            background: #fef2f2;
+        }
+
+        .perfect-for-card {
+            transition: all 0.3s ease;
+        }
+
+        .perfect-for-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+
+        /* Workflow Animation - Sequential */
+        @keyframes pulse-glow {
+            0% {
+                box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+                transform: scale(1);
+                background: rgba(255, 255, 255, 0.2);
+            }
+            20% {
+                box-shadow: 0 0 40px rgba(255, 255, 255, 0.8), 0 0 60px rgba(167, 139, 250, 0.6);
+                transform: scale(1.1);
+                background: rgba(255, 255, 255, 0.4);
+            }
+            40%, 100% {
+                box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+                transform: scale(1);
+                background: rgba(255, 255, 255, 0.2);
+            }
+        }
+
+        .workflow-step {
+            animation: pulse-glow 5s ease-in-out infinite;
+        }
+
+        /* Each step starts 0.5s after the previous */
+        .workflow-step:nth-of-type(1) {
+            animation-delay: 0s;
+        }
+
+        .workflow-step:nth-of-type(3) {
+            animation-delay: 1s;
+        }
+
+        .workflow-step:nth-of-type(5) {
+            animation-delay: 2s;
+        }
+
+        .workflow-step:nth-of-type(7) {
+            animation-delay: 3s;
+        }
+
+        .workflow-step:nth-of-type(9) {
+            animation-delay: 4s;
+        }
+
+        @keyframes arrow-flow {
+            0% { 
+                opacity: 0.4; 
+                transform: translateX(-5px); 
+            }
+            20% { 
+                opacity: 1; 
+                transform: translateX(5px);
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            }
+            40%, 100% { 
+                opacity: 0.4; 
+                transform: translateX(0); 
+            }
+        }
+
+        .workflow-arrow {
+            animation: arrow-flow 5s ease-in-out infinite;
+        }
+
+        /* Arrows start 0.5s after their preceding box */
+        .workflow-arrow:nth-of-type(2) {
+            animation-delay: 0.5s;
+        }
+
+        .workflow-arrow:nth-of-type(4) {
+            animation-delay: 1.5s;
+        }
+
+        .workflow-arrow:nth-of-type(6) {
+            animation-delay: 2.5s;
+        }
+
+        .workflow-arrow:nth-of-type(8) {
+            animation-delay: 3.5s;
+        }
+        /* Sticky header styles */
+        .header-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .header-scrolled {
+            background: rgba(15, 23, 42, 0.95);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header / Navigation -->
+    <header class="header-sticky bg-slate-900/80 text-white">
+        <nav class="max-w-7xl mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <!-- Logo -->
+                <div class="flex items-center">
+                    <a href="/" class="flex items-center space-x-4 group">
+                        <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-20 md:h-24 w-auto transition-transform group-hover:scale-105">
+                        <span class="text-3xl md:text-4xl font-bold tracking-tight">FeedbackNFC</span>
+                    </a>
+                </div>
+
+                <!-- Desktop Navigation -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
+                    <a href="#how-it-works" class="text-gray-300 hover:text-white transition-colors">How It Works</a>
+                    <a href="#perfect-for" class="text-gray-300 hover:text-white transition-colors">Solutions</a>
+                    <a href="#faq" class="text-gray-300 hover:text-white transition-colors">FAQ</a>
+                    <button onclick="openModal('demo')" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold transition-all">
+                        Request Demo
+                    </button>
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <button id="mobileMenuBtn" class="md:hidden text-white p-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Mobile Navigation -->
+            <div id="mobileMenu" class="hidden md:hidden mt-4 pb-4 border-t border-slate-700">
+                <div class="flex flex-col space-y-4 pt-4">
+                    <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
+                    <a href="#how-it-works" class="text-gray-300 hover:text-white transition-colors">How It Works</a>
+                    <a href="#perfect-for" class="text-gray-300 hover:text-white transition-colors">Solutions</a>
+                    <a href="#faq" class="text-gray-300 hover:text-white transition-colors">FAQ</a>
+                    <button onclick="openModal('demo')" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold transition-all text-left">
+                        Request Demo
+                    </button>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white py-16 px-6 relative overflow-hidden">
+        <!-- Subtle background pattern -->
+        <div class="absolute inset-0 opacity-10">
+            <div class="absolute inset-0" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 40px 40px;"></div>
+        </div>
+
+        <div class="max-w-7xl mx-auto relative z-10">
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <!-- Left Column: Content -->
+                <div>
+                    <h1 class="text-4xl md:text-6xl font-bold mb-6 leading-tight">
+                        Warranty Service<br/>
+                        <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">Without the Complexity</span>
+                    </h1>
+
+                    <p class="text-xl text-slate-300 mb-8 leading-relaxed">
+                        Transform warranty claims from a 2-hour phone ordeal into a 30-second tap. Zero training required for customers or staff.
+                    </p>
+
+                    <!-- Key Metrics - Compact -->
+                    <div class="grid grid-cols-4 gap-4 mb-8">
+                        <div class="text-center">
+                            <div class="text-3xl font-bold text-blue-400 mb-1">0</div>
+                            <div class="text-xs text-slate-400">Training</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-3xl font-bold text-cyan-400 mb-1">30s</div>
+                            <div class="text-xs text-slate-400">Request Time</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-3xl font-bold text-green-400 mb-1">100%</div>
+                            <div class="text-xs text-slate-400">Registration</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-3xl font-bold text-emerald-400 mb-1">70%</div>
+                            <div class="text-xs text-slate-400">Cost Cut</div>
+                        </div>
+                    </div>
+
+                    <!-- CTA Buttons -->
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button onclick="openModal('pilot')" class="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/25">
+                            Start Free Pilot
+                            <svg class="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                            </svg>
+                        </button>
+                        <button onclick="openModal('demo')" class="inline-flex items-center justify-center border-2 border-slate-600 hover:border-slate-500 hover:bg-slate-800/50 text-white px-6 py-3 rounded-lg font-semibold transition-all">
+                            Request Demo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Column: Visual Comparison -->
+                <div class="lg:pl-8">
+                    <div class="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
+                        <h3 class="text-lg font-semibold text-center mb-6 text-slate-200">From Hours to Seconds</h3>
+
+                        <!-- Traditional Process -->
+                        <div class="mb-6 p-4 bg-red-500/5 rounded-xl border border-red-500/20">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-semibold text-red-300">Traditional</span>
+                                <span class="text-xl font-bold text-red-400">2+ hrs</span>
+                            </div>
+                            <div class="flex items-center gap-1 text-xs">
+                                <span class="bg-red-500/20 px-2 py-1 rounded text-red-200">Call</span>
+                                <span class="text-red-400/50">→</span>
+                                <span class="bg-red-500/20 px-2 py-1 rounded text-red-200">Wait</span>
+                                <span class="text-red-400/50">→</span>
+                                <span class="bg-red-500/20 px-2 py-1 rounded text-red-200">Forms</span>
+                                <span class="text-red-400/50">→</span>
+                                <span class="bg-red-500/20 px-2 py-1 rounded text-red-200">Callback</span>
+                            </div>
+                        </div>
+
+                        <!-- FeedbackNFC Process -->
+                        <div class="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/20">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-semibold text-emerald-300">FeedbackNFC</span>
+                                <span class="text-xl font-bold text-emerald-400">30 sec</span>
+                            </div>
+                            <div class="flex items-center gap-1 text-xs">
+                                <span class="bg-emerald-500/20 px-2 py-1 rounded text-emerald-200">Tap NFC</span>
+                                <span class="text-emerald-400/50">→</span>
+                                <span class="bg-emerald-500/20 px-2 py-1 rounded text-emerald-200">AI Assigns</span>
+                                <span class="text-emerald-400/50">→</span>
+                                <span class="bg-emerald-500/20 px-2 py-1 rounded text-emerald-200">Done</span>
+                            </div>
+                        </div>
+
+                        <!-- Speed Badge -->
+                        <div class="text-center mt-4">
+                            <span class="inline-flex items-center gap-2 text-sm font-semibold text-blue-300">
+                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                                </svg>
+                                96% Faster • Zero Phone Calls
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Current Warranty Challenges -->
+    <section class="py-20 px-6 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold text-gray-900 mb-4">Current Warranty Challenges</h2>
+                <p class="text-xl text-gray-600">Pain points manufacturers and distributors face every day</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="challenge-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="flex items-start mb-4">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Customer Frustration</h3>
+                            <p class="text-gray-600">Customers spend 1-2 hours on phone calls trying to get warranty service. Long wait times, unclear processes, and manual data entry create terrible experiences.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="challenge-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="flex items-start mb-4">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">High Service Costs</h3>
+                            <p class="text-gray-600">Wrong part trips (15-20%), manual dispatching (45 min/call), and call center overhead drain profit margins. Service coordination costs spiral out of control.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="challenge-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="flex items-start mb-4">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Warranty Activation Mystery</h3>
+                            <p class="text-gray-600">When does warranty actually start? Manufacturing date? Sale date? Customer never registered (70% don't). Leads to disputes, lost goodwill, and compliance issues.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="challenge-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="flex items-start mb-4">
+                        <div class="bg-red-100 p-3 rounded-lg mr-4">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Distributor Cashflow Nightmare</h3>
+                            <p class="text-gray-600">Service centers pay technicians upfront, wait 60-90 days for manufacturer reimbursement. 15-25% of claims rejected for "insufficient documentation."</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution: Context-Aware Experience -->
+    <section class="py-20 px-6 bg-gradient-to-br from-purple-50 to-blue-50">
+        <div class="max-w-6xl mx-auto text-center">
+            <h2 class="text-4xl font-bold text-gray-900 mb-4">One Sticker. Infinite Possibilities.</h2>
+            <p class="text-xl text-gray-600 mb-12 max-w-3xl mx-auto">
+                The same NFC sticker transforms based on context - showing exactly what each person needs, when they need it, without any confusion or training.
+            </p>
+
+            <!-- Interactive Demo Preview -->
+            <div class="bg-white rounded-3xl shadow-2xl p-12 floating">
+                <div class="mb-6 flex justify-center">
+                    <i data-lucide="sparkles" class="w-16 h-16 text-purple-600"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-900 mb-4">Context-Aware Interface</h3>
+                <p class="text-gray-600 mb-8">Same sticker, completely different experience based on user role and situation</p>
+                
+                <!-- Role-Based Experiences -->
+                <div class="grid md:grid-cols-3 gap-6 text-left mb-8">
+                    <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-xl border-2 border-purple-200">
+                        <div class="mb-3">
+                            <i data-lucide="user" class="w-8 h-8 text-purple-600"></i>
+                        </div>
+                        <div class="font-bold text-gray-900 mb-2">Customer Experience</div>
+                        <div class="text-sm text-gray-600 mb-3">Simple, friendly interface</div>
+                        <ul class="text-xs text-gray-500 space-y-1">
+                            <li>• Pre-filled product details</li>
+                            <li>• One-tap service request</li>
+                            <li>• Real-time status updates</li>
+                            <li>• Multi-language support</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border-2 border-blue-200">
+                        <div class="mb-3">
+                            <i data-lucide="wrench" class="w-8 h-8 text-blue-600"></i>
+                        </div>
+                        <div class="font-bold text-gray-900 mb-2">Technician Experience</div>
+                        <div class="text-sm text-gray-600 mb-3">Professional work interface</div>
+                        <ul class="text-xs text-gray-500 space-y-1">
+                            <li>• Complete asset history</li>
+                            <li>• Parts inventory check</li>
+                            <li>• Customer contact info</li>
+                            <li>• Photo documentation</li>
+                        </ul>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border-2 border-green-200">
+                        <div class="mb-3">
+                            <i data-lucide="bar-chart-3" class="w-8 h-8 text-green-600"></i>
+                        </div>
+                        <div class="font-bold text-gray-900 mb-2">Manager Experience</div>
+                        <div class="text-sm text-gray-600 mb-3">Analytics and oversight</div>
+                        <ul class="text-xs text-gray-500 space-y-1">
+                            <li>• Performance metrics</li>
+                            <li>• Cost tracking</li>
+                            <li>• Compliance reports</li>
+                            <li>• ROI analysis</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Smart Context Detection -->
+                <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
+                    <div class="mb-3 flex justify-center">
+                        <i data-lucide="brain" class="w-8 h-8 text-indigo-600"></i>
+                    </div>
+                    <div class="font-bold text-gray-900 mb-2">Smart Context Detection</div>
+                    <div class="text-sm text-gray-600">
+                        The system automatically detects who's tapping and what they need: 
+                        <span class="font-semibold text-purple-600">Customer</span> → Service Request | 
+                        <span class="font-semibold text-blue-600">Technician</span> → Work Order | 
+                        <span class="font-semibold text-green-600">Manager</span> → Analytics Dashboard
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Real-World Example -->
+    <section id="how-it-works" class="py-20 px-6 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold text-gray-900 text-center mb-4">Real-World Example</h2>
+            <p class="text-xl text-gray-600 text-center mb-16">Follow Sarah's AC warranty claim from start to finish</p>
+
+            <!-- Timeline -->
+            <div class="relative">
+                <!-- Timeline Line -->
+                <div class="absolute left-1/2 transform -translate-x-1/2 w-1 h-full bg-gradient-to-b from-purple-200 via-blue-200 to-green-200 rounded-full"></div>
+
+                <!-- Step 1 -->
+                <div class="flex items-center mb-16">
+                    <div class="w-1/2 pr-8 text-right">
+                        <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 border-l-4 border-purple-500">
+                            <div class="mb-3 flex justify-end">
+                                <i data-lucide="thermometer" class="w-8 h-8 text-purple-600"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Sarah's AC Stops Cooling</h3>
+                            <p class="text-gray-600 text-sm">Sarah notices her AC isn't cooling properly. Instead of calling customer service, she taps the NFC sticker on her AC unit.</p>
+                        </div>
+                    </div>
+                    <div class="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">1</div>
+                    <div class="w-1/2 pl-8">
+                        <div class="bg-gray-50 rounded-2xl p-6">
+                            <h4 class="font-bold text-gray-900 mb-2">What Sarah Sees:</h4>
+                            <ul class="text-sm text-gray-600 space-y-1">
+                                <li>• Pre-filled form with AC model & serial number</li>
+                                <li>• Warranty status: "Active until Dec 2025"</li>
+                                <li>• Simple issue description dropdown</li>
+                                <li>• One-tap submit button</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="flex items-center mb-16">
+                    <div class="w-1/2 pr-8 text-right">
+                        <div class="bg-gray-50 rounded-2xl p-6">
+                            <h4 class="font-bold text-gray-900 mb-2">System Processing:</h4>
+                            <ul class="text-sm text-gray-600 space-y-1">
+                                <li>• Validates warranty coverage</li>
+                                <li>• Matches issue to qualified technician</li>
+                                <li>• Checks parts inventory</li>
+                                <li>• Schedules appointment</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">2</div>
+                    <div class="w-1/2 pl-8">
+                        <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-6 border-l-4 border-blue-500">
+                            <div class="mb-3">
+                                <i data-lucide="bot" class="w-8 h-8 text-blue-600"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">AI Assignment in 30 Seconds</h3>
+                            <p class="text-gray-600 text-sm">The system automatically assigns Ahmed, a certified AC technician with availability in Sarah's area, and confirms he has the necessary parts.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="flex items-center mb-16">
+                    <div class="w-1/2 pr-8 text-right">
+                        <div class="bg-gradient-to-r from-green-50 to-green-100 rounded-2xl p-6 border-l-4 border-green-500">
+                            <div class="mb-3 flex justify-end">
+                                <i data-lucide="tool" class="w-8 h-8 text-green-600"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Ahmed Arrives with Right Parts</h3>
+                            <p class="text-gray-600 text-sm">Ahmed taps the same NFC sticker and sees complete AC history, customer info, and the specific issue. He brings the correct refrigerant and tools.</p>
+                        </div>
+                    </div>
+                    <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">3</div>
+                    <div class="w-1/2 pl-8">
+                        <div class="bg-gray-50 rounded-2xl p-6">
+                            <h4 class="text-gray-900 mb-2">What Ahmed Sees:</h4>
+                            <ul class="text-sm text-gray-600 space-y-1">
+                                <li>• Complete AC service history</li>
+                                <li>• Customer contact information</li>
+                                <li>• Issue details & troubleshooting steps</li>
+                                <li>• Parts needed & inventory status</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4 -->
+                <div class="flex items-center mb-16">
+                    <div class="w-1/2 pr-8 text-right">
+                        <div class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl p-6 border-l-4 border-orange-500">
+                            <div class="mb-3 flex justify-end">
+                                <i data-lucide="wrench" class="w-8 h-8 text-orange-600"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Ahmed Completes Repair</h3>
+                            <p class="text-gray-600 text-sm">Ahmed fixes the AC and taps the NFC sticker again to mark work completion. He uploads photos, documents parts used, and marks the job as complete.</p>
+                        </div>
+                    </div>
+                    <div class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">4</div>
+                    <div class="w-1/2 pl-8">
+                        <div class="bg-gray-50 rounded-2xl p-6">
+                            <h4 class="font-bold text-gray-900 mb-2">Work Documentation:</h4>
+                            <ul class="text-sm text-gray-600 space-y-1">
+                                <li>• Work completion photos</li>
+                                <li>• Parts used & costs</li>
+                                <li>• Technician notes</li>
+                                <li>• Timestamp & location data</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 5 -->
+                <div class="flex items-center">
+                    <div class="w-1/2 pr-8 text-right">
+                        <div class="bg-gray-50 rounded-2xl p-6">
+                            <h4 class="font-bold text-gray-900 mb-2">Auto-Generated Claim:</h4>
+                            <ul class="text-sm text-gray-600 space-y-1">
+                                <li>• Complete documentation</li>
+                                <li>• Photo evidence</li>
+                                <li>• Customer confirmation</li>
+                                <li>• Ready for reimbursement</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="w-16 h-16 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">5</div>
+                    <div class="w-1/2 pl-8">
+                        <div class="bg-gradient-to-r from-emerald-50 to-emerald-100 rounded-2xl p-6 border-l-4 border-emerald-500">
+                            <div class="mb-3">
+                                <i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-600"></i>
+                            </div>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Sarah Confirms Resolution</h3>
+                            <p class="text-gray-600 text-sm">Sarah receives notification and taps the NFC to confirm the AC is working properly. System auto-generates complete warranty claim and sends to manufacturer for reimbursement.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Summary -->
+            <div class="mt-16 bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-8 text-center">
+                <h3 class="text-2xl font-bold text-gray-900 mb-4">Total Time: 2 Hours (vs 2+ Days Traditional)</h3>
+                <div class="grid md:grid-cols-3 gap-6 text-sm">
+                    <div class="bg-white/60 rounded-xl p-4">
+                        <div class="font-bold text-gray-900 mb-1">Customer Effort</div>
+                        <div class="text-gray-600">2 taps (request + confirm) vs 2+ hours on phone</div>
+                    </div>
+                    <div class="bg-white/60 rounded-xl p-4">
+                        <div class="font-bold text-gray-900 mb-1">Technician Efficiency</div>
+                        <div class="text-gray-600">Right parts, first visit</div>
+                    </div>
+                    <div class="bg-white/60 rounded-xl p-4">
+                        <div class="font-bold text-gray-900 mb-1">Claim Processing</div>
+                        <div class="text-gray-600">Auto-generated, instant</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-12 text-center">
+                <button onclick="openModal('demo')" class="inline-block bg-purple-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-purple-700 transition-colors shadow-xl">
+                    Request Demo →
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Powerful Features -->
+    <section id="features" class="py-20 px-6 bg-gray-50">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold text-gray-900 text-center mb-4">Powerful Features, Simple Experience</h2>
+            <p class="text-xl text-gray-600 text-center mb-16">Everything manufacturers and distributors need for warranty excellence</p>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+                    <div class="feature-icon bg-purple-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Automatic Warranty Activation</h3>
+                    <p class="text-gray-600">First customer tap = warranty start. Irrefutable proof, full warranty period guaranteed. 100% registration rate vs. 30% with manual registration.</p>
+                </div>
+
+                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+                    <div class="feature-icon bg-blue-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">AI-Powered Assignment</h3>
+                    <p class="text-gray-600">Automatically matches reported issues with the most qualified available technician. Reduces dispatch time from 45 minutes to instant.</p>
+                </div>
+
+                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+                    <div class="feature-icon bg-green-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Real-Time Tracking</h3>
+                    <p class="text-gray-600">Complete visibility for customers, service centers, and manufacturers. Track response times, service quality, and asset performance.</p>
+                </div>
+
+                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+                    <div class="feature-icon bg-yellow-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Smart Escalation</h3>
+                    <p class="text-gray-600">Critical assets get priority treatment. Automatic escalation when response times exceed acceptable limits. No warranty issues fall through cracks.</p>
+                </div>
+
+                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+                    <div class="feature-icon bg-red-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Auto Claim Generation</h3>
+                    <p class="text-gray-600">Complete warranty claims with photos, timestamps, parts used, customer signature. Reduces claim rejection from 20% to 2%. Faster reimbursement.</p>
+                </div>
+
+                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+                    <div class="feature-icon bg-indigo-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Regulatory Compliance</h3>
+                    <p class="text-gray-600">Built for warranty regulations worldwide. Automatic warranty period tracking, extension calculation, complete audit trail for inspections and compliance.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Measurable Results -->
+    <section class="py-20 px-6 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold text-gray-900 text-center mb-4">Measurable Results</h2>
+            <p class="text-xl text-gray-600 text-center mb-16">Manufacturers and distributors see immediate improvements in warranty efficiency</p>
+
+            <div class="grid md:grid-cols-4 gap-8">
+                <div class="text-center">
+                    <div class="text-6xl font-bold text-purple-600 mb-4">96%</div>
+                    <div class="text-xl font-semibold text-gray-900 mb-2">Faster Service Requests</div>
+                    <div class="text-gray-600">From 2 hours to 30 seconds - eliminate phone calls entirely</div>
+                </div>
+
+                <div class="text-center">
+                    <div class="text-6xl font-bold text-blue-600 mb-4">80%</div>
+                    <div class="text-xl font-semibold text-gray-900 mb-2">Fewer Wrong Parts</div>
+                    <div class="text-gray-600">Complete asset info upfront = correct parts first visit</div>
+                </div>
+
+                <div class="text-center">
+                    <div class="text-6xl font-bold text-green-600 mb-4">70%</div>
+                    <div class="text-xl font-semibold text-gray-900 mb-2">Cost Reduction</div>
+                    <div class="text-gray-600">Lower service coordination, dispatch, and claim processing costs</div>
+                </div>
+
+                <div class="text-center">
+                    <div class="text-6xl font-bold text-orange-600 mb-4">100%</div>
+                    <div class="text-xl font-semibold text-gray-900 mb-2">Registration Rate</div>
+                    <div class="text-gray-600">Every customer automatically registered vs. 30% manual rate</div>
+                </div>
+            </div>
+
+            <div class="mt-16 bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-12 text-center">
+                <h3 class="text-3xl font-bold text-gray-900 mb-6">See Your Exact ROI</h3>
+                <p class="text-xl text-gray-600 mb-8">Calculate how much you'll save with our interactive ROI calculator</p>
+                <button onclick="openModal('pricing')" class="inline-block bg-purple-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-purple-700 transition-colors shadow-xl">
+                    Calculate My Savings →
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Perfect For Section - WITH 4 CARDS -->
+    <section id="perfect-for" class="py-20 px-6 bg-gray-50">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold text-gray-900 text-center mb-16">Perfect For</h2>
+
+            <!-- First Row - 3 Cards -->
+            <div class="grid md:grid-cols-3 gap-8 mb-8">
+                <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="mb-6">
+                        <i data-lucide="factory" class="w-12 h-12 text-purple-600"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Equipment Manufacturers</h3>
+                    <ul class="space-y-3 text-gray-600">
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>HVAC systems & air conditioners</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Home appliances & electronics</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Computers & office equipment</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Industrial machinery</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="mb-6">
+                        <i data-lucide="building-2" class="w-12 h-12 text-blue-600"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Regional Distributors</h3>
+                    <ul class="space-y-3 text-gray-600">
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Manage multi-brand warranties</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Coordinate service network</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Faster manufacturer reimbursement</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Reduce claim rejections</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg">
+                    <div class="mb-6">
+                        <i data-lucide="shopping-cart" class="w-12 h-12 text-green-600"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Retailers & Resellers</h3>
+                    <ul class="space-y-3 text-gray-600">
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Differentiate on service experience</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Increase customer loyalty</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Zero training for staff</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Premium warranty service offering</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Second Row - 1 Centered Card (THE NEW 4TH CARD!) -->
+            <div class="flex justify-center">
+                <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg w-full md:w-1/3">
+                    <div class="mb-6">
+                        <i data-lucide="settings" class="w-12 h-12 text-orange-600"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Authorized Service Centers</h3>
+                    <ul class="space-y-3 text-gray-600">
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Complete job info before arrival</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Faster payment processing</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Automated claim documentation</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Reduced callbacks & rework</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Global Benefits -->
+    <section class="py-20 px-6 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div class="max-w-4xl mx-auto text-center">
+            <div class="mb-6 flex justify-center">
+                <i data-lucide="globe" class="w-16 h-16 text-emerald-600"></i>
+            </div>
+            <h2 class="text-4xl font-bold text-gray-900 mb-6">Built for Global Excellence</h2>
+            <p class="text-xl text-gray-600 mb-8">
+                FeedbackNFC supports digital transformation with innovative technology
+                that enhances consumer protection, improves service quality, and drives operational efficiency worldwide.
+            </p>
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="bg-white/60 backdrop-blur rounded-xl p-6">
+                    <div class="mb-3 flex justify-center">
+                        <i data-lucide="smartphone" class="w-8 h-8 text-emerald-600"></i>
+                    </div>
+                    <div class="font-bold text-gray-900 mb-2">Digital First</div>
+                    <div class="text-sm text-gray-600">Paperless, automated warranty management</div>
+                </div>
+                <div class="bg-white/60 backdrop-blur rounded-xl p-6">
+                    <div class="mb-3 flex justify-center">
+                        <i data-lucide="shield-check" class="w-8 h-8 text-emerald-600"></i>
+                    </div>
+                    <div class="font-bold text-gray-900 mb-2">Consumer Protection</div>
+                    <div class="text-sm text-gray-600">Full compliance with local regulations</div>
+                </div>
+                <div class="bg-white/60 backdrop-blur rounded-xl p-6">
+                    <div class="mb-3 flex justify-center">
+                        <i data-lucide="target" class="w-8 h-8 text-emerald-600"></i>
+                    </div>
+                    <div class="font-bold text-gray-900 mb-2">Quality Service</div>
+                    <div class="text-sm text-gray-600">Superior customer service experiences</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Social Proof / Trust -->
+    <section class="py-20 px-6 bg-white">
+        <div class="max-w-6xl mx-auto">
+            <h2 class="text-4xl font-bold text-gray-900 text-center mb-4">Trusted Technology</h2>
+            <p class="text-xl text-gray-600 text-center mb-16">Proven platform already managing thousands of assets for leading organizations</p>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="bg-gray-50 rounded-xl p-8">
+                    <div class="text-4xl font-bold text-purple-600 mb-2">5,000+</div>
+                    <div class="text-gray-600">Assets Under Management</div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-8">
+                    <div class="text-4xl font-bold text-blue-600 mb-2">95%</div>
+                    <div class="text-gray-600">User Satisfaction Rate</div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-8">
+                    <div class="text-4xl font-bold text-green-600 mb-2">24/7</div>
+                    <div class="text-gray-600">Multi-Language Support</div>
+                </div>
+            </div>
+
+            <div class="mt-16 bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-8 border-l-4 border-purple-600">
+                <div class="flex items-start">
+                    <div class="mr-6">
+                        <i data-lucide="lightbulb" class="w-12 h-12 text-purple-600"></i>
+                    </div>
+                    <div>
+                        <div class="text-xl font-bold text-gray-900 mb-3">Same Platform, Warranty Extension</div>
+                        <p class="text-gray-600 mb-4">
+                            FeedbackNFC already powers asset maintenance for corporate facilities. Now we're extending 
+                            the same zero-training experience to manufacturer warranty programs. Proven technology, 
+                            new application.
+                        </p>
+                        <a href="https://asset.feedbacknfc.com" target="_blank" class="text-purple-600 font-semibold hover:text-purple-700">
+                            See Corporate Platform →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Free Pilot Program -->
+    <section class="py-20 px-6 bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-4xl md:text-5xl font-bold mb-6">Start with a Free 3-Month Pilot</h2>
+            <p class="text-xl md:text-2xl text-white/90 mb-8">
+                Zero risk. Zero cost. We provide everything you need to prove ROI before committing.
+            </p>
+
+            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-12">
+                <h3 class="text-2xl font-bold mb-6">What's Included (Free)</h3>
+                <div class="grid md:grid-cols-2 gap-6 text-left">
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>500-1,000 NFC stickers (customizable languages)</span>
+                    </div>
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Complete platform access (3 months)</span>
+                    </div>
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>30-minute training session (that's it!)</span>
+                    </div>
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Implementation support & setup</span>
+                    </div>
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Weekly ROI reports & analytics</span>
+                    </div>
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Multi-language customer support</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button onclick="openModal('pilot')" class="bg-white text-purple-600 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-gray-100 transition-colors shadow-xl">
+                    Apply for Free Pilot
+                </button>
+                <button onclick="openModal('demo')" class="border-2 border-white text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/10 transition-colors">
+                    Request Demo
+                </button>
+            </div>
+
+            <p class="text-white/80 mt-6 text-sm">
+                Limited availability for qualified manufacturers/distributors • No credit card required
+            </p>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="py-20 px-6 bg-white">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-4xl font-bold text-gray-900 text-center mb-16">Frequently Asked Questions</h2>
+
+            <div class="space-y-6">
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        How does this differ from traditional warranty management software?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        Traditional warranty software requires complex training (2-4 weeks), manual data entry at every step, 
+                        and still depends on phone calls for initial service requests. FeedbackNFC eliminates all of this: 
+                        customers tap an NFC sticker and everything is automated. Zero training. Zero phone calls. Zero manual entry.
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        Do customers need to download an app?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        No! That's the beauty of NFC technology. When customers tap the sticker with their smartphone, 
+                        it opens directly in their mobile browser. No app download, no account creation, no barriers. 
+                        Works with any NFC-enabled phone (95%+ of smartphones in Saudi Arabia).
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        What if a customer doesn't have an NFC-enabled phone?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        Every NFC sticker also includes a QR code as backup. Customers can scan the QR code with their 
+                        camera app and get the same experience. This ensures 100% compatibility with all smartphones.
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        How does warranty activation work?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        The first time a customer taps the NFC sticker, the system records that as the warranty start date.
+                        This means warranty truly begins when the customer receives the product, not when it was manufactured
+                        or sold to a distributor. This ensures customers get their full warranty period and complies with
+                        local consumer protection requirements.
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        Can this integrate with our existing systems?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        Yes! FeedbackNFC has API endpoints that can integrate with existing ERP, CMMS, and warranty management 
+                        systems. We can also work as a standalone platform if you prefer. During the pilot, we'll assess 
+                        your current systems and recommend the best integration approach.
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        What's the pricing after the 3-month free pilot?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        Pricing is based on the number of devices under warranty: $2-6 per device per year, depending on
+                        volume. For a manufacturer selling 1,000 devices/year with 2-year warranties (2,000 devices under
+                        warranty at any time), the annual cost would be $6,000-12,000. Given that you'll save $60,000+
+                        annually, the ROI is 500-1000%. We'll provide exact pricing based on your volume during the pilot discussions.
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        What happens if we're not satisfied after the pilot?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        Simple: you walk away, no payment owed. The 3-month pilot is completely free with no strings attached. 
+                        We're confident that once you see the results - 70% cost savings, happier customers, faster service - 
+                        you'll want to continue. But if not, no problem.
+                    </p>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA - Simplified without form -->
+    <section id="contact" class="py-20 px-6 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white relative overflow-hidden">
+        <!-- Decorative background elements -->
+        <div class="absolute inset-0 opacity-10">
+            <div class="absolute inset-0" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 40px 40px;"></div>
+        </div>
+
+        <div class="max-w-4xl mx-auto text-center relative z-10">
+            <h2 class="text-4xl md:text-5xl font-bold mb-6">Ready to Transform Your Warranty Program?</h2>
+            <p class="text-xl text-blue-100 mb-12">
+                Join forward-thinking manufacturers who are reducing costs, improving customer satisfaction,
+                and gaining competitive advantage.
+            </p>
+
+            <!-- Simplified CTA Buttons -->
+            <div class="flex flex-col sm:flex-row gap-6 justify-center">
+                <button onclick="openModal('pilot')" class="bg-white text-purple-900 px-10 py-5 rounded-xl font-semibold text-xl hover:bg-gray-100 transition-all transform hover:scale-105 shadow-2xl">
+                    Apply for Free 3-Month Pilot
+                </button>
+                <button onclick="openModal('demo')" class="border-2 border-white text-white px-10 py-5 rounded-xl font-semibold text-xl hover:bg-white/10 transition-all transform hover:scale-105">
+                    Request Live Demo
+                </button>
+            </div>
+
+            <p class="text-blue-200 mt-8 text-sm">
+                📍 Serving manufacturers and distributors worldwide
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-950 text-gray-400 py-12 px-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="grid md:grid-cols-4 gap-8 mb-8">
+                <div>
+                    <div class="flex items-center space-x-3 mb-4">
+                        <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-12 w-auto">
+                        <div class="text-white font-bold text-xl">FeedbackNFC</div>
+                    </div>
+                    <p class="text-sm">Asset service without training. For corporate maintenance and manufacturer warranty programs.</p>
+                </div>
+                <div>
+                    <div class="text-white font-semibold mb-4">Solutions</div>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="https://asset.feedbacknfc.com" class="hover:text-white transition-colors">Corporate Maintenance</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Warranty Management</a></li>
+                        <li><a href="#demo" class="hover:text-white transition-colors">Interactive Demo</a></li>
+                        <li><a href="#roi" class="hover:text-white transition-colors">ROI Calculator</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="text-white font-semibold mb-4">Company</div>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#" class="hover:text-white transition-colors">About Us</a></li>
+                        <li><a href="#contact" class="hover:text-white transition-colors">Contact</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Free Pilot Program</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Case Studies</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="text-white font-semibold mb-4">Legal</div>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="#" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Regulatory Compliance</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="border-t border-gray-800 pt-8 text-center text-sm">
+                <p>&copy; 2025 FeedbackNFC. All rights reserved.</p>
+                <p class="mt-2 text-gray-500">Compliant with global warranty regulations</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Contact Form Modal -->
+    <div id="contactModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="p-8">
+                <!-- Modal Header -->
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-3xl font-bold text-gray-900">Get in Touch</h3>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <p class="text-gray-600 mb-8">Fill out the form below and we'll get back to you within 24 hours.</p>
+
+                <!-- Contact Form -->
+                <form id="contactForm" class="space-y-6">
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="firstName" class="block text-sm font-semibold text-gray-700 mb-2">First Name *</label>
+                            <input type="text" id="firstName" name="firstName" required
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                        </div>
+                        <div>
+                            <label for="lastName" class="block text-sm font-semibold text-gray-700 mb-2">Last Name *</label>
+                            <input type="text" id="lastName" name="lastName" required
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="email" class="block text-sm font-semibold text-gray-700 mb-2">Email *</label>
+                        <input type="email" id="email" name="email" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                    </div>
+
+                    <div>
+                        <label for="company" class="block text-sm font-semibold text-gray-700 mb-2">Company Name *</label>
+                        <input type="text" id="company" name="company" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                    </div>
+
+                    <div>
+                        <label for="phone" class="block text-sm font-semibold text-gray-700 mb-2">Phone Number</label>
+                        <input type="tel" id="phone" name="phone"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                    </div>
+
+                    <div>
+                        <label for="requestType" class="block text-sm font-semibold text-gray-700 mb-2">I'm interested in *</label>
+                        <select id="requestType" name="requestType" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                            <option value="">Select an option...</option>
+                            <option value="demo">Schedule a Live Demo</option>
+                            <option value="pilot">Apply for Free 3-Month Pilot</option>
+                            <option value="pricing">Get Pricing Information</option>
+                            <option value="integration">Discuss Integration Options</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="message" class="block text-sm font-semibold text-gray-700 mb-2">Message</label>
+                        <textarea id="message" name="message" rows="4"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                            placeholder="Tell us about your warranty management needs..."></textarea>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <button type="submit"
+                            class="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg">
+                            Send Message
+                        </button>
+                        <button type="button" onclick="closeModal()"
+                            class="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-lg hover:bg-gray-50 transition-all">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mobile menu toggle
+        document.getElementById('mobileMenuBtn').addEventListener('click', function() {
+            const mobileMenu = document.getElementById('mobileMenu');
+            mobileMenu.classList.toggle('hidden');
+        });
+
+        // Close mobile menu when clicking on a link
+        document.querySelectorAll('#mobileMenu a').forEach(link => {
+            link.addEventListener('click', function() {
+                document.getElementById('mobileMenu').classList.add('hidden');
+            });
+        });
+
+        // Header scroll effect
+        let lastScroll = 0;
+        window.addEventListener('scroll', function() {
+            const header = document.querySelector('header');
+            if (window.scrollY > 50) {
+                header.classList.add('header-scrolled');
+            } else {
+                header.classList.remove('header-scrolled');
+            }
+        });
+
+        // Modal functions
+        function openModal(requestType = '') {
+            const modal = document.getElementById('contactModal');
+            const select = document.getElementById('requestType');
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+
+            if (requestType) {
+                select.value = requestType;
+            }
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('contactModal');
+            modal.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close modal on outside click
+        document.getElementById('contactModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('contactForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Get form data
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+
+            // Here you would typically send to your backend
+            console.log('Form submitted:', data);
+
+            // Show success message
+            alert('Thank you for your interest! We will contact you within 24 hours.');
+
+            // Close modal and reset form
+            closeModal();
+            this.reset();
+        });
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
