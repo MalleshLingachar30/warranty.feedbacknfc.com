@@ -3,9 +3,9 @@
 This project already includes Clerk integration in these paths:
 
 - `src/app/layout.tsx` uses `ClerkProvider`
-- `src/middleware.ts` protects `/dashboard/*`
+- `src/proxy.ts` protects `/dashboard/*`
 - `src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`
-- `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx`
+- `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx` (redirects to `/sign-in`)
 
 ## 1) Configure Clerk app and env vars
 
@@ -19,7 +19,11 @@ This project already includes Clerk integration in these paths:
    - `CLERK_SECRET_KEY`
 4. Ensure these are present:
    - `CLERK_SIGN_IN_URL=/sign-in`
-   - `CLERK_SIGN_UP_URL=/sign-up`
+   - `CLERK_SIGN_UP_URL=/sign-in`
+   - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`
+   - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-in`
+   - `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard`
+   - `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard`
 
 Then run:
 
@@ -29,8 +33,8 @@ npm run dev
 
 ## 2) Basic auth test
 
-1. Open `http://localhost:3000/sign-up` and create a test account.
-2. After sign-up, app redirects to `/dashboard`.
+1. Open `http://localhost:3000/sign-in` and use the sign-up link within Clerk's single flow.
+2. After sign-up, the app redirects to `/dashboard`.
 3. Open `http://localhost:3000/dashboard` while signed out to confirm redirect to sign-in.
 
 ## 3) Role-based testing (all dashboards/features)
@@ -68,3 +72,28 @@ NEXT_PUBLIC_DISABLE_ROLE_GUARD=true
 ```
 
 Do not use that bypass in production.
+
+## 6) Vercel environment key split (recommended)
+
+Use different Clerk keys per Vercel environment:
+
+- `Development` and `Preview`: test keys (`pk_test_*`, `sk_test_*`)
+- `Production`: live keys (`pk_live_*`, `sk_live_*`)
+
+Example commands:
+
+```bash
+# Preview -> test keys
+echo "pk_test_xxx" | vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY preview --force
+echo "sk_test_xxx" | vercel env add CLERK_SECRET_KEY preview --force
+
+# Development -> test keys
+echo "pk_test_xxx" | vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY development --force
+echo "sk_test_xxx" | vercel env add CLERK_SECRET_KEY development --force
+
+# Production -> live keys
+echo "pk_live_xxx" | vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production --force
+echo "sk_live_xxx" | vercel env add CLERK_SECRET_KEY production --force
+```
+
+After changing environment variables, create a new deployment so updated values are used.

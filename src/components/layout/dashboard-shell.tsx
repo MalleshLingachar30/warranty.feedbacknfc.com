@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+import { SignOutButton, UserButton } from "@clerk/nextjs";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -103,7 +103,14 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                   <p className="text-xs text-slate-500">Dashboard</p>
                 </div>
               </div>
-              <UserButton />
+              <div className="flex items-center gap-2">
+                <SignOutButton redirectUrl="/sign-in">
+                  <Button variant="outline" size="sm">
+                    Sign out
+                  </Button>
+                </SignOutButton>
+                <UserButton />
+              </div>
             </div>
           </header>
 
