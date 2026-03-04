@@ -1,0 +1,430 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationType {
+  manufacturer
+  distributor
+  service_center
+  retailer
+}
+
+enum SubscriptionTier {
+  pilot
+  starter
+  professional
+  enterprise
+}
+
+enum UserRole {
+  super_admin
+  manufacturer_admin
+  service_center_admin
+  technician
+  customer
+}
+
+enum StickerType {
+  qr_only
+  nfc_qr
+}
+
+enum StickerVariant {
+  standard
+  high_temp
+  premium
+}
+
+enum StickerStatus {
+  unallocated
+  allocated
+  bound
+  activated
+  deactivated
+}
+
+enum WarrantyStatus {
+  pending_activation
+  active
+  expired
+  extended
+  voided
+}
+
+enum IssueSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum AssignmentMethod {
+  ai_auto
+  manual
+  escalated
+}
+
+enum TicketStatus {
+  reported
+  assigned
+  technician_enroute
+  work_in_progress
+  pending_confirmation
+  resolved
+  reopened
+  escalated
+  closed
+}
+
+enum ClaimType {
+  warranty_repair
+  warranty_replacement
+  extended_warranty
+  goodwill
+}
+
+enum ClaimStatus {
+  auto_generated
+  submitted
+  under_review
+  approved
+  rejected
+  disputed
+  paid
+  closed
+}
+
+enum StickerAllocationType {
+  bulk_bind
+  reserve_only
+}
+
+model Organization {
+  id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                  String           @db.VarChar(255)
+  type                  OrganizationType
+  slug                  String?          @unique @db.VarChar(100)
+  logoUrl               String?          @map("logo_url")
+  address               String?
+  city                  String?          @db.VarChar(100)
+  state                 String?          @db.VarChar(100)
+  country               String           @default("IN") @db.VarChar(50)
+  pincode               String?          @db.VarChar(10)
+  gstNumber             String?          @map("gst_number") @db.VarChar(20)
+  contactEmail          String?          @map("contact_email") @db.VarChar(255)
+  contactPhone          String?          @map("contact_phone") @db.VarChar(20)
+  settings              Json             @default(dbgenerated("'{}'::jsonb"))
+  subscriptionTier      SubscriptionTier @default(pilot) @map("subscription_tier")
+  subscriptionExpiresAt DateTime?        @map("subscription_expires_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  users               User[]
+  productModels       ProductModel[]
+  allocatedStickers   Sticker[]           @relation("AllocatedOrganization")
+  products            Product[]
+  serviceCenters      ServiceCenter[]
+  manufacturerClaims  WarrantyClaim[]     @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims WarrantyClaim[]     @relation("ServiceCenterOrganizationClaims")
+  stickerAllocations  StickerAllocation[]
+
+  @@map("organizations")
+}
+
+model User {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clerkId            String   @unique @map("clerk_id") @db.VarChar(255)
+  organizationId     String?  @map("organization_id") @db.Uuid
+  email              String?  @db.VarChar(255)
+  phone              String?  @db.VarChar(20)
+  name               String?  @db.VarChar(255)
+  role               UserRole
+  languagePreference String   @default("en") @map("language_preference") @db.VarChar(5)
+  isActive           Boolean  @default(true) @map("is_active")
+  metadata           Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  organization       Organization?       @relation(fields: [organizationId], references: [id])
+  technicianProfile  Technician?
+  reportedTickets    Ticket[]            @relation("ReportedTickets")
+  approvedClaims     WarrantyClaim[]     @relation("ClaimApprover")
+  timelineEvents     TicketTimeline[]    @relation("TimelineActor")
+  stickerAllocations StickerAllocation[] @relation("AllocatedByUser")
+  customerProducts   Product[]           @relation("CustomerProducts")
+
+  @@map("users")
+}
+
+model ProductModel {
+  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId            String   @map("organization_id") @db.Uuid
+  name                      String   @db.VarChar(255)
+  category                  String   @db.VarChar(100)
+  subCategory               String?  @map("sub_category") @db.VarChar(100)
+  modelNumber               String?  @map("model_number") @db.VarChar(100)
+  description               String?
+  imageUrl                  String?  @map("image_url")
+  warrantyDurationMonths    Int      @default(12) @map("warranty_duration_months")
+  extendedWarrantyAvailable Boolean  @default(false) @map("extended_warranty_available")
+  extendedWarrantyMonths    Int?     @map("extended_warranty_months")
+  specifications            Json     @default(dbgenerated("'{}'::jsonb"))
+  commonIssues              Json     @default(dbgenerated("'[]'::jsonb")) @map("common_issues")
+  requiredSkills            String[] @default([]) @map("required_skills")
+  partsCatalog              Json     @default(dbgenerated("'[]'::jsonb")) @map("parts_catalog")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  organization       Organization        @relation(fields: [organizationId], references: [id])
+  products           Product[]
+  stickerAllocations StickerAllocation[]
+
+  @@map("product_models")
+}
+
+model Sticker {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stickerNumber    Int            @unique @map("sticker_number")
+  stickerSerial    String         @unique @map("sticker_serial") @db.VarChar(20)
+  type             StickerType    @default(qr_only)
+  variant          StickerVariant @default(standard)
+  status           StickerStatus  @default(unallocated)
+  allocatedToOrgId String?        @map("allocated_to_org") @db.Uuid
+  batchId          String?        @map("batch_id") @db.VarChar(50)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  allocatedToOrg Organization? @relation("AllocatedOrganization", fields: [allocatedToOrgId], references: [id])
+  product        Product?
+  tickets        Ticket[]
+
+  @@index([stickerNumber], map: "idx_stickers_number")
+  @@map("stickers")
+}
+
+model Product {
+  id                      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stickerId               String         @unique @map("sticker_id") @db.Uuid
+  productModelId          String         @map("product_model_id") @db.Uuid
+  organizationId          String         @map("organization_id") @db.Uuid
+  serialNumber            String?        @map("serial_number") @db.VarChar(255)
+  manufactureDate         DateTime?      @map("manufacture_date") @db.Date
+  saleDate                DateTime?      @map("sale_date") @db.Date
+  installationDate        DateTime?      @map("installation_date") @db.Date
+  warrantyStartDate       DateTime?      @map("warranty_start_date")
+  warrantyEndDate         DateTime?      @map("warranty_end_date")
+  warrantyStatus          WarrantyStatus @default(pending_activation) @map("warranty_status")
+  extendedWarrantyEndDate DateTime?      @map("extended_warranty_end_date")
+  customerId              String?        @map("customer_id") @db.Uuid
+  customerName            String?        @map("customer_name") @db.VarChar(255)
+  customerPhone           String?        @map("customer_phone") @db.VarChar(20)
+  customerEmail           String?        @map("customer_email") @db.VarChar(255)
+  customerAddress         String?        @map("customer_address")
+  customerCity            String?        @map("customer_city") @db.VarChar(100)
+  customerState           String?        @map("customer_state") @db.VarChar(100)
+  customerPincode         String?        @map("customer_pincode") @db.VarChar(10)
+  installationLocation    Json?          @map("installation_location")
+  metadata                Json           @default(dbgenerated("'{}'::jsonb"))
+  createdAt               DateTime       @default(now()) @map("created_at")
+  updatedAt               DateTime       @updatedAt @map("updated_at")
+
+  sticker      Sticker         @relation(fields: [stickerId], references: [id])
+  productModel ProductModel    @relation(fields: [productModelId], references: [id])
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  customer     User?           @relation("CustomerProducts", fields: [customerId], references: [id])
+  tickets      Ticket[]
+  claims       WarrantyClaim[]
+
+  @@index([warrantyStatus, warrantyEndDate], map: "idx_products_warranty")
+  @@map("products")
+}
+
+model ServiceCenter {
+  id                         String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId             String                @map("organization_id") @db.Uuid
+  name                       String                @db.VarChar(255)
+  address                    String?
+  city                       String?               @db.VarChar(100)
+  state                      String?               @db.VarChar(100)
+  pincode                    String?               @db.VarChar(10)
+  phone                      String?               @db.VarChar(20)
+  email                      String?               @db.VarChar(255)
+  location                   Unsupported("point")?
+  serviceRadiusKm            Int                   @default(50) @map("service_radius_km")
+  supportedCategories        String[]              @default([]) @map("supported_categories")
+  manufacturerAuthorizations String[]              @default([]) @map("manufacturer_authorizations") @db.Uuid
+  operatingHours             Json?                 @map("operating_hours")
+  isActive                   Boolean               @default(true) @map("is_active")
+  rating                     Decimal               @default(0.00) @db.Decimal(3, 2)
+  totalJobsCompleted         Int                   @default(0) @map("total_jobs_completed")
+  averageResolutionHours     Decimal?              @map("average_resolution_hours") @db.Decimal(6, 2)
+  createdAt                  DateTime              @default(now()) @map("created_at")
+  updatedAt                  DateTime              @updatedAt @map("updated_at")
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  technicians     Technician[]
+  assignedTickets Ticket[]     @relation("AssignedServiceCenterTickets")
+
+  @@index([location], type: Gist, map: "idx_service_centers_location")
+  @@map("service_centers")
+}
+
+model Technician {
+  id                 String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String                @unique @map("user_id") @db.Uuid
+  serviceCenterId    String                @map("service_center_id") @db.Uuid
+  name               String                @db.VarChar(255)
+  phone              String                @db.VarChar(20)
+  skills             String[]
+  certifications     Json                  @default(dbgenerated("'[]'::jsonb"))
+  isAvailable        Boolean               @default(true) @map("is_available")
+  currentLocation    Unsupported("point")? @map("current_location")
+  maxConcurrentJobs  Int                   @default(3) @map("max_concurrent_jobs")
+  activeJobCount     Int                   @default(0) @map("active_job_count")
+  rating             Decimal               @default(0.00) @db.Decimal(3, 2)
+  totalJobsCompleted Int                   @default(0) @map("total_jobs_completed")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+
+  user            User          @relation(fields: [userId], references: [id])
+  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
+  assignedTickets Ticket[]      @relation("AssignedTechnicianTickets")
+
+  @@map("technicians")
+}
+
+model Ticket {
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketNumber            String           @unique @map("ticket_number") @db.VarChar(20)
+  productId               String           @map("product_id") @db.Uuid
+  stickerId               String           @map("sticker_id") @db.Uuid
+  reportedByUserId        String?          @map("reported_by_user_id") @db.Uuid
+  reportedByName          String?          @map("reported_by_name") @db.VarChar(255)
+  reportedByPhone         String           @map("reported_by_phone") @db.VarChar(20)
+  issueCategory           String?          @map("issue_category") @db.VarChar(100)
+  issueDescription        String           @map("issue_description")
+  issueSeverity           IssueSeverity    @default(medium) @map("issue_severity")
+  issuePhotos             String[]         @default([]) @map("issue_photos")
+  assignedServiceCenterId String?          @map("assigned_service_center_id") @db.Uuid
+  assignedTechnicianId    String?          @map("assigned_technician_id") @db.Uuid
+  assignmentMethod        AssignmentMethod @default(ai_auto) @map("assignment_method")
+  assignmentNotes         String?          @map("assignment_notes")
+  reportedAt              DateTime         @default(now()) @map("reported_at")
+  assignedAt              DateTime?        @map("assigned_at")
+  technicianStartedAt     DateTime?        @map("technician_started_at")
+  technicianCompletedAt   DateTime?        @map("technician_completed_at")
+  customerConfirmedAt     DateTime?        @map("customer_confirmed_at")
+  closedAt                DateTime?        @map("closed_at")
+  status                  TicketStatus     @default(reported)
+  resolutionNotes         String?          @map("resolution_notes")
+  resolutionPhotos        String[]         @default([]) @map("resolution_photos")
+  partsUsed               Json             @default(dbgenerated("'[]'::jsonb")) @map("parts_used")
+  laborHours              Decimal?         @map("labor_hours") @db.Decimal(4, 2)
+  claimId                 String?          @unique @map("claim_id") @db.Uuid
+  isWarrantyCovered       Boolean          @default(true) @map("is_warranty_covered")
+  slaResponseDeadline     DateTime?        @map("sla_response_deadline")
+  slaResolutionDeadline   DateTime?        @map("sla_resolution_deadline")
+  slaBreached             Boolean          @default(false) @map("sla_breached")
+  escalationLevel         Int              @default(0) @map("escalation_level")
+  escalatedAt             DateTime?        @map("escalated_at")
+  escalationReason        String?          @map("escalation_reason")
+  metadata                Json             @default(dbgenerated("'{}'::jsonb"))
+  createdAt               DateTime         @default(now()) @map("created_at")
+  updatedAt               DateTime         @updatedAt @map("updated_at")
+
+  product               Product          @relation(fields: [productId], references: [id])
+  sticker               Sticker          @relation(fields: [stickerId], references: [id])
+  reportedByUser        User?            @relation("ReportedTickets", fields: [reportedByUserId], references: [id])
+  assignedServiceCenter ServiceCenter?   @relation("AssignedServiceCenterTickets", fields: [assignedServiceCenterId], references: [id])
+  assignedTechnician    Technician?      @relation("AssignedTechnicianTickets", fields: [assignedTechnicianId], references: [id])
+  timelineEntries       TicketTimeline[]
+  claimById             WarrantyClaim?   @relation("TicketClaimPointer", fields: [claimId], references: [id])
+  claim                 WarrantyClaim?   @relation("TicketToWarrantyClaim")
+
+  @@index([status], map: "idx_tickets_status")
+  @@index([productId], map: "idx_tickets_product")
+  @@index([assignedTechnicianId], map: "idx_tickets_technician")
+  @@map("tickets")
+}
+
+model WarrantyClaim {
+  id                  String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  claimNumber         String      @unique @map("claim_number") @db.VarChar(20)
+  ticketId            String      @unique @map("ticket_id") @db.Uuid
+  productId           String      @map("product_id") @db.Uuid
+  manufacturerOrgId   String      @map("manufacturer_org_id") @db.Uuid
+  serviceCenterOrgId  String      @map("service_center_org_id") @db.Uuid
+  claimType           ClaimType   @default(warranty_repair) @map("claim_type")
+  partsCost           Decimal     @default(0.00) @map("parts_cost") @db.Decimal(10, 2)
+  laborCost           Decimal     @default(0.00) @map("labor_cost") @db.Decimal(10, 2)
+  totalClaimAmount    Decimal     @default(0.00) @map("total_claim_amount") @db.Decimal(10, 2)
+  currency            String      @default("INR") @db.VarChar(3)
+  documentation       Json        @default(dbgenerated("'{}'::jsonb"))
+  documentationPdfUrl String?     @map("documentation_pdf_url")
+  status              ClaimStatus @default(auto_generated)
+  rejectionReason     String?     @map("rejection_reason")
+  approvedAmount      Decimal?    @map("approved_amount") @db.Decimal(10, 2)
+  approvedById        String?     @map("approved_by") @db.Uuid
+  approvedAt          DateTime?   @map("approved_at")
+  paymentReference    String?     @map("payment_reference") @db.VarChar(255)
+  paidAt              DateTime?   @map("paid_at")
+  paymentMethod       String?     @map("payment_method") @db.VarChar(50)
+  submittedAt         DateTime?   @map("submitted_at")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+
+  ticket           Ticket       @relation("TicketToWarrantyClaim", fields: [ticketId], references: [id])
+  ticketPointer    Ticket?      @relation("TicketClaimPointer")
+  product          Product      @relation(fields: [productId], references: [id])
+  manufacturerOrg  Organization @relation("ManufacturerOrganizationClaims", fields: [manufacturerOrgId], references: [id])
+  serviceCenterOrg Organization @relation("ServiceCenterOrganizationClaims", fields: [serviceCenterOrgId], references: [id])
+  approvedBy       User?        @relation("ClaimApprover", fields: [approvedById], references: [id])
+
+  @@map("warranty_claims")
+}
+
+model TicketTimeline {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId         String   @map("ticket_id") @db.Uuid
+  eventType        String   @map("event_type") @db.VarChar(50)
+  eventDescription String?  @map("event_description")
+  actorUserId      String?  @map("actor_user_id") @db.Uuid
+  actorRole        String?  @map("actor_role") @db.VarChar(50)
+  actorName        String?  @map("actor_name") @db.VarChar(255)
+  metadata         Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  ticket    Ticket @relation(fields: [ticketId], references: [id])
+  actorUser User?  @relation("TimelineActor", fields: [actorUserId], references: [id])
+
+  @@index([ticketId, createdAt], map: "idx_timeline_ticket")
+  @@map("ticket_timeline")
+}
+
+model StickerAllocation {
+  id                    String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId        String                @map("organization_id") @db.Uuid
+  stickerStartNumber    Int                   @map("sticker_start_number")
+  stickerEndNumber      Int                   @map("sticker_end_number")
+  totalCount            Int                   @map("total_count")
+  productModelId        String?               @map("product_model_id") @db.Uuid
+  allocationType        StickerAllocationType @default(bulk_bind) @map("allocation_type")
+  applianceSerialPrefix String?               @map("appliance_serial_prefix") @db.VarChar(50)
+  applianceSerialStart  String?               @map("appliance_serial_start") @db.VarChar(100)
+  applianceSerialEnd    String?               @map("appliance_serial_end") @db.VarChar(100)
+  allocatedById         String?               @map("allocated_by") @db.Uuid
+  allocatedAt           DateTime              @default(now()) @map("allocated_at")
+  notes                 String?
+  createdAt             DateTime              @default(now()) @map("created_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  productModel ProductModel? @relation(fields: [productModelId], references: [id])
+  allocatedBy  User?         @relation("AllocatedByUser", fields: [allocatedById], references: [id])
+
+  @@map("sticker_allocations")
+}
