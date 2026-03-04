@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
+import { runSlaSweep } from "@/lib/sla-engine";
 import { resolveTechnicianId } from "@/lib/technician-context";
 import { sendCustomerWorkStartedNotification } from "@/lib/warranty-notifications";
 
@@ -114,6 +115,8 @@ export async function POST(
         },
       }),
     ]);
+
+    await runSlaSweep({ ticketId: ticket.id });
 
     if (ticket.product.customerPhone) {
       void sendCustomerWorkStartedNotification({

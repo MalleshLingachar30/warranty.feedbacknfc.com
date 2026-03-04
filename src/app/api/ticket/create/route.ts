@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 
 import { assignTechnician } from "@/lib/ai-assignment";
 import { db as prisma } from "@/lib/db";
-import { sendTechnicianAssignmentSms } from "@/lib/warranty-notifications";
+import { computeSlaDeadlines, runSlaSweep } from "@/lib/sla-engine";
+import {
+  sendServiceCenterTicketAssignedEmail,
+  sendTechnicianAssignmentSms,
+} from "@/lib/warranty-notifications";
 
 interface CreateTicketRequest {
   productId?: string;
@@ -99,6 +103,11 @@ export async function POST(request: Request) {
         stickerId: true,
         customerId: true,
         customerCity: true,
+        organization: {
+          select: {
+            settings: true,
+          },
+        },
         productModel: {
           select: {
             name: true,
@@ -185,6 +194,12 @@ export async function POST(request: Request) {
 
     const ticketNumber = await generateTicketNumber();
     const ticketId = crypto.randomUUID();
+    const reportedAt = new Date();
+    const deadlines = computeSlaDeadlines({
+      reportedAt,
+      issueSeverity,
+      organizationSettings: product.organization.settings,
+    });
 
     const [ticket] = await prisma.$transaction([
       prisma.ticket.create({
@@ -201,6 +216,9 @@ export async function POST(request: Request) {
           issuePhotos,
           issueSeverity,
           status: "reported",
+          reportedAt,
+          slaResponseDeadline: deadlines.responseDeadline,
+          slaResolutionDeadline: deadlines.resolutionDeadline,
         },
       }),
       prisma.ticketTimeline.create({
@@ -239,6 +257,17 @@ export async function POST(request: Request) {
                 phone: true,
               },
             },
+            assignedServiceCenter: {
+              select: {
+                name: true,
+                email: true,
+                organization: {
+                  select: {
+                    contactEmail: true,
+                  },
+                },
+              },
+            },
           },
         });
 
@@ -255,10 +284,29 @@ export async function POST(request: Request) {
             ticketNumber: assignedTicket?.ticketNumber ?? ticket.ticketNumber,
           });
         }
+
+        const serviceCenterEmail =
+          assignedTicket?.assignedServiceCenter?.email ??
+          assignedTicket?.assignedServiceCenter?.organization.contactEmail ??
+          "";
+
+        if (serviceCenterEmail) {
+          void sendServiceCenterTicketAssignedEmail({
+            serviceCenterEmail,
+            serviceCenterName:
+              assignedTicket?.assignedServiceCenter?.name ?? "Service Center",
+            ticketNumber: assignedTicket?.ticketNumber ?? ticket.ticketNumber,
+            issueCategory: assignedTicket?.issueCategory ?? "General issue",
+            productName: product.productModel.name,
+            technicianName: technicianName || "Assigned Technician",
+          });
+        }
       }
     } catch (assignmentError) {
       console.error("AI assignment failed", assignmentError);
     }
+
+    await runSlaSweep({ ticketId: ticket.id });
 
     const latestTicket = await prisma.ticket.findUnique({
       where: { id: ticket.id },

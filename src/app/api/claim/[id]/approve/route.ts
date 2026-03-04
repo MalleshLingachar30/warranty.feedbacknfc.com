@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
+import { sendServiceCenterClaimApprovedEmail } from "@/lib/warranty-notifications";
 
 import {
   ApiError,
@@ -56,6 +57,12 @@ export async function POST(
         claimNumber: true,
         totalClaimAmount: true,
         status: true,
+        serviceCenterOrg: {
+          select: {
+            name: true,
+            contactEmail: true,
+          },
+        },
       },
     });
 
@@ -97,6 +104,17 @@ export async function POST(
         approvedAt: true,
       },
     });
+
+    const serviceCenterEmail = claim.serviceCenterOrg.contactEmail ?? "";
+
+    if (serviceCenterEmail) {
+      void sendServiceCenterClaimApprovedEmail({
+        serviceCenterEmail,
+        serviceCenterName: claim.serviceCenterOrg.name,
+        claimNumber: updated.claimNumber,
+        approvedAmount: toNumberValue(updated.approvedAmount),
+      });
+    }
 
     return NextResponse.json({
       claim: {

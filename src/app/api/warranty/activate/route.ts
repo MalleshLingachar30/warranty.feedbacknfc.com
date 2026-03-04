@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { db as prisma } from "@/lib/db";
-import { sendWarrantyActivatedNotification } from "@/lib/warranty-notifications";
+import {
+  sendCustomerWarrantyActivatedEmail,
+  sendWarrantyActivatedNotification,
+} from "@/lib/warranty-notifications";
 
 interface ActivateWarrantyRequest {
   productId?: string;
@@ -157,6 +160,15 @@ export async function POST(request: Request) {
     if (normalizedPhone) {
       void sendWarrantyActivatedNotification({
         customerPhone: normalizedPhone,
+        productName: model?.name ?? "product",
+        warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
+      });
+    }
+
+    if (body.customerEmail) {
+      void sendCustomerWarrantyActivatedEmail({
+        customerEmail: body.customerEmail,
+        customerName: body.customerName,
         productName: model?.name ?? "product",
         warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
       });

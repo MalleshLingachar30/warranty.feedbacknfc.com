@@ -2,6 +2,7 @@ import { type Prisma } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
+import { runSlaSweep } from "@/lib/sla-engine";
 import { resolveTechnicianId } from "@/lib/technician-context";
 import { sendCustomerCompletionPrompt } from "@/lib/warranty-notifications";
 
@@ -270,6 +271,8 @@ export async function POST(
         },
       }),
     ]);
+
+    await runSlaSweep({ ticketId: ticket.id });
 
     if (ticket.product.customerPhone) {
       void sendCustomerCompletionPrompt({

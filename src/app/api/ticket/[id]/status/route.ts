@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
+import { runSlaSweep } from "@/lib/sla-engine";
 
 export async function GET(
   _request: Request,
@@ -15,6 +16,8 @@ export async function GET(
         { status: 400 },
       );
     }
+
+    await runSlaSweep({ ticketId: id });
 
     const ticket = await db.ticket.findUnique({
       where: {

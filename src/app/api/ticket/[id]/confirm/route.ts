@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { type Prisma } from "@prisma/client";
 
 import { db as prisma } from "@/lib/db";
+import { runSlaSweep } from "@/lib/sla-engine";
+import { sendManufacturerClaimSubmittedEmail } from "@/lib/warranty-notifications";
 
 interface TicketConfirmationRequest {
   action?: "confirm" | "reopen";
@@ -289,6 +291,43 @@ export async function POST(request: Request, context: RouteContext) {
         };
       });
 
+      if (result.generatedClaim) {
+        const claimNotification = await prisma.warrantyClaim.findUnique({
+          where: {
+            id: result.generatedClaim.id,
+          },
+          select: {
+            claimNumber: true,
+            totalClaimAmount: true,
+            manufacturerOrg: {
+              select: {
+                name: true,
+                contactEmail: true,
+              },
+            },
+            serviceCenterOrg: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
+
+        const manufacturerEmail =
+          claimNotification?.manufacturerOrg.contactEmail ?? "";
+
+        if (claimNotification && manufacturerEmail) {
+          void sendManufacturerClaimSubmittedEmail({
+            manufacturerEmail,
+            manufacturerName: claimNotification.manufacturerOrg.name,
+            claimNumber: claimNotification.claimNumber,
+            ticketNumber: ticket.ticketNumber,
+            serviceCenterName: claimNotification.serviceCenterOrg.name,
+            claimAmount: toNumber(claimNotification.totalClaimAmount),
+          });
+        }
+      }
+
       return NextResponse.json({
         success: true,
         message: `Resolution confirmed for ${ticket.ticketNumber}.`,
@@ -330,6 +369,8 @@ export async function POST(request: Request, context: RouteContext) {
         },
       }),
     ]);
+
+    await runSlaSweep({ ticketId: reopenedTicket.id });
 
     return NextResponse.json({
       success: true,
