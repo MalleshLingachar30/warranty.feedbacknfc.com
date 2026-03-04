@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { LANDING_PAGE_HTML } from "@/lib/generated/landing-page-content";
 
 export type LandingLanguage = "en" | "ar";
 
@@ -25,11 +24,8 @@ function normalizeLinks(bodyHtml: string): string {
     .replace(/href='index\.html'/g, "href='/?lang=en'");
 }
 
-export async function loadLandingPageContent(
-  lang: LandingLanguage,
-): Promise<LandingPageContent> {
-  const fileName = lang === "ar" ? "ar.html" : "index.html";
-  const raw = await readFile(path.join(process.cwd(), fileName), "utf8");
+export function loadLandingPageContent(lang: LandingLanguage): LandingPageContent {
+  const raw = LANDING_PAGE_HTML[lang];
 
   const htmlLang = extractMatch(raw, /<html[^>]*\slang="([^"]+)"[^>]*>/i, lang);
   const htmlDir = extractMatch(
