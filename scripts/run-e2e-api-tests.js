@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require("node:child_process");
 
 const baseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";

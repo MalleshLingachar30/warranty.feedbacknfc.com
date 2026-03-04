@@ -1,13 +1,20 @@
+import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
+import { ArrowRightIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { DevRoleSwitcher } from "@/components/dashboard/dev-role-switcher";
-import { ComingSoonCard } from "@/components/dashboard/coming-soon-card";
-import { getRoleLabel, parseAppRoleFromClaims } from "@/lib/roles";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  NAVIGATION_BY_ROLE,
+  getRoleLabel,
+  parseAppRoleFromClaims,
+} from "@/lib/roles";
 
 export default async function DashboardPage() {
   const { sessionClaims } = await auth();
   const role = parseAppRoleFromClaims(sessionClaims);
+  const navItems = NAVIGATION_BY_ROLE[role] ?? [];
 
   if (role === "manufacturer_admin") {
     redirect("/dashboard/manufacturer");
@@ -21,13 +28,35 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
           Dashboard
         </h1>
-        <p className="text-sm text-slate-600">{getRoleLabel(role)} overview</p>
+        <p className="text-sm text-slate-600">
+          {getRoleLabel(role)} quick navigation
+        </p>
       </div>
       {showDevRoleSwitcher ? <DevRoleSwitcher currentRole={role} /> : null}
-      <ComingSoonCard
-        title="Role-Based Dashboard Overview"
-        description="Analytics widgets and operational summaries are being wired in the next phase."
-      />
+      <Card>
+        <CardHeader>
+          <CardTitle>Workspace</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 transition-colors hover:border-indigo-300 hover:bg-indigo-50"
+              >
+                <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-900">
+                  <Icon className="h-4 w-4 text-indigo-600" />
+                  {item.label}
+                </span>
+                <ArrowRightIcon className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-600" />
+              </Link>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 }

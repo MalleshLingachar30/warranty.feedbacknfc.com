@@ -7,12 +7,41 @@ interface CreateTicketRequest {
   issueCategory?: string | null;
   issueDescription?: string;
   issuePhotos?: string[];
+  photos?: string[];
+  severity?: string;
   reportedByName?: string | null;
+  customerName?: string | null;
   reportedByPhone?: string;
+  customerPhone?: string;
 }
 
 function normalizePhone(phone: string): string {
   return phone.replace(/[^\d+]/g, "");
+}
+
+function normalizeSeverity(value: string | undefined) {
+  if (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "critical"
+  ) {
+    return value;
+  }
+
+  return "medium";
+}
+
+function sanitizePhotos(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .slice(0, 10);
 }
 
 function syntheticCustomerClerkId(phone: string): string {
@@ -46,8 +75,12 @@ async function generateTicketNumber(): Promise<string> {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as CreateTicketRequest;
+    const reportedByPhone = body.reportedByPhone ?? body.customerPhone;
+    const reportedByName = body.reportedByName ?? body.customerName ?? null;
+    const issuePhotos = sanitizePhotos(body.issuePhotos ?? body.photos ?? []);
+    const issueSeverity = normalizeSeverity(body.severity);
 
-    if (!body.productId || !body.issueDescription || !body.reportedByPhone) {
+    if (!body.productId || !body.issueDescription || !reportedByPhone) {
       return NextResponse.json(
         {
           error:
@@ -105,7 +138,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedPhone = normalizePhone(body.reportedByPhone);
+    const normalizedPhone = normalizePhone(reportedByPhone);
 
     const userLookupFilters: Array<{ id?: string; phone?: string }> = [];
 
@@ -133,7 +166,7 @@ export async function POST(request: Request) {
         data: {
           clerkId: syntheticCustomerClerkId(normalizedPhone),
           role: "customer",
-          name: body.reportedByName ?? "Customer",
+          name: reportedByName ?? "Customer",
           phone: normalizedPhone || null,
         },
         select: {
@@ -153,12 +186,12 @@ export async function POST(request: Request) {
           productId: product.id,
           stickerId: product.stickerId,
           reportedByUserId: customerUser.id,
-          reportedByName: body.reportedByName ?? customerUser.name ?? "Customer",
+          reportedByName: reportedByName ?? customerUser.name ?? "Customer",
           reportedByPhone: normalizedPhone,
           issueCategory: body.issueCategory ?? null,
           issueDescription: body.issueDescription,
-          issuePhotos: body.issuePhotos ?? [],
-          issueSeverity: "medium",
+          issuePhotos,
+          issueSeverity,
           status: "reported",
         },
       }),
@@ -169,7 +202,7 @@ export async function POST(request: Request) {
           eventDescription: "Service request created by customer.",
           actorUserId: customerUser.id,
           actorRole: "customer",
-          actorName: body.reportedByName ?? customerUser.name ?? "Customer",
+          actorName: reportedByName ?? customerUser.name ?? "Customer",
         },
       }),
     ]);
