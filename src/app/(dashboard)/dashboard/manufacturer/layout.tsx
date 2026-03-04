@@ -1,17 +1,23 @@
-import type { Metadata } from "next"
+import type { Metadata } from "next";
 
-import { ensureManufacturerAdmin } from "@/lib/auth"
+import { ManufacturerSubNav } from "@/components/manufacturer/sub-nav";
+import { ensureManufacturerAdmin } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Manufacturer Dashboard",
-}
+};
 
 export default async function ManufacturerLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  await ensureManufacturerAdmin()
+  await ensureManufacturerAdmin();
 
-  return children
+  return (
+    <div>
+      <ManufacturerSubNav />
+      {children}
+    </div>
+  );
 }

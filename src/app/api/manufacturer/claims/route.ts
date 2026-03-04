@@ -1,12 +1,34 @@
-import { ClaimsClient } from "@/components/manufacturer/claims-client";
-import { type ClaimQueueRow } from "@/components/manufacturer/types";
+import { NextResponse } from "next/server";
+import { ClaimStatus } from "@prisma/client";
+
 import { db } from "@/lib/db";
-import { claimsSeed } from "@/lib/mock/manufacturer-dashboard";
 
 import {
-  decimalToNumber,
-  resolveManufacturerPageContext,
-} from "../_lib/server-context";
+  PENDING_REVIEW_CLAIM_STATUSES,
+  jsonError,
+  requireManufacturerContext,
+} from "../_utils";
+
+type ClaimDocumentation = {
+  photos: string[];
+  timestamps: string[];
+  partsUsed: string[];
+  technicianNotes: string;
+};
+
+type ClaimQueueRow = {
+  id: string;
+  claimNumber: string;
+  ticketReference: string;
+  product: string;
+  serviceCenter: string;
+  amount: number;
+  approvedAmount: number | null;
+  status: ClaimStatus;
+  submittedDate: string;
+  documentation: ClaimDocumentation;
+  rejectionReason: string | null;
+};
 
 type GenericRecord = Record<string, unknown>;
 
@@ -61,48 +83,37 @@ function normalizeParts(partsUsed: unknown): string[] {
 
       return "";
     })
-    .filter((entry) => entry.length > 0);
+    .filter((value) => value.length > 0);
 }
 
-function mapSeedClaims(): ClaimQueueRow[] {
-  return claimsSeed.map((claim) => ({
-    id: claim.id,
-    claimNumber: claim.claimNumber,
-    ticketReference: claim.ticketReference,
-    product: claim.product,
-    serviceCenter: claim.serviceCenter,
-    amount: claim.amount,
-    approvedAmount:
-      claim.status === "approved" || claim.status === "paid"
-        ? claim.amount
-        : null,
-    status: claim.status,
-    submittedDate: claim.submittedDate,
-    rejectionReason:
-      claim.status === "rejected" ? "Rejected by manufacturer" : null,
-    documentation: {
-      photos: claim.documentation.photos,
-      timestamps: claim.documentation.timestamps,
-      partsUsed: claim.documentation.partsUsed,
-      technicianNotes: claim.documentation.technicianNotes,
-    },
-  }));
+function toNumberValue(value: unknown) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "object" && value !== null && "toNumber" in value) {
+    try {
+      const numeric = (value as { toNumber: () => number }).toNumber();
+      return Number.isFinite(numeric) ? numeric : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export default async function ClaimsPage() {
-  const { organizationId } = await resolveManufacturerPageContext();
+export async function GET() {
+  try {
+    const { organizationId } = await requireManufacturerContext();
 
-  let claims: ClaimQueueRow[] = [];
-
-  if (organizationId) {
-    const rows = await db.warrantyClaim.findMany({
+    const claims = await db.warrantyClaim.findMany({
       where: {
         manufacturerOrgId: organizationId,
         status: {
           in: [
-            "auto_generated",
-            "submitted",
-            "under_review",
+            ...PENDING_REVIEW_CLAIM_STATUSES,
             "approved",
             "rejected",
             "paid",
@@ -124,6 +135,7 @@ export default async function ClaimsPage() {
         rejectionReason: true,
         ticket: {
           select: {
+            id: true,
             ticketNumber: true,
             issuePhotos: true,
             resolutionPhotos: true,
@@ -153,7 +165,7 @@ export default async function ClaimsPage() {
       },
     });
 
-    claims = rows.map((claim) => {
+    const queue: ClaimQueueRow[] = claims.map((claim) => {
       const documentationRecord = isRecord(claim.documentation)
         ? claim.documentation
         : {};
@@ -181,12 +193,16 @@ export default async function ClaimsPage() {
         .filter((value): value is Date => value instanceof Date)
         .map((date) => date.toISOString());
 
+      const fallbackParts = normalizeParts(claim.ticket.partsUsed);
+
+      const productName = claim.product.productModel.name;
+      const modelNumber = claim.product.productModel.modelNumber;
+      const serialNumber = claim.product.serialNumber;
+
       const productLabel = [
-        claim.product.productModel.name,
-        claim.product.productModel.modelNumber
-          ? `(${claim.product.productModel.modelNumber})`
-          : null,
-        claim.product.serialNumber ? `• ${claim.product.serialNumber}` : null,
+        productName,
+        modelNumber ? `(${modelNumber})` : null,
+        serialNumber ? `• ${serialNumber}` : null,
       ]
         .filter(Boolean)
         .join(" ");
@@ -197,11 +213,11 @@ export default async function ClaimsPage() {
         ticketReference: claim.ticket.ticketNumber,
         product: productLabel,
         serviceCenter: claim.serviceCenterOrg.name,
-        amount: decimalToNumber(claim.totalClaimAmount),
+        amount: toNumberValue(claim.totalClaimAmount),
         approvedAmount:
           claim.approvedAmount === null
             ? null
-            : decimalToNumber(claim.approvedAmount),
+            : toNumberValue(claim.approvedAmount),
         status: claim.status,
         submittedDate: (claim.submittedAt ?? claim.createdAt).toISOString(),
         rejectionReason: claim.rejectionReason,
@@ -215,21 +231,17 @@ export default async function ClaimsPage() {
               ? documentedTimestamps
               : fallbackTimestamps,
           partsUsed:
-            documentedParts.length > 0
-              ? documentedParts
-              : normalizeParts(claim.ticket.partsUsed),
+            documentedParts.length > 0 ? documentedParts : fallbackParts,
           technicianNotes:
             documentedNotes.length > 0
               ? documentedNotes
               : (claim.ticket.resolutionNotes ?? "No notes submitted."),
         },
-      } satisfies ClaimQueueRow;
+      };
     });
-  }
 
-  if (claims.length === 0) {
-    claims = mapSeedClaims();
+    return NextResponse.json({ claims: queue });
+  } catch (error) {
+    return jsonError(error);
   }
-
-  return <ClaimsClient initialClaims={claims} />;
 }

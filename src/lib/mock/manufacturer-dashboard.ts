@@ -1,77 +1,86 @@
-export type TicketStatus = "new" | "assigned" | "in_progress" | "awaiting_parts"
-export type ClaimStatus = "submitted" | "under_review" | "approved" | "rejected" | "paid"
+export type TicketStatus =
+  | "new"
+  | "assigned"
+  | "in_progress"
+  | "awaiting_parts";
+export type ClaimStatus =
+  | "submitted"
+  | "under_review"
+  | "approved"
+  | "rejected"
+  | "paid";
 
 export type ProductModel = {
-  id: string
-  name: string
-  category: string
-  subCategory: string
-  modelNumber: string
-  description: string
-  imageUrl: string
-  warrantyDurationMonths: number
-  totalUnits: number
-  commonIssues: string[]
-  requiredSkills: string[]
-}
+  id: string;
+  name: string;
+  category: string;
+  subCategory: string;
+  modelNumber: string;
+  description: string;
+  imageUrl: string;
+  warrantyDurationMonths: number;
+  totalUnits: number;
+  commonIssues: string[];
+  requiredSkills: string[];
+};
 
 export type AllocationHistoryItem = {
-  id: string
-  allocationId: string
-  date: string
-  stickerStart: number
-  stickerEnd: number
-  serialPrefix: string
-  serialStart: number
-  serialEnd: number
-  productModelId: string
-}
+  id: string;
+  allocationId: string;
+  date: string;
+  stickerStart: number;
+  stickerEnd: number;
+  serialPrefix: string;
+  serialStart: number;
+  serialEnd: number;
+  productModelId: string;
+};
 
 export type ServiceCenter = {
-  id: string
-  name: string
-  city: string
-  supportedCategories: string[]
-  rating: number
-  totalJobsCompleted: number
+  id: string;
+  name: string;
+  city: string;
+  supportedCategories: string[];
+  rating: number;
+  totalJobsCompleted: number;
   technicians: Array<{
-    id: string
-    name: string
-    skillset: string[]
-    jobsCompleted: number
-    firstTimeFixRate: number
-  }>
+    id: string;
+    name: string;
+    skillset: string[];
+    jobsCompleted: number;
+    firstTimeFixRate: number;
+  }>;
   performance: {
-    avgResolutionHours: number
-    claimAccuracy: number
-    customerSatisfaction: number
-  }
-}
+    avgResolutionHours: number;
+    claimAccuracy: number;
+    customerSatisfaction: number;
+  };
+};
 
 export type ClaimDocumentation = {
-  photos: string[]
-  timestamps: string[]
-  partsUsed: string[]
-  technicianNotes: string
-}
+  photos: string[];
+  timestamps: string[];
+  partsUsed: string[];
+  technicianNotes: string;
+};
 
 export type Claim = {
-  id: string
-  claimNumber: string
-  ticketReference: string
-  product: string
-  serviceCenter: string
-  amount: number
-  status: ClaimStatus
-  submittedDate: string
-  documentation: ClaimDocumentation
-}
+  id: string;
+  claimNumber: string;
+  ticketReference: string;
+  product: string;
+  serviceCenter: string;
+  amount: number;
+  status: ClaimStatus;
+  submittedDate: string;
+  documentation: ClaimDocumentation;
+};
 
 export const productCatalogSeed: ProductModel[] = [
   {
     id: "pm-101",
     name: "AstraCool Inverter Split AC 1.5T",
-    category: "Air Conditioner",
+    category: "ac",
     subCategory: "Inverter Split",
     modelNumber: "AC-INV-15-AX",
     description:
@@ -85,7 +94,7 @@ export const productCatalogSeed: ProductModel[] = [
   {
     id: "pm-102",
     name: "ThermoWash Front Load 8kg",
-    category: "Washing Machine",
+    category: "washing_machine",
     subCategory: "Front Load",
     modelNumber: "WM-FL-800-TW",
     description:
@@ -99,7 +108,7 @@ export const productCatalogSeed: ProductModel[] = [
   {
     id: "pm-103",
     name: "FreshMax Double Door 420L",
-    category: "Refrigerator",
+    category: "refrigerator",
     subCategory: "Double Door",
     modelNumber: "RF-DD-420-FM",
     description:
@@ -113,7 +122,7 @@ export const productCatalogSeed: ProductModel[] = [
   {
     id: "pm-104",
     name: "HeatPro Induction Cooktop 2Z",
-    category: "Kitchen Appliance",
+    category: "kitchen_appliance",
     subCategory: "Cooktop",
     modelNumber: "KC-IN-2Z-HP",
     description:
@@ -127,29 +136,28 @@ export const productCatalogSeed: ProductModel[] = [
   {
     id: "pm-105",
     name: "PureWave Smart Water Purifier",
-    category: "Water Purifier",
+    category: "water_purifier",
     subCategory: "RO + UV",
     modelNumber: "WP-ROUV-PW",
-    description:
-      "Connected water purifier with TDS monitor and app alerts.",
+    description: "Connected water purifier with TDS monitor and app alerts.",
     imageUrl: "/vercel.svg",
     warrantyDurationMonths: 30,
     totalUnits: 6750,
     commonIssues: ["RO membrane clog", "Flow sensor failure"],
     requiredSkills: ["Filter Replacement", "IoT Diagnostics"],
   },
-]
+];
 
 export const openTicketStatusCounts: Array<{
-  status: TicketStatus
-  label: string
-  count: number
+  status: TicketStatus;
+  label: string;
+  count: number;
 }> = [
   { status: "new", label: "New", count: 32 },
   { status: "assigned", label: "Assigned", count: 47 },
   { status: "in_progress", label: "In Progress", count: 58 },
   { status: "awaiting_parts", label: "Awaiting Parts", count: 21 },
-]
+];
 
 export const monthlyWarrantyCostTrend = [
   { month: "Sep", cost: 142000, claims: 88 },
@@ -158,14 +166,14 @@ export const monthlyWarrantyCostTrend = [
   { month: "Dec", cost: 171000, claims: 103 },
   { month: "Jan", cost: 164300, claims: 98 },
   { month: "Feb", cost: 178900, claims: 112 },
-]
+];
 
 export const stickerInventorySeed = {
   totalAllocated: 125000,
   totalBound: 88940,
   totalActivated: 74612,
   totalAvailable: 36060,
-}
+};
 
 export const allocationHistorySeed: AllocationHistoryItem[] = [
   {
@@ -201,7 +209,7 @@ export const allocationHistorySeed: AllocationHistoryItem[] = [
     serialEnd: 82500,
     productModelId: "pm-103",
   },
-]
+];
 
 export const serviceCentersSeed: ServiceCenter[] = [
   {
@@ -237,7 +245,11 @@ export const serviceCentersSeed: ServiceCenter[] = [
     id: "sc-12",
     name: "MetroCare Appliances",
     city: "Hyderabad",
-    supportedCategories: ["Water Purifier", "Kitchen Appliance", "Washing Machine"],
+    supportedCategories: [
+      "Water Purifier",
+      "Kitchen Appliance",
+      "Washing Machine",
+    ],
     rating: 4.5,
     totalJobsCompleted: 3562,
     technicians: [
@@ -291,7 +303,7 @@ export const serviceCentersSeed: ServiceCenter[] = [
       customerSatisfaction: 4.4,
     },
   },
-]
+];
 
 export const claimsSeed: Claim[] = [
   {
@@ -379,11 +391,27 @@ export const claimsSeed: Claim[] = [
         "Touch panel ghost inputs due to PCB moisture damage. Replaced PCB and updated firmware patch.",
     },
   },
-]
+];
 
 export const topIssueByModel = [
-  { model: "AstraCool Inverter Split AC 1.5T", issue: "Gas leakage", incidents: 42 },
-  { model: "ThermoWash Front Load 8kg", issue: "Drain pump block", incidents: 35 },
-  { model: "FreshMax Double Door 420L", issue: "Thermostat drift", incidents: 28 },
-  { model: "PureWave Smart Water Purifier", issue: "RO membrane clog", incidents: 24 },
-]
+  {
+    model: "AstraCool Inverter Split AC 1.5T",
+    issue: "Gas leakage",
+    incidents: 42,
+  },
+  {
+    model: "ThermoWash Front Load 8kg",
+    issue: "Drain pump block",
+    incidents: 35,
+  },
+  {
+    model: "FreshMax Double Door 420L",
+    issue: "Thermostat drift",
+    incidents: 28,
+  },
+  {
+    model: "PureWave Smart Water Purifier",
+    issue: "RO membrane clog",
+    incidents: 24,
+  },
+];
