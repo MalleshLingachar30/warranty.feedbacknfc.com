@@ -1,10 +1,9 @@
-import { ComingSoonCard } from "@/components/dashboard/coming-soon-card";
+import { SchedulePanel } from "@/components/technician/schedule-panel";
 
 export default function SchedulePage() {
   return (
-    <ComingSoonCard
-      title="Schedule"
-      description="Calendar scheduling and job timeline visibility are coming soon."
-    />
+    <div className="mx-auto w-full max-w-md">
+      <SchedulePanel />
+    </div>
   );
 }

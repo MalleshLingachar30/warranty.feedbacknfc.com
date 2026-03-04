@@ -1,10 +1,9 @@
-import { ComingSoonCard } from "@/components/dashboard/coming-soon-card";
+import { MyJobsBoard } from "@/components/technician/my-jobs-board";
 
 export default function MyJobsPage() {
   return (
-    <ComingSoonCard
-      title="My Jobs"
-      description="Assigned job lists and mobile-first execution workflow are coming soon."
-    />
+    <div className="mx-auto w-full max-w-md">
+      <MyJobsBoard />
+    </div>
   );
 }

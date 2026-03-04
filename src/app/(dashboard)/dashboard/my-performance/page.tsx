@@ -1,10 +1,9 @@
-import { ComingSoonCard } from "@/components/dashboard/coming-soon-card";
+import { MyPerformancePanel } from "@/components/technician/my-performance-panel";
 
 export default function MyPerformancePage() {
   return (
-    <ComingSoonCard
-      title="My Performance"
-      description="Technician productivity and service quality metrics are coming soon."
-    />
+    <div className="mx-auto w-full max-w-md">
+      <MyPerformancePanel />
+    </div>
   );
 }
