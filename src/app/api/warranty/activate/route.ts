@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db as prisma } from "@/lib/db";
+import { sendWarrantyActivatedNotification } from "@/lib/warranty-notifications";
 
 interface ActivateWarrantyRequest {
   productId?: string;
@@ -23,6 +24,14 @@ function buildSyntheticClerkId(phone: string): string {
   }
 
   return `customer_phone_${normalized}`;
+}
+
+function formatWarrantyEndDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function addMonths(input: Date, months: number): Date {
@@ -144,6 +153,14 @@ export async function POST(request: Request) {
         data: { status: "activated" },
       }),
     ]);
+
+    if (normalizedPhone) {
+      void sendWarrantyActivatedNotification({
+        customerPhone: normalizedPhone,
+        productName: model?.name ?? "product",
+        warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
+      });
+    }
 
     return NextResponse.json({
       success: true,

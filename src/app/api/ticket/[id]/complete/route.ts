@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
 import { resolveTechnicianId } from "@/lib/technician-context";
+import { sendCustomerCompletionPrompt } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
 
@@ -144,6 +145,17 @@ export async function POST(
         ticketNumber: true,
         assignedTechnicianId: true,
         metadata: true,
+        product: {
+          select: {
+            customerPhone: true,
+            customerName: true,
+            sticker: {
+              select: {
+                stickerNumber: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -258,6 +270,15 @@ export async function POST(
         },
       }),
     ]);
+
+    if (ticket.product.customerPhone) {
+      void sendCustomerCompletionPrompt({
+        customerPhone: ticket.product.customerPhone,
+        customerName: ticket.product.customerName ?? "Customer",
+        ticketNumber: ticket.ticketNumber,
+        stickerNumber: ticket.product.sticker.stickerNumber,
+      });
+    }
 
     return NextResponse.json({
       success: true,

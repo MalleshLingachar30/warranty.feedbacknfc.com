@@ -1,0 +1,9 @@
+.git
+.next
+node_modules
+.agents
+.claude
+docs
+ar.html
+index.html
+tsconfig.tsbuildinfo

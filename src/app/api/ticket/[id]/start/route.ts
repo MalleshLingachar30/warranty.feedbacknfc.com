@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
 import { resolveTechnicianId } from "@/lib/technician-context";
+import { sendCustomerWorkStartedNotification } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,12 @@ export async function POST(
         ticketNumber: true,
         assignedTechnicianId: true,
         technicianStartedAt: true,
+        product: {
+          select: {
+            customerPhone: true,
+            customerName: true,
+          },
+        },
       },
     });
 
@@ -107,6 +114,14 @@ export async function POST(
         },
       }),
     ]);
+
+    if (ticket.product.customerPhone) {
+      void sendCustomerWorkStartedNotification({
+        customerPhone: ticket.product.customerPhone,
+        customerName: ticket.product.customerName ?? "Customer",
+        ticketNumber: ticket.ticketNumber,
+      });
+    }
 
     return NextResponse.json({
       success: true,

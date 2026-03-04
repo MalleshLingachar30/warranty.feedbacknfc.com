@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/lib/db";
 import { resolveTechnicianId } from "@/lib/technician-context";
+import { sendCustomerEnRouteNotification } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,12 @@ export async function POST(
         assignedServiceCenterId: true,
         assignedAt: true,
         metadata: true,
+        product: {
+          select: {
+            customerPhone: true,
+            customerName: true,
+          },
+        },
       },
     });
 
@@ -97,6 +104,7 @@ export async function POST(
       select: {
         id: true,
         name: true,
+        phone: true,
         serviceCenterId: true,
       },
     });
@@ -138,6 +146,16 @@ export async function POST(
         },
       }),
     ]);
+
+    if (ticket.product.customerPhone) {
+      void sendCustomerEnRouteNotification({
+        customerPhone: ticket.product.customerPhone,
+        customerName: ticket.product.customerName ?? "Customer",
+        technicianName: technician.name,
+        technicianPhone: technician.phone,
+        ticketNumber: ticket.ticketNumber,
+      });
+    }
 
     return NextResponse.json({
       success: true,

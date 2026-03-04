@@ -87,3 +87,14 @@ export async function sendCustomerCompletionPrompt(input: {
     body: `Service complete for ${input.ticketNumber}. Please scan sticker #${input.stickerNumber} and confirm resolution.`,
   });
 }
+
+export async function sendWarrantyActivatedNotification(input: {
+  customerPhone: string;
+  productName: string;
+  warrantyEndDateLabel: string;
+}) {
+  await sendSms({
+    to: input.customerPhone,
+    body: `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}.`,
+  });
+}

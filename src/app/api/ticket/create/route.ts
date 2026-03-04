@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { assignTechnician } from "@/lib/ai-assignment";
 import { db as prisma } from "@/lib/db";
+import { sendTechnicianAssignmentSms } from "@/lib/warranty-notifications";
 
 interface CreateTicketRequest {
   productId?: string;
@@ -96,6 +98,12 @@ export async function POST(request: Request) {
         id: true,
         stickerId: true,
         customerId: true,
+        customerCity: true,
+        productModel: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
 
@@ -207,10 +215,60 @@ export async function POST(request: Request) {
       }),
     ]);
 
+    let assignment:
+      | {
+          status: "assigned" | "escalated";
+          assignedTechnicianId?: string;
+          assignedServiceCenterId?: string;
+          reason?: string;
+        }
+      | null = null;
+
+    try {
+      assignment = await assignTechnician(ticket.id);
+
+      if (assignment.status === "assigned" && assignment.assignedTechnicianId) {
+        const assignedTicket = await prisma.ticket.findUnique({
+          where: { id: ticket.id },
+          select: {
+            ticketNumber: true,
+            issueCategory: true,
+            assignedTechnician: {
+              select: {
+                name: true,
+                phone: true,
+              },
+            },
+          },
+        });
+
+        const technicianPhone = assignedTicket?.assignedTechnician?.phone ?? "";
+        const technicianName = assignedTicket?.assignedTechnician?.name ?? "";
+
+        if (technicianPhone && technicianName) {
+          void sendTechnicianAssignmentSms({
+            technicianName,
+            technicianPhone,
+            issueCategory: assignedTicket?.issueCategory ?? "General issue",
+            location: product.customerCity ?? "Customer location",
+            productName: product.productModel.name,
+            ticketNumber: assignedTicket?.ticketNumber ?? ticket.ticketNumber,
+          });
+        }
+      }
+    } catch (assignmentError) {
+      console.error("AI assignment failed", assignmentError);
+    }
+
+    const latestTicket = await prisma.ticket.findUnique({
+      where: { id: ticket.id },
+    });
+
     return NextResponse.json(
       {
         success: true,
-        ticket,
+        ticket: latestTicket ?? ticket,
+        assignment,
       },
       { status: 201 },
     );
