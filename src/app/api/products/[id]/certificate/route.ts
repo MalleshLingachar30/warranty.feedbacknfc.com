@@ -62,6 +62,7 @@ export async function GET(
       sticker: {
         select: {
           stickerNumber: true,
+          type: true,
         },
       },
     },
@@ -91,6 +92,7 @@ export async function GET(
     warrantyStartDate: formatDate(product.warrantyStartDate),
     warrantyEndDate: formatDate(product.warrantyEndDate),
     stickerNumber: product.sticker.stickerNumber,
+    stickerType: product.sticker.type,
     nfcUrl,
     qrDataUrl,
   });

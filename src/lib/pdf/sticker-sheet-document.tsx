@@ -1,0 +1,184 @@
+import {
+  Document,
+  type DocumentProps,
+  Image as PdfImage,
+  Page,
+  StyleSheet,
+  Text,
+  View,
+} from "@react-pdf/renderer";
+import { type ReactElement } from "react";
+
+import { type StickerBrandingConfig } from "@/lib/sticker-config";
+
+export type StickerSheetItem = {
+  stickerNumber: number;
+  stickerSerial: string;
+  qrDataUrl: string;
+};
+
+type StickerSheetDocumentProps = {
+  title: string;
+  urlBaseLabel: string;
+  branding: StickerBrandingConfig;
+  qrSizeMm: 25 | 30 | 35;
+  items: StickerSheetItem[];
+};
+
+function mmToPt(mm: number) {
+  return (mm / 25.4) * 72;
+}
+
+const styles = StyleSheet.create({
+  page: {
+    padding: 18,
+    fontSize: 7,
+    fontFamily: "Helvetica",
+    color: "#0f172a",
+  },
+  header: {
+    display: "flex",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  headerMeta: {
+    fontSize: 8,
+    color: "#475569",
+  },
+  grid: {
+    display: "flex",
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  label: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 4,
+    padding: 4,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  logo: {
+    width: 44,
+    height: 14,
+    objectFit: "contain",
+    marginBottom: 2,
+  },
+  instruction: {
+    fontSize: 6,
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  qr: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 3,
+  },
+  serial: {
+    fontSize: 7,
+    fontWeight: 700,
+    marginTop: 2,
+  },
+  domain: {
+    fontSize: 6,
+    color: "#475569",
+    marginTop: 1,
+  },
+});
+
+export function StickerSheetDocument({
+  title,
+  urlBaseLabel,
+  branding,
+  qrSizeMm,
+  items,
+}: StickerSheetDocumentProps) {
+  const secondaryInstruction =
+    branding.regionalLanguage === "ar"
+      ? branding.instructionTextAr
+      : branding.instructionTextHi;
+
+  const qrSizePt = mmToPt(qrSizeMm);
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const padding = 18;
+  const columns = 5;
+  const usableWidth = pageWidth - padding * 2;
+
+  const labelWidth = usableWidth / columns;
+  const labelHeight = qrSizePt + 34;
+  const rows = Math.max(
+    1,
+    Math.floor((pageHeight - padding * 2 - 26) / labelHeight),
+  );
+  const labelsPerPage = columns * rows;
+
+  const pages: StickerSheetItem[][] = [];
+  for (let offset = 0; offset < items.length; offset += labelsPerPage) {
+    pages.push(items.slice(offset, offset + labelsPerPage));
+  }
+
+  return (
+    <Document title={title}>
+      {pages.map((pageItems, pageIndex) => (
+        <Page key={`page-${pageIndex}`} size="A4" style={styles.page}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>{title}</Text>
+            <Text style={styles.headerMeta}>
+              {qrSizeMm}mm • {urlBaseLabel}
+            </Text>
+          </View>
+
+          <View style={styles.grid}>
+            {pageItems.map((item) => (
+              <View
+                key={item.stickerSerial}
+                style={[
+                  styles.label,
+                  {
+                    width: labelWidth,
+                    height: labelHeight,
+                    borderColor: branding.primaryColor || "#e2e8f0",
+                  },
+                ]}
+              >
+                <View>
+                  {branding.logoUrl ? (
+                    <PdfImage src={branding.logoUrl} style={styles.logo} />
+                  ) : null}
+                  <Text style={styles.instruction}>{branding.instructionTextEn}</Text>
+                  <Text style={styles.instruction}>{secondaryInstruction}</Text>
+                </View>
+
+                <PdfImage
+                  src={item.qrDataUrl}
+                  style={[styles.qr, { width: qrSizePt, height: qrSizePt }]}
+                />
+
+                <View>
+                  <Text style={styles.serial}>{item.stickerSerial}</Text>
+                  <Text style={styles.domain}>{urlBaseLabel}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </Page>
+      ))}
+    </Document>
+  );
+}
+
+export function createStickerSheetPdfDocument(
+  props: StickerSheetDocumentProps,
+): ReactElement<DocumentProps> {
+  return <StickerSheetDocument {...props} />;
+}
+

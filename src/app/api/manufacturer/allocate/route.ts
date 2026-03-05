@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
+import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 
 import {
   ApiError,
@@ -14,6 +15,7 @@ import {
 type AllocatePayload = {
   stickerStartNumber?: unknown;
   stickerEndNumber?: unknown;
+  stickerVariant?: unknown;
   productModelId?: unknown;
   serialPrefix?: unknown;
   serialStartNumber?: unknown;
@@ -72,6 +74,38 @@ export async function POST(request: Request) {
     const stickerEndNumber = toNumber(body.stickerEndNumber);
     const serialStartNumber = toNumber(body.serialStartNumber);
     const serialEndNumber = toNumber(body.serialEndNumber);
+
+    const organization = await db.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        settings: true,
+      },
+    });
+
+    const stickerConfig = normalizeManufacturerStickerConfig(
+      organization?.settings ?? {},
+    );
+
+    const stickerType = stickerConfig.mode;
+    const defaultVariant =
+      stickerType === "nfc_qr" ? "premium" : "standard";
+
+    const rawVariant =
+      typeof body.stickerVariant === "string" ? body.stickerVariant.trim() : "";
+    const requestedVariant =
+      rawVariant === "standard" || rawVariant === "high_temp" || rawVariant === "premium"
+        ? rawVariant
+        : "";
+
+    let stickerVariant: "standard" | "high_temp" | "premium" = defaultVariant;
+
+    if (stickerType === "qr_only") {
+      stickerVariant = requestedVariant === "high_temp" ? "high_temp" : "standard";
+    } else if (stickerType === "nfc_qr") {
+      stickerVariant = "premium";
+    } else {
+      stickerVariant = "standard";
+    }
 
     const productModelId =
       typeof body.productModelId === "string" ? body.productModelId.trim() : "";
@@ -203,6 +237,8 @@ export async function POST(request: Request) {
           stickerSerial: buildStickerSerial(stickerNumber),
           status: "bound" as const,
           allocatedToOrgId: organizationId,
+          type: stickerType,
+          variant: stickerVariant,
         }));
 
       if (missingStickerRows.length > 0) {
@@ -242,6 +278,8 @@ export async function POST(request: Request) {
         data: {
           allocatedToOrgId: organizationId,
           status: "bound",
+          type: stickerType,
+          variant: stickerVariant,
         },
       });
 

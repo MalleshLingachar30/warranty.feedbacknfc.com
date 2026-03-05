@@ -5,6 +5,7 @@ import {
   type StickerInventorySummary,
 } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
+import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 import {
   allocationHistorySeed,
   productCatalogSeed,
@@ -69,16 +70,24 @@ export default async function ManufacturerStickersPage() {
 
   let productModels: ManufacturerProductModel[] = [];
   let allocationHistory: AllocationHistoryRow[] = [];
+  let stickerConfig = normalizeManufacturerStickerConfig({});
   let inventory: StickerInventorySummary = {
     totalAllocated: 0,
     totalBound: 0,
     totalActivated: 0,
     totalAvailable: 0,
   };
+  let hasRealAllocations = false;
 
   if (organizationId) {
-    const [models, allocations, totalAllocated, totalBound, totalActivated] =
-      await Promise.all([
+    const [
+      models,
+      allocations,
+      totalAllocated,
+      totalBound,
+      totalActivated,
+      organization,
+    ] = await Promise.all([
         db.productModel.findMany({
           where: {
             organizationId,
@@ -137,6 +146,10 @@ export default async function ManufacturerStickersPage() {
             status: "activated",
           },
         }),
+        db.organization.findUnique({
+          where: { id: organizationId },
+          select: { settings: true },
+        }),
       ]);
 
     productModels = models.map((model) => ({
@@ -152,6 +165,8 @@ export default async function ManufacturerStickersPage() {
       commonIssues: jsonStringArray(model.commonIssues),
       requiredSkills: model.requiredSkills,
     }));
+
+    hasRealAllocations = allocations.length > 0;
 
     allocationHistory = allocations.map((allocation) => {
       const serialStartNumber = Number(allocation.applianceSerialStart ?? 0);
@@ -181,6 +196,8 @@ export default async function ManufacturerStickersPage() {
       totalActivated,
       totalAvailable: Math.max(totalAllocated - totalBound - totalActivated, 0),
     };
+
+    stickerConfig = normalizeManufacturerStickerConfig(organization?.settings ?? {});
   }
 
   if (productModels.length === 0) {
@@ -200,6 +217,8 @@ export default async function ManufacturerStickersPage() {
       initialProductModels={productModels}
       initialAllocationHistory={allocationHistory}
       initialInventory={inventory}
+      stickerConfig={stickerConfig}
+      hasRealAllocations={hasRealAllocations}
     />
   );
 }

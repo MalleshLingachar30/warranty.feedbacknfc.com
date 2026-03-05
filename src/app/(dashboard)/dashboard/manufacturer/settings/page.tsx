@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { ManufacturerSettingsClient } from "@/components/manufacturer/settings-client";
 import { DEFAULT_SLA_HOURS } from "@/lib/sla-config";
+import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 
 import { resolveManufacturerPageContext } from "../_lib/server-context";
 
@@ -107,6 +108,7 @@ function normalizeSettings(value: unknown) {
       apiKeyLabel: asString(integrations.apiKeyLabel, ""),
       erpApiKeyMasked: asString(integrations.erpApiKeyMasked, ""),
     },
+    stickers: normalizeManufacturerStickerConfig(source),
   };
 }
 

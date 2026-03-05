@@ -31,10 +31,12 @@ import type {
   ManufacturerProductModel,
   StickerInventorySummary,
 } from "./types";
+import { type ManufacturerStickerConfig } from "@/lib/sticker-config";
 
 type WizardState = {
   stickerStart: string;
   stickerEnd: string;
+  stickerVariant: "standard" | "high_temp" | "premium";
   productModelId: string;
   serialPrefix: string;
   serialStart: string;
@@ -51,6 +53,8 @@ type StickerWizardClientProps = {
   initialProductModels: ManufacturerProductModel[];
   initialAllocationHistory: AllocationHistoryRow[];
   initialInventory: StickerInventorySummary;
+  stickerConfig: ManufacturerStickerConfig;
+  hasRealAllocations: boolean;
 };
 
 const stepTitles = [
@@ -60,6 +64,12 @@ const stepTitles = [
   "Review",
   "Success",
 ];
+
+function isProbablyUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
 
 function formatSerial(prefix: string, number: number, padLength: number) {
   return `${prefix}${number.toString().padStart(padLength, "0")}`;
@@ -109,16 +119,21 @@ export function StickerWizardClient({
   initialProductModels,
   initialAllocationHistory,
   initialInventory,
+  stickerConfig,
+  hasRealAllocations,
 }: StickerWizardClientProps) {
   const [step, setStep] = useState(1);
-  const [wizard, setWizard] = useState<WizardState>({
+  const defaultStickerVariant =
+    stickerConfig.mode === "nfc_qr" ? "premium" : "standard";
+  const [wizard, setWizard] = useState<WizardState>(() => ({
     stickerStart: "",
     stickerEnd: "",
+    stickerVariant: defaultStickerVariant,
     productModelId: initialProductModels[0]?.id ?? "",
     serialPrefix: "",
     serialStart: "",
     serialEnd: "",
-  });
+  }));
   const [wizardError, setWizardError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allocationHistory, setAllocationHistory] = useState<
@@ -127,6 +142,22 @@ export function StickerWizardClient({
   const [inventory, setInventory] = useState(initialInventory);
   const [lastAllocationId, setLastAllocationId] = useState("");
   const [lastAllocatedCount, setLastAllocatedCount] = useState(0);
+
+  const initialProductionAllocationId =
+    initialAllocationHistory.find((entry) => isProbablyUuid(entry.id))?.id ?? "";
+  const [productionAllocationId, setProductionAllocationId] = useState(
+    initialProductionAllocationId,
+  );
+  const [qrSizeMm, setQrSizeMm] = useState<25 | 30 | 35>(30);
+  const [qrErrorCorrection, setQrErrorCorrection] = useState<
+    "L" | "M" | "Q" | "H"
+  >("H");
+  const [qrFormat, setQrFormat] = useState<"pdf_sheet" | "png_zip" | "csv">(
+    "png_zip",
+  );
+  const [nfcFormat, setNfcFormat] = useState<"ndef_uri_csv" | "nfc_tools_json">(
+    "ndef_uri_csv",
+  );
 
   const parsedStickerStart = Number(wizard.stickerStart);
   const parsedStickerEnd = Number(wizard.stickerEnd);
@@ -175,6 +206,36 @@ export function StickerWizardClient({
   const selectedProductModel = initialProductModels.find(
     (productModel) => productModel.id === wizard.productModelId,
   );
+
+  const technologyLabel =
+    stickerConfig.mode === "qr_only"
+      ? "QR Code Only"
+      : stickerConfig.mode === "nfc_qr"
+        ? "NFC + QR Code"
+        : "NFC Only (no QR printed)";
+
+  const allowedVariants = useMemo<WizardState["stickerVariant"][]>(() => {
+    if (stickerConfig.mode === "qr_only") {
+      return ["standard", "high_temp"];
+    }
+
+    if (stickerConfig.mode === "nfc_qr") {
+      return ["premium"];
+    }
+
+    return ["standard"];
+  }, [stickerConfig.mode]);
+
+  const effectiveStickerVariant = allowedVariants.includes(wizard.stickerVariant)
+    ? wizard.stickerVariant
+    : allowedVariants[0];
+
+  const stickerVariantLabel =
+    effectiveStickerVariant === "high_temp"
+      ? "High Temperature (up to 150°C)"
+      : effectiveStickerVariant === "premium"
+        ? "Premium"
+        : "Standard (up to 80°C)";
 
   const goToNextStep = () => {
     setWizardError(null);
@@ -229,6 +290,7 @@ export function StickerWizardClient({
         body: JSON.stringify({
           stickerStartNumber: parsedStickerStart,
           stickerEndNumber: parsedStickerEnd,
+          stickerVariant: effectiveStickerVariant,
           productModelId: wizard.productModelId,
           serialPrefix: wizard.serialPrefix,
           serialStartNumber: parsedSerialStart,
@@ -268,6 +330,7 @@ export function StickerWizardClient({
       };
 
       setAllocationHistory((current) => [newHistoryRow, ...current]);
+      setProductionAllocationId(newHistoryRow.id);
       setLastAllocationId(json.allocation.allocationId);
       setLastAllocatedCount(json.allocation.totalCount);
       setStep(5);
@@ -286,6 +349,7 @@ export function StickerWizardClient({
     setWizard({
       stickerStart: "",
       stickerEnd: "",
+      stickerVariant: defaultStickerVariant,
       productModelId: initialProductModels[0]?.id ?? "",
       serialPrefix: "",
       serialStart: "",
@@ -337,43 +401,85 @@ export function StickerWizardClient({
           </div>
 
           {step === 1 ? (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Sticker Start Number
-                </label>
-                <Input
-                  type="number"
-                  value={wizard.stickerStart}
-                  onChange={(event) =>
-                    setWizard((current) => ({
-                      ...current,
-                      stickerStart: event.target.value,
-                    }))
-                  }
-                />
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Sticker Start Number
+                  </label>
+                  <Input
+                    type="number"
+                    value={wizard.stickerStart}
+                    onChange={(event) =>
+                      setWizard((current) => ({
+                        ...current,
+                        stickerStart: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Sticker End Number
+                  </label>
+                  <Input
+                    type="number"
+                    value={wizard.stickerEnd}
+                    onChange={(event) =>
+                      setWizard((current) => ({
+                        ...current,
+                        stickerEnd: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Total Sticker Count
+                  </label>
+                  <Input value={stickerCount.toLocaleString()} readOnly />
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Sticker End Number
-                </label>
-                <Input
-                  type="number"
-                  value={wizard.stickerEnd}
-                  onChange={(event) =>
-                    setWizard((current) => ({
-                      ...current,
-                      stickerEnd: event.target.value,
-                    }))
-                  }
-                />
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Technology</label>
+                  <Input value={technologyLabel} readOnly />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Material Variant</label>
+                  <select
+                    value={effectiveStickerVariant}
+                    onChange={(event) =>
+                      setWizard((current) => ({
+                        ...current,
+                        stickerVariant: event.target.value as WizardState["stickerVariant"],
+                      }))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    disabled={allowedVariants.length === 1}
+                  >
+                    {allowedVariants.includes("standard") ? (
+                      <option value="standard">Standard (up to 80°C)</option>
+                    ) : null}
+                    {allowedVariants.includes("high_temp") ? (
+                      <option value="high_temp">
+                        High Temperature (up to 150°C)
+                      </option>
+                    ) : null}
+                    {allowedVariants.includes("premium") ? (
+                      <option value="premium">Premium</option>
+                    ) : null}
+                  </select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Total Sticker Count
-                </label>
-                <Input value={stickerCount.toLocaleString()} readOnly />
-              </div>
+
+              {stickerConfig.mode === "nfc_qr" || stickerConfig.mode === "nfc_only" ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  ⚠ NFC stickers require encoding. Download the NFC encoding file
+                  after allocation to program NFC chips with matching URLs.
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -510,6 +616,10 @@ export function StickerWizardClient({
                     </p>
                   </div>
                   <div className="rounded-md border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">Technology</p>
+                    <p className="font-medium">{technologyLabel}</p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
                     <p className="text-xs text-muted-foreground">
                       Product Model
                     </p>
@@ -518,6 +628,12 @@ export function StickerWizardClient({
                         ? `${selectedProductModel.name} (${selectedProductModel.modelNumber})`
                         : "-"}
                     </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Material Variant
+                    </p>
+                    <p className="font-medium">{stickerVariantLabel}</p>
                   </div>
                   <div className="rounded-md border bg-background p-3">
                     <p className="text-xs text-muted-foreground">Serial Range</p>
@@ -627,6 +743,206 @@ export function StickerWizardClient({
           </CardHeader>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Production Tools</CardTitle>
+          <CardDescription>
+            Generate print-ready QR assets and NFC encoding exports for sticker
+            production.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {hasRealAllocations || allocationHistory.some((row) => isProbablyUuid(row.id)) ? (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Select Allocation
+                </label>
+                <select
+                  value={productionAllocationId}
+                  onChange={(event) => setProductionAllocationId(event.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Select an allocation…</option>
+                  {allocationHistory
+                    .filter((row) => isProbablyUuid(row.id))
+                    .map((allocation) => (
+                      <option key={allocation.id} value={allocation.id}>
+                        {allocation.allocationId} ({allocation.stickerStart}-
+                        {allocation.stickerEnd}, {allocation.productModelName})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {stickerConfig.mode !== "nfc_only" ? (
+                <div className="space-y-3 rounded-md border p-4">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Generate Print-Ready QR Codes
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Available for QR Only and NFC + QR sticker modes.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <span>QR Code Size</span>
+                      <select
+                        value={qrSizeMm}
+                        onChange={(event) =>
+                          setQrSizeMm(Number(event.target.value) as 25 | 30 | 35)
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value={25}>25mm</option>
+                        <option value={30}>30mm</option>
+                        <option value={35}>35mm</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Error Correction</span>
+                      <select
+                        value={qrErrorCorrection}
+                        onChange={(event) =>
+                          setQrErrorCorrection(
+                            event.target.value as "L" | "M" | "Q" | "H",
+                          )
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="H">H (30%)</option>
+                        <option value="Q">Q (25%)</option>
+                        <option value="M">M (15%)</option>
+                        <option value="L">L (7%)</option>
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm md:col-span-2">
+                      <span>Output Format</span>
+                      <select
+                        value={qrFormat}
+                        onChange={(event) =>
+                          setQrFormat(
+                            event.target.value as "pdf_sheet" | "png_zip" | "csv",
+                          )
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="pdf_sheet">PDF (print sheet)</option>
+                        <option value="png_zip">Individual PNGs (ZIP)</option>
+                        <option value="csv">
+                          CSV (number + URL, for label printer)
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <a
+                    href={
+                      productionAllocationId && isProbablyUuid(productionAllocationId)
+                        ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
+                            productionAllocationId,
+                          )}&format=${encodeURIComponent(
+                            qrFormat,
+                          )}&qr_size_mm=${encodeURIComponent(
+                            String(qrSizeMm),
+                          )}&error_correction=${encodeURIComponent(
+                            qrErrorCorrection,
+                          )}`
+                        : undefined
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className={
+                      productionAllocationId && isProbablyUuid(productionAllocationId)
+                        ? "inline-flex"
+                        : "pointer-events-none inline-flex opacity-60"
+                    }
+                  >
+                    <Button
+                      type="button"
+                      disabled={
+                        !productionAllocationId ||
+                        !isProbablyUuid(productionAllocationId)
+                      }
+                    >
+                      Generate & Download
+                    </Button>
+                  </a>
+                </div>
+              ) : null}
+
+              {stickerConfig.mode !== "qr_only" ? (
+                <div className="space-y-3 rounded-md border p-4">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Generate NFC Encoding File
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Available for NFC + QR and NFC Only sticker modes.
+                    </p>
+                  </div>
+
+                  <label className="space-y-1 text-sm">
+                    <span>Output Format</span>
+                    <select
+                      value={nfcFormat}
+                      onChange={(event) =>
+                        setNfcFormat(
+                          event.target.value as "ndef_uri_csv" | "nfc_tools_json",
+                        )
+                      }
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="ndef_uri_csv">
+                        NDEF URI CSV (for encoding machines)
+                      </option>
+                      <option value="nfc_tools_json">
+                        NFC Tools JSON (generic)
+                      </option>
+                    </select>
+                  </label>
+
+                  <a
+                    href={
+                      productionAllocationId && isProbablyUuid(productionAllocationId)
+                        ? `/api/manufacturer/stickers/generate-nfc-encoding?allocation_id=${encodeURIComponent(
+                            productionAllocationId,
+                          )}&format=${encodeURIComponent(nfcFormat)}`
+                        : undefined
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className={
+                      productionAllocationId && isProbablyUuid(productionAllocationId)
+                        ? "inline-flex"
+                        : "pointer-events-none inline-flex opacity-60"
+                    }
+                  >
+                    <Button
+                      type="button"
+                      disabled={
+                        !productionAllocationId ||
+                        !isProbablyUuid(productionAllocationId)
+                      }
+                    >
+                      Generate & Download
+                    </Button>
+                  </a>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              Create at least one real allocation to unlock production tools.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader>

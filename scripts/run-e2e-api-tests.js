@@ -2,6 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require("node:child_process");
+const { PrismaClient } = require("@prisma/client");
 
 const baseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";
 
@@ -9,6 +10,10 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function apiRequest(path, options = {}) {
@@ -36,6 +41,40 @@ function pretty(label, result) {
   console.log(`\n[${label}] ${result.url}`);
   console.log(`status: ${result.status}`);
   console.log("body:", JSON.stringify(result.json, null, 2));
+}
+
+async function fetchStatus(path, options = {}) {
+  const url = `${baseUrl}${path}`;
+  const response = await fetch(url, options);
+  const body = await response.text();
+  return {
+    url,
+    status: response.status,
+    bodyLength: body.length,
+  };
+}
+
+async function waitForScanEvent(prisma, stickerNumber, minimumCount, timeoutMs = 2500) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const count = await prisma.stickerScanEvent.count({
+      where: { stickerNumber },
+    });
+
+    if (count >= minimumCount) {
+      return count;
+    }
+
+    await sleep(200);
+  }
+
+  const finalCount = await prisma.stickerScanEvent.count({
+    where: { stickerNumber },
+  });
+
+  throw new Error(
+    `Expected at least ${minimumCount} scan events for sticker ${stickerNumber}, found ${finalCount}.`,
+  );
 }
 
 async function main() {
@@ -73,6 +112,9 @@ async function main() {
   const seed = JSON.parse(seedOutput);
   console.log("Seed payload:", JSON.stringify(seed, null, 2));
 
+  const prisma = new PrismaClient();
+
+  try {
   console.log("\n3) Sticker lookup (pre-ticket)...");
   const lookup1 = await apiRequest(
     `/api/sticker/lookup?number=${seed.stickerNumber}`,
@@ -92,7 +134,40 @@ async function main() {
     "Expected no open ticket before ticket creation",
   );
 
-  console.log("\n4) Warranty activation...");
+  console.log("\n4) NFC landing page (scan attribution)...");
+  const scanCountBefore = await prisma.stickerScanEvent.count({
+    where: { stickerNumber: seed.stickerNumber },
+  });
+
+  const nfcLanding = await fetchStatus(
+    `/nfc/${seed.stickerNumber}?src=qr&lang=en`,
+  );
+  console.log(
+    `\n[nfc-landing] ${nfcLanding.url}\nstatus: ${nfcLanding.status}\nbytes: ${nfcLanding.bodyLength}`,
+  );
+  assert(nfcLanding.status === 200, "NFC landing page should return 200");
+
+  const scanCountAfter = await waitForScanEvent(
+    prisma,
+    seed.stickerNumber,
+    scanCountBefore + 1,
+  );
+  console.log(
+    `scan events: before=${scanCountBefore} after=${scanCountAfter}`,
+  );
+
+  const latestScan = await prisma.stickerScanEvent.findFirst({
+    where: { stickerNumber: seed.stickerNumber },
+    orderBy: { scannedAt: "desc" },
+    select: {
+      source: true,
+      scannedAt: true,
+    },
+  });
+  assert(latestScan, "Expected scan event to exist");
+  assert(latestScan.source === "qr", "Expected scan source to be 'qr'");
+
+  console.log("\n5) Warranty activation...");
   const activate = await apiRequest("/api/warranty/activate", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -103,6 +178,7 @@ async function main() {
       customerEmail: "e2e.customer@example.com",
       customerAddress: "221B API Street",
       installationDate: "2026-03-04",
+      activationSource: "qr",
     }),
   });
   pretty("warranty-activation", activate);
@@ -112,7 +188,17 @@ async function main() {
     "Warranty activation success should be true",
   );
 
-  console.log("\n5) Ticket creation...");
+  const activatedProduct = await prisma.product.findUnique({
+    where: { id: seed.productId },
+    select: { metadata: true },
+  });
+  assert(activatedProduct, "Activated product should exist");
+  assert(
+    activatedProduct.metadata?.activationSource === "qr",
+    "Expected product.metadata.activationSource to be 'qr'",
+  );
+
+  console.log("\n6) Ticket creation...");
   const createTicket = await apiRequest("/api/ticket/create", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -135,7 +221,7 @@ async function main() {
   assert(ticketId, "Ticket id missing from create response");
 
   console.log(
-    "\n6) Sticker lookup (post-ticket) should include open ticket...",
+    "\n7) Sticker lookup (post-ticket) should include open ticket...",
   );
   const lookup2 = await apiRequest(
     `/api/sticker/lookup?number=${seed.stickerNumber}`,
@@ -150,7 +236,15 @@ async function main() {
     "Open ticket mismatch after creation",
   );
 
-  console.log("\n7) Ticket confirm...\n");
+  console.log(
+    "\n8) Forcing ticket status to pending_confirmation (E2E harness)...",
+  );
+  await prisma.ticket.update({
+    where: { id: ticketId },
+    data: { status: "pending_confirmation" },
+  });
+
+  console.log("\n9) Ticket confirm...\n");
   const confirm = await apiRequest(`/api/ticket/${ticketId}/confirm`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -163,7 +257,7 @@ async function main() {
     "Ticket should be resolved after confirm",
   );
 
-  console.log("\n8) Ticket reopen...\n");
+  console.log("\n10) Ticket reopen...\n");
   const reopen = await apiRequest(`/api/ticket/${ticketId}/confirm`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -177,6 +271,9 @@ async function main() {
   );
 
   console.log("\nE2E API test suite completed successfully.");
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 main().catch((error) => {

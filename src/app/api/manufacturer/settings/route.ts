@@ -3,6 +3,14 @@ import { type Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { DEFAULT_SLA_HOURS } from "@/lib/sla-config";
+import {
+  STICKER_MODES,
+  STICKER_REGIONAL_LANGUAGES,
+  normalizeManufacturerStickerConfig,
+  stickerConfigToOrganizationSettingsPatch,
+  type StickerMode,
+  type StickerRegionalLanguage,
+} from "@/lib/sticker-config";
 
 import {
   ApiError,
@@ -16,6 +24,7 @@ type SettingsPayload = {
   sla?: unknown;
   notifications?: unknown;
   integrations?: unknown;
+  stickers?: unknown;
 };
 
 type GenericRecord = Record<string, unknown>;
@@ -150,6 +159,7 @@ function normalizeSettings(settings: Prisma.JsonValue) {
     },
     notifications: normalizeNotifications(source.notifications),
     integrations: normalizeIntegrations(source.integrations),
+    stickers: normalizeManufacturerStickerConfig(source),
   };
 }
 
@@ -215,6 +225,10 @@ export async function PUT(request: Request) {
     const integrationsPatch = isRecord(body.integrations)
       ? body.integrations
       : {};
+    const stickersPatch = isRecord(body.stickers) ? body.stickers : {};
+    const brandingPatch = isRecord(stickersPatch.branding)
+      ? stickersPatch.branding
+      : {};
 
     const existingOrganization = await db.organization.findUnique({
       where: { id: organizationId },
@@ -229,6 +243,75 @@ export async function PUT(request: Request) {
     }
 
     const existingSettings = normalizeSettings(existingOrganization.settings);
+    const existingStickerConfig = existingSettings.stickers;
+
+    const patchedModeRaw =
+      typeof stickersPatch.mode === "string" ? stickersPatch.mode.trim() : null;
+    const patchedMode: StickerMode | null =
+      patchedModeRaw && (STICKER_MODES as readonly string[]).includes(patchedModeRaw)
+        ? (patchedModeRaw as StickerMode)
+        : null;
+
+    const patchedRegionalLanguageRaw =
+      typeof brandingPatch.regionalLanguage === "string"
+        ? brandingPatch.regionalLanguage.trim()
+        : typeof brandingPatch.regional_language === "string"
+          ? brandingPatch.regional_language.trim()
+          : null;
+    const patchedRegionalLanguage: StickerRegionalLanguage | null =
+      patchedRegionalLanguageRaw &&
+      (STICKER_REGIONAL_LANGUAGES as readonly string[]).includes(
+        patchedRegionalLanguageRaw,
+      )
+        ? (patchedRegionalLanguageRaw as StickerRegionalLanguage)
+        : null;
+
+    const patchedUrlBaseRaw = asString(
+      stickersPatch.urlBase ?? stickersPatch.url_base,
+    );
+    const patchedUrlBase = patchedUrlBaseRaw
+      ? normalizeManufacturerStickerConfig({
+          sticker_url_base: patchedUrlBaseRaw,
+        }).urlBase
+      : null;
+
+    const nextStickerConfig = {
+      mode: patchedMode ?? existingStickerConfig.mode,
+      urlBase: patchedUrlBase ?? existingStickerConfig.urlBase,
+      branding: {
+        primaryColor:
+          asString(brandingPatch.primaryColor ?? brandingPatch.primary_color) ??
+          existingStickerConfig.branding.primaryColor,
+        logoUrl:
+          asString(brandingPatch.logoUrl ?? brandingPatch.logo_url) ??
+          existingStickerConfig.branding.logoUrl,
+        instructionTextEn:
+          asString(
+            brandingPatch.instructionTextEn ?? brandingPatch.instruction_text_en,
+          ) ?? existingStickerConfig.branding.instructionTextEn,
+        instructionTextHi:
+          asString(
+            brandingPatch.instructionTextHi ?? brandingPatch.instruction_text_hi,
+          ) ?? existingStickerConfig.branding.instructionTextHi,
+        instructionTextAr:
+          asString(
+            brandingPatch.instructionTextAr ?? brandingPatch.instruction_text_ar,
+          ) ?? existingStickerConfig.branding.instructionTextAr,
+        regionalLanguage:
+          patchedRegionalLanguage ?? existingStickerConfig.branding.regionalLanguage,
+        showSupportPhone:
+          asOptionalBoolean(
+            brandingPatch.showSupportPhone ?? brandingPatch.show_support_phone,
+          ) ?? existingStickerConfig.branding.showSupportPhone,
+        supportPhone:
+          asString(brandingPatch.supportPhone ?? brandingPatch.support_phone) ??
+          existingStickerConfig.branding.supportPhone,
+      },
+    };
+
+    const stickerSettingsPatch =
+      stickerConfigToOrganizationSettingsPatch(nextStickerConfig);
+
     const nextSettings = {
       sla: {
         responseHoursBySeverity: normalizeSeverityHours(
@@ -248,6 +331,7 @@ export async function PUT(request: Request) {
         ...existingSettings.integrations,
         ...integrationsPatch,
       }),
+      ...stickerSettingsPatch,
     };
 
     const updated = await db.organization.update({

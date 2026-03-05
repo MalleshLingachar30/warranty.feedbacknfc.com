@@ -20,6 +20,7 @@ interface WarrantyCertificateDocumentProps {
   warrantyStartDate: string;
   warrantyEndDate: string;
   stickerNumber: number;
+  stickerType: "qr_only" | "nfc_qr" | "nfc_only";
   nfcUrl: string;
   qrDataUrl: string;
 }
@@ -127,9 +128,23 @@ export function WarrantyCertificateDocument({
   warrantyStartDate,
   warrantyEndDate,
   stickerNumber,
+  stickerType,
   nfcUrl,
   qrDataUrl,
 }: WarrantyCertificateDocumentProps) {
+  const accessTitle =
+    stickerType === "qr_only"
+      ? "Scan for Service"
+      : stickerType === "nfc_only"
+        ? "Tap for Service"
+        : "Tap or Scan for Service";
+  const accessInstruction =
+    stickerType === "qr_only"
+      ? "Scan the QR code below to access warranty service."
+      : stickerType === "nfc_qr"
+        ? "Tap or scan the sticker on your product for warranty service, or open this link:"
+        : "Tap the NFC sticker on your product for warranty service, or open this link:";
+
   return (
     <Document title={`Warranty Certificate ${certificateNumber}`}>
       <Page size="A4" style={styles.page}>
@@ -181,19 +196,19 @@ export function WarrantyCertificateDocument({
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Scan for Service</Text>
+          <Text style={styles.sectionTitle}>{accessTitle}</Text>
           <View style={styles.qrWrap}>
             <PdfImage src={qrDataUrl} style={styles.qrImage} />
             <View style={styles.qrText}>
-              <Text>Tap/scan this QR to open the product service page.</Text>
+              <Text>{accessInstruction}</Text>
               <Text>{nfcUrl}</Text>
             </View>
           </View>
         </View>
 
         <Text style={styles.footnote}>
-          This certificate is system-generated and linked to the NFC sticker
-          identity. Keep this copy for future claim verification.
+          This certificate is system-generated and linked to the sticker identity.
+          Keep this copy for future claim verification.
         </Text>
       </Page>
     </Document>

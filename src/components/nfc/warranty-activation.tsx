@@ -16,6 +16,7 @@ interface WarrantyActivationProps {
   product: ProductView;
   language: NfcLanguage;
   languageToggle?: ReactNode;
+  activationSource?: "qr" | "nfc" | null;
 }
 
 interface ActivationFormState {
@@ -52,6 +53,7 @@ export function WarrantyActivation({
   product,
   language,
   languageToggle,
+  activationSource,
 }: WarrantyActivationProps) {
   const copy = getNfcCopy(language);
   const defaultInstallationDate = useMemo(() => {
@@ -106,6 +108,7 @@ export function WarrantyActivation({
           customerEmail: formState.customerEmail || null,
           customerAddress: formState.customerAddress || null,
           installationDate: formState.installationDate,
+          activationSource,
         }),
       });
 

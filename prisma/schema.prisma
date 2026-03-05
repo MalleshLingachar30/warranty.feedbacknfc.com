@@ -33,6 +33,7 @@ enum UserRole {
 enum StickerType {
   qr_only
   nfc_qr
+  nfc_only
 }
 
 enum StickerVariant {
@@ -103,6 +104,12 @@ enum ClaimStatus {
 enum StickerAllocationType {
   bulk_bind
   reserve_only
+}
+
+enum StickerScanSource {
+  qr
+  nfc
+  unknown
 }
 
 model Organization {
@@ -428,4 +435,19 @@ model StickerAllocation {
   allocatedBy  User?         @relation("AllocatedByUser", fields: [allocatedById], references: [id])
 
   @@map("sticker_allocations")
+}
+
+model StickerScanEvent {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stickerId      String           @map("sticker_id") @db.Uuid
+  stickerNumber  Int              @map("sticker_number")
+  organizationId String?          @map("organization_id") @db.Uuid
+  source         StickerScanSource @default(unknown)
+  userAgent      String?          @map("user_agent")
+  scannedAt      DateTime         @default(now()) @map("scanned_at")
+
+  @@index([organizationId, scannedAt], map: "idx_sticker_scans_org_time")
+  @@index([stickerId, scannedAt], map: "idx_sticker_scans_sticker_time")
+  @@index([stickerNumber], map: "idx_sticker_scans_number")
+  @@map("sticker_scan_events")
 }

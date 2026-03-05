@@ -17,9 +17,11 @@ import { WarrantyActivation } from "@/components/nfc/warranty-activation";
 import { auth } from "@clerk/nextjs/server";
 import type { TicketStatus } from "@prisma/client";
 import { headers } from "next/headers";
+import { after } from "next/server";
 
 import { db } from "@/lib/db";
 import { detectNfcLanguage } from "@/lib/nfc-i18n";
+import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 import {
   parseAppRole,
   parseAppRoleFromClaims,
@@ -38,7 +40,7 @@ import type {
 
 interface NfcStickerPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ lang?: string | string[] }>;
+  searchParams: Promise<{ lang?: string | string[]; src?: string | string[] }>;
 }
 
 const OPEN_TICKET_STATUSES: TicketStatus[] = [
@@ -488,10 +490,14 @@ export default async function NfcStickerPage({
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
   const stickerNumber = Number.parseInt(id, 10);
+  const srcParam = firstQueryValue(resolvedSearchParams.src);
+  const scanSource = srcParam === "qr" ? "qr" : srcParam === "nfc" ? "nfc" : "unknown";
 
   if (!Number.isFinite(stickerNumber)) {
     return <StickerNotFound />;
   }
+
+  const requestHeaders = await headers();
 
   const sticker = await db.sticker.findUnique({
     where: { stickerNumber },
@@ -500,6 +506,7 @@ export default async function NfcStickerPage({
         select: {
           id: true,
           name: true,
+          settings: true,
         },
       },
     },
@@ -508,6 +515,22 @@ export default async function NfcStickerPage({
   if (!sticker) {
     return <StickerNotFound />;
   }
+
+  after(async () => {
+    try {
+      await db.stickerScanEvent.create({
+        data: {
+          stickerId: sticker.id,
+          stickerNumber: sticker.stickerNumber,
+          organizationId: sticker.allocatedToOrgId,
+          source: scanSource,
+          userAgent: requestHeaders.get("user-agent") ?? null,
+        },
+      });
+    } catch (error) {
+      console.error("Sticker scan event capture failed", error);
+    }
+  });
 
   if (sticker.status === "unallocated") {
     return <UnregisteredSticker />;
@@ -551,6 +574,14 @@ export default async function NfcStickerPage({
   });
 
   if (!product) {
+    const orgStickerConfig = sticker.allocatedToOrg
+      ? normalizeManufacturerStickerConfig(sticker.allocatedToOrg.settings)
+      : null;
+
+    const supportPhoneRaw = orgStickerConfig?.branding.supportPhone ?? "";
+    const supportPhone =
+      supportPhoneRaw.trim().length > 0 ? supportPhoneRaw.trim() : null;
+
     return (
       <StickerNotBound
         sticker={{
@@ -558,8 +589,13 @@ export default async function NfcStickerPage({
           stickerNumber: sticker.stickerNumber,
           stickerSerial: sticker.stickerSerial,
           status: sticker.status,
+          stickerType: sticker.type,
           allocatedToOrg: sticker.allocatedToOrgId,
           organizationName: sticker.allocatedToOrg?.name ?? null,
+          showSupportPhone:
+            Boolean(orgStickerConfig?.branding.showSupportPhone) &&
+            Boolean(supportPhone),
+          supportPhone,
         }}
       />
     );
@@ -607,7 +643,6 @@ export default async function NfcStickerPage({
   const serviceHistory = toServiceHistoryItems(tickets);
 
   const { userId, sessionClaims } = await auth();
-  const requestHeaders = await headers();
   const queryLanguage = firstQueryValue(resolvedSearchParams.lang);
 
   let role: AppRole | "anonymous_customer" = "anonymous_customer";
@@ -658,8 +693,8 @@ export default async function NfcStickerPage({
   const languageToggle = (
     <NfcLanguageToggle
       currentLanguage={nfcLanguage}
-      englishHref={`/nfc/${sticker.stickerNumber}?lang=en`}
-      hindiHref={`/nfc/${sticker.stickerNumber}?lang=hi`}
+      englishHref={`/nfc/${sticker.stickerNumber}?lang=en${srcParam ? `&src=${encodeURIComponent(srcParam)}` : ""}`}
+      hindiHref={`/nfc/${sticker.stickerNumber}?lang=hi${srcParam ? `&src=${encodeURIComponent(srcParam)}` : ""}`}
     />
   );
 
@@ -673,6 +708,7 @@ export default async function NfcStickerPage({
           product={mapActivationProduct(mappedProduct, productModel)}
           language={nfcLanguage}
           languageToggle={languageToggle}
+          activationSource={scanSource === "unknown" ? null : scanSource}
         />
       );
     }

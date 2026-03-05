@@ -104,6 +104,8 @@ export async function sendWarrantyActivatedNotification(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  stickerNumber: number;
+  stickerType?: "qr_only" | "nfc_qr" | "nfc_only" | null;
   certificateUrl?: string | null;
   languagePreference?: string | null;
 }) {

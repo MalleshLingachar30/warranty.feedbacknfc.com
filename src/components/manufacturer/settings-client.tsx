@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { type ManufacturerStickerConfig } from "@/lib/sticker-config";
 
 type SeverityHours = {
   low: number;
@@ -44,6 +45,7 @@ type SettingsPayload = {
     apiKeyLabel: string;
     erpApiKeyMasked: string;
   };
+  stickers: ManufacturerStickerConfig;
 };
 
 type OrganizationPayload = {
@@ -220,6 +222,7 @@ export function ManufacturerSettingsClient({
           sla: settings.sla,
           notifications: settings.notifications,
           integrations: settings.integrations,
+          stickers: settings.stickers,
         }),
       });
 
@@ -342,7 +345,7 @@ export function ManufacturerSettingsClient({
     <div>
       <PageHeader
         title="Settings"
-        description="Manage organization profile, SLA configuration, notifications, API integrations, and team members."
+        description="Manage organization profile, sticker configuration, SLA configuration, notifications, API integrations, and team members."
         actions={
           <Button
             onClick={() => void saveSettings()}
@@ -487,6 +490,285 @@ export function ManufacturerSettingsClient({
                 }
               />
             </label>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Sticker Configuration</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Sticker Technology Mode</p>
+              <div className="space-y-3 rounded-md border p-3">
+                <label className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    name="stickerMode"
+                    value="qr_only"
+                    checked={settings.stickers.mode === "qr_only"}
+                    onChange={() =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          mode: "qr_only",
+                        },
+                      }))
+                    }
+                    className="mt-1 h-4 w-4"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">QR Code Only</p>
+                    <p className="text-xs text-muted-foreground">
+                      Best for: India mass market, cost-sensitive. Sticker cost:
+                      ₹2-10 per unit. Customer scans QR code with phone camera.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    name="stickerMode"
+                    value="nfc_qr"
+                    checked={settings.stickers.mode === "nfc_qr"}
+                    onChange={() =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          mode: "nfc_qr",
+                        },
+                      }))
+                    }
+                    className="mt-1 h-4 w-4"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">
+                      NFC + QR Code{" "}
+                      <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        Recommended
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Best for: Premium appliances, medical equipment. Sticker
+                      cost: ₹15-30 per unit. Customer can tap OR scan — both
+                      work.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    name="stickerMode"
+                    value="nfc_only"
+                    checked={settings.stickers.mode === "nfc_only"}
+                    onChange={() =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          mode: "nfc_only",
+                        },
+                      }))
+                    }
+                    className="mt-1 h-4 w-4"
+                  />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">NFC Only</p>
+                    <p className="text-xs text-muted-foreground">
+                      Best for: Markets with high NFC awareness. Sticker cost:
+                      ₹15-25 per unit. Customer must tap — no QR fallback.
+                    </p>
+                  </div>
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Changing sticker mode affects future allocations only. Existing
+                allocated/bound stickers keep their original type.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Sticker Branding</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span>Brand Color</span>
+                  <Input
+                    type="color"
+                    value={settings.stickers.branding.primaryColor}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            primaryColor: event.target.value,
+                          },
+                        },
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="space-y-1 text-sm">
+                  <span>Logo URL</span>
+                  <Input
+                    value={settings.stickers.branding.logoUrl}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            logoUrl: event.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    placeholder="https://cdn.example.com/logo.png"
+                  />
+                </label>
+
+                <label className="space-y-1 text-sm sm:col-span-2">
+                  <span>Instruction Text (English)</span>
+                  <Input
+                    value={settings.stickers.branding.instructionTextEn}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            instructionTextEn: event.target.value,
+                          },
+                        },
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="space-y-1 text-sm">
+                  <span>Regional Language</span>
+                  <select
+                    value={settings.stickers.branding.regionalLanguage}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            regionalLanguage:
+                              event.target.value as ManufacturerStickerConfig["branding"]["regionalLanguage"],
+                          },
+                        },
+                      }))
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="hi">Hindi</option>
+                    <option value="ar">Arabic</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1 text-sm">
+                  <span>
+                    Instruction Text (
+                    {settings.stickers.branding.regionalLanguage === "ar"
+                      ? "Arabic"
+                      : "Hindi"}
+                    )
+                  </span>
+                  <Input
+                    value={
+                      settings.stickers.branding.regionalLanguage === "ar"
+                        ? settings.stickers.branding.instructionTextAr
+                        : settings.stickers.branding.instructionTextHi
+                    }
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            ...(current.stickers.branding.regionalLanguage ===
+                            "ar"
+                              ? { instructionTextAr: event.target.value }
+                              : { instructionTextHi: event.target.value }),
+                          },
+                        },
+                      }))
+                    }
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
+                  <span>Show Support Phone</span>
+                  <input
+                    type="checkbox"
+                    checked={settings.stickers.branding.showSupportPhone}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            showSupportPhone: event.target.checked,
+                          },
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-input"
+                  />
+                </label>
+
+                <label className="space-y-1 text-sm sm:col-span-2">
+                  <span>Support Phone</span>
+                  <Input
+                    value={settings.stickers.branding.supportPhone}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            supportPhone: event.target.value,
+                          },
+                        },
+                      }))
+                    }
+                    placeholder="+91 7899910288"
+                    disabled={!settings.stickers.branding.showSupportPhone}
+                  />
+                </label>
+
+                <label className="space-y-1 text-sm sm:col-span-2">
+                  <span>Sticker URL Base</span>
+                  <Input
+                    value={settings.stickers.urlBase}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          urlBase: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="warranty.feedbacknfc.com"
+                  />
+                </label>
+              </div>
+            </div>
           </CardContent>
         </Card>
 

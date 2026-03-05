@@ -205,7 +205,7 @@ CREATE TABLE stickers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sticker_number INTEGER UNIQUE NOT NULL, -- sequential: 1, 2, 3... (maps to /nfc/[number])
     sticker_serial VARCHAR(20) UNIQUE NOT NULL, -- human-readable: FNFC-000001
-    type ENUM('qr_only', 'nfc_qr') NOT NULL DEFAULT 'qr_only',
+    type ENUM('qr_only', 'nfc_qr', 'nfc_only') NOT NULL DEFAULT 'qr_only',
     variant ENUM('standard', 'high_temp', 'premium') NOT NULL DEFAULT 'standard',
     status ENUM('unallocated', 'allocated', 'bound', 'activated', 'deactivated') DEFAULT 'unallocated',
     allocated_to_org UUID REFERENCES organizations(id), -- which manufacturer received this batch
@@ -575,7 +575,7 @@ When a customer scans a QR/taps NFC for the first time on a product with `warran
    - Set product.warranty_status = 'active'
    - Set product.customer_name, customer_phone, etc.
    - Create user record if not exists (role: customer)
-   - Send confirmation SMS: "Your [Product Name] warranty is now active until [date]. Scan the QR anytime for service."
+   - Send confirmation SMS (mode-aware): "Your [Product Name] warranty is now active until [date]. Tap/scan your sticker anytime for service: [link]."
    
 4. Show confirmation:
    - "Warranty Activated!"
@@ -776,6 +776,8 @@ POST   /api/claim/[id]/submit               — Submit claim to manufacturer
 ```
 POST   /api/manufacturer/product-model      — CRUD product models
 POST   /api/manufacturer/allocate           — Bulk sticker allocation
+GET    /api/manufacturer/stickers/generate-qr            — QR asset exports (CSV / PNG ZIP / PDF sheet)
+GET    /api/manufacturer/stickers/generate-nfc-encoding  — NFC encoding exports (CSV / JSON)
 GET    /api/manufacturer/products            — All products under warranty
 GET    /api/manufacturer/claims              — Claims for review
 POST   /api/claim/[id]/approve              — Approve claim
@@ -850,12 +852,12 @@ async function assignTechnician(ticket: Ticket, product: Product): Promise<Assig
 
 | Event | Recipient | Channel | Message |
 |---|---|---|---|
-| Warranty activated | Customer | SMS | "Your [Product] warranty is active until [date]. Scan QR anytime for service." |
+| Warranty activated | Customer | SMS | "Your [Product] warranty is active until [date]. Tap/scan your sticker anytime for service: [link]." (mode-aware) |
 | Ticket created | Technician | SMS + Push + WhatsApp | "New job: [Issue] at [Location]. Product: [Model]. Accept?" |
 | Ticket created | Service Center | Email + Dashboard | "New ticket [#] assigned to [Technician]" |
 | Technician en route | Customer | SMS | "[Technician] is on the way. ETA: [time]. Call: [phone]" |
 | Work started | Customer | SMS | "Service has begun on your [Product]." |
-| Work completed | Customer | SMS + WhatsApp | "Service complete! Please scan your QR sticker to confirm." |
+| Work completed | Customer | SMS + WhatsApp | "Service complete! Confirm resolution: [link]" |
 | Customer confirmed | Technician | Push | "Customer confirmed resolution for ticket [#]. Well done!" |
 | Customer confirmed | Service Center | Dashboard | Claim auto-generated and ready for review |
 | Claim submitted | Manufacturer | Email + Dashboard | "New warranty claim [#] from [Service Center]. Amount: ₹[X]" |
@@ -1162,4 +1164,224 @@ Do not introduce:
 
 ---
 
-*End of specification. This document provides complete context for an agentic coding platform to build the warranty application by cloning and extending the asset.feedbacknfc.com codebase with full UX/UI consistency.*
+*End of base specification. See Appendix A for addenda that keep this document aligned with the current implementation.*
+
+---
+
+## Appendix A — Sticker Mode Configuration (Spec Addendum)
+
+**Feature:** Manufacturer-configurable sticker mode (QR Only / NFC + QR / NFC Only)  
+**Scope:** Manufacturer settings, sticker allocation wizard, sticker production tools, customer-facing copy, analytics attribution  
+**Dependencies:** Existing sticker management (GAP 1), existing manufacturer settings (GAP 9)
+
+### A1. Concept
+
+Each manufacturer organization chooses a sticker technology mode as a platform setting. This choice affects:
+
+- What `stickers.type` is stamped during allocation
+- Which sticker production tools are available in the Sticker Management dashboard
+- What print-ready assets are generated for sticker production
+- What instructions/labels appear in the allocation wizard
+
+This choice does **not** affect:
+
+- The `/nfc/[id]` route logic (same route for all modes; only copy/attribution changes)
+- Ticket/claim workflows
+- The user experience after reaching the sticker page (customer/technician/manager views remain role-driven)
+
+### A2. Data Model
+
+#### A2.1 Organization Settings Extension (JSONB)
+
+Extend `organizations.settings` with:
+
+```json
+{
+  "sticker_mode": "qr_only",
+  "sticker_branding": {
+    "primary_color": "#0066CC",
+    "logo_url": "https://...",
+    "instruction_text_en": "Scan for Warranty Service",
+    "instruction_text_hi": "वारंटी सेवा के लिए स्कैन करें",
+    "instruction_text_ar": "امسح للحصول على خدمة الضمان",
+    "regional_language": "hi",
+    "show_support_phone": true,
+    "support_phone": "+91 7899910288"
+  },
+  "sticker_url_base": "warranty.feedbacknfc.com"
+}
+```
+
+Notes:
+- `sticker_url_base` is stored/used as a host (no scheme). Inputs like `https://warranty.feedbacknfc.com` are normalized to `warranty.feedbacknfc.com`.
+- Branding fields are stored snake_case as shown above.
+
+#### A2.2 Stickers Table / Enum
+
+`stickers.type` represents the sticker technology mode. Supported values:
+
+- `qr_only`
+- `nfc_qr`
+- `nfc_only`
+
+`stickers.variant` remains independent and describes the physical material (`standard`, `high_temp`, `premium`).
+
+Migration reference:
+- `prisma/migrations/20260305193000_add_nfc_only_sticker_type/migration.sql`
+
+#### A2.3 Sticker Scan Events (Analytics)
+
+For scan frequency + “top scanned stickers” analytics, store scan events:
+
+- Table: `sticker_scan_events`
+- Enum: `StickerScanSource = qr | nfc | unknown`
+
+Migration reference:
+- `prisma/migrations/20260305194500_add_sticker_scan_events/migration.sql`
+
+Additionally, warranty activation stores `activationSource` in `products.metadata` as `qr | nfc | unknown` when the activation form is submitted.
+
+### A3. Manufacturer Settings UI
+
+Add a new **Sticker Configuration** section to:
+
+- `/dashboard/manufacturer/settings`
+
+This section includes:
+
+1) **Sticker Technology Mode**
+- QR Code Only
+- NFC + QR Code (recommended)
+- NFC Only
+
+2) **Sticker Branding**
+- Brand color (hex)
+- Logo URL
+- Instruction text (English + regional language)
+- Regional language selector (`hi` / `ar`)
+- Support phone toggle + phone value
+- Sticker URL base (`warranty.feedbacknfc.com` by default)
+
+Behavior:
+- Changing sticker mode affects **future allocations only**.
+- Existing allocated/bound/activated stickers keep their stamped `stickers.type`.
+
+### A4. Allocation Wizard Adaptation
+
+The existing allocation wizard remains a 5-step flow. Step 1 adapts based on `organizations.settings.sticker_mode`:
+
+- **QR Only**
+  - Technology label: “QR Code Only”
+  - Material variants: `standard`, `high_temp`
+
+- **NFC + QR**
+  - Technology label: “NFC + QR Code”
+  - Material variants: `premium` (fixed)
+  - Show warning: NFC stickers require encoding export after allocation
+
+- **NFC Only**
+  - Technology label: “NFC Only (no QR printed)”
+  - Material variants: `standard` (fixed)
+  - Show warning: NFC stickers require encoding export after allocation
+
+Allocation backend behavior:
+- Allocation stamps `stickers.type` and `stickers.variant` for all stickers in the allocated range at allocation time.
+
+### A5. Sticker Production Tools
+
+Add a “Production Tools” section to the manufacturer Stickers page:
+
+- `/dashboard/manufacturer/stickers`
+
+#### A5.1 Generate Print-Ready QR Codes (QR Only + NFC + QR)
+
+API:
+- `GET /api/manufacturer/stickers/generate-qr`
+
+Query params:
+- `allocation_id` — allocation UUID
+- `format` — `pdf_sheet` | `png_zip` | `csv`
+- `qr_size_mm` — `25` | `30` | `35`
+- `error_correction` — `L` | `M` | `Q` | `H`
+
+Outputs:
+- `csv`: `sticker_number,serial,url` where the URL is:
+  - `https://{sticker_url_base}/nfc/{stickerNumber}?src=qr`
+- `png_zip`: individual PNG QR codes named `{serial}.png`
+- `pdf_sheet`: multi-page A4 PDF with a simple sticker grid including branding + serial + QR
+
+#### A5.2 Generate NFC Encoding File (NFC + QR + NFC Only)
+
+API:
+- `GET /api/manufacturer/stickers/generate-nfc-encoding`
+
+Query params:
+- `allocation_id` — allocation UUID
+- `format` — `ndef_uri_csv` | `nfc_tools_json`
+
+Outputs:
+- `ndef_uri_csv`: `sticker_number,serial,ndef_uri` where the URI is:
+  - `https://{sticker_url_base}/nfc/{stickerNumber}?src=nfc`
+- `nfc_tools_json`: JSON export with the same payload for generic tooling.
+
+### A6. Customer-Facing Differences by Mode
+
+#### A6.1 Sticker Not Registered / Not Bound Copy
+
+When a sticker is allocated but not yet bound to a product, copy adapts by `stickers.type`:
+
+- **QR Only:** “This QR sticker is not registered…”
+- **NFC + QR:** “Try tapping or scanning again…”
+- **NFC Only:** “Please tap again…”
+
+If a sticker number does not exist in the DB (truly unknown), default to generic copy.
+
+#### A6.2 Warranty Certificate Wording
+
+The warranty certificate PDF includes mode-aware access instructions:
+
+- **QR Only:** “Scan the QR code below…”
+- **NFC + QR:** “Tap or scan the sticker…”
+- **NFC Only:** “Tap the NFC sticker…”
+
+#### A6.3 Customer SMS Templates (Warranty Activated)
+
+Warranty activation confirmation SMS uses mode-aware wording and includes a direct service link:
+
+- QR Only: “Scan the QR sticker…”
+- NFC + QR: “Tap or scan the sticker…”
+- NFC Only: “Tap the NFC sticker…”
+
+### A7. Analytics Extension
+
+Add to manufacturer analytics:
+
+- **Activation source breakdown**: counts of activations by `products.metadata.activationSource`
+- **Top scanned stickers**: scan counts from `sticker_scan_events` over the last 30 days
+
+### A8. Defaults (New Manufacturer Organizations)
+
+Defaults for new manufacturers:
+
+- `sticker_mode`: `qr_only`
+- `sticker_branding.primary_color`: `#0066CC`
+- `sticker_branding.regional_language`: `hi`
+- `sticker_branding.show_support_phone`: `true`
+- `sticker_url_base`: `warranty.feedbacknfc.com`
+- QR defaults (for production tooling): size `30mm`, error correction `H`
+
+### A9. Implementation References (for Sync)
+
+Key implementation entry points:
+
+- Settings schema + normalization: `src/lib/sticker-config.ts`
+- Manufacturer settings API: `src/app/api/manufacturer/settings/route.ts`
+- Settings UI: `src/components/manufacturer/settings-client.tsx`
+- Allocation API stamping `type`/`variant`: `src/app/api/manufacturer/allocate/route.ts`
+- Allocation wizard + production tools UI: `src/components/manufacturer/sticker-wizard-client.tsx`
+- QR generation API: `src/app/api/manufacturer/stickers/generate-qr/route.ts`
+- NFC encoding export API: `src/app/api/manufacturer/stickers/generate-nfc-encoding/route.ts`
+- PDF sheet renderer: `src/lib/pdf/sticker-sheet-document.tsx`
+- Scan tracking (`?src=qr|nfc` + scan events): `src/app/nfc/[id]/page.tsx`
+- Activation source capture: `src/app/api/warranty/activate/route.ts`
+- Manufacturer analytics panels: `src/app/(dashboard)/dashboard/manufacturer/analytics/page.tsx`

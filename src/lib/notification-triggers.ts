@@ -4,6 +4,7 @@ import { sendEmail, sendSMS, sendWhatsApp } from "@/lib/notifications";
 import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 
 type NotificationLanguage = "en" | "hi";
+type StickerTechnologyMode = "qr_only" | "nfc_qr" | "nfc_only";
 
 function normalizeNotificationLanguage(
   preference: string | null | undefined,
@@ -15,6 +16,16 @@ function normalizeNotificationLanguage(
   }
 
   return "en";
+}
+
+function normalizeStickerTechnologyMode(
+  value: unknown,
+): StickerTechnologyMode {
+  if (value === "qr_only" || value === "nfc_qr" || value === "nfc_only") {
+    return value;
+  }
+
+  return "qr_only";
 }
 
 function inr(amount: number): string {
@@ -29,10 +40,14 @@ export async function onWarrantyActivated(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  stickerNumber: number;
+  stickerType?: StickerTechnologyMode | null;
   certificateUrl?: string | null;
   languagePreference?: string | null;
 }): Promise<void> {
   const language = normalizeNotificationLanguage(input.languagePreference);
+  const stickerType = normalizeStickerTechnologyMode(input.stickerType);
+  const link = `${getWarrantyAppBaseUrl()}/nfc/${input.stickerNumber}`;
   const certificateSuffix =
     input.certificateUrl && input.certificateUrl.trim().length > 0
       ? language === "hi"
@@ -40,10 +55,23 @@ export async function onWarrantyActivated(input: {
         : ` Certificate: ${input.certificateUrl}.`
       : "";
 
+  const accessLine =
+    language === "hi"
+      ? stickerType === "qr_only"
+        ? `सेवा के लिए अपने ${input.productName} पर QR स्टिकर स्कैन करें: ${link}.`
+        : stickerType === "nfc_only"
+          ? `सेवा के लिए अपने ${input.productName} पर NFC स्टिकर टैप करें: ${link}.`
+          : `सेवा के लिए अपने ${input.productName} पर स्टिकर टैप या QR स्कैन करें: ${link}.`
+      : stickerType === "qr_only"
+        ? `Scan the QR sticker on your ${input.productName} anytime for service: ${link}.`
+        : stickerType === "nfc_only"
+          ? `Tap the NFC sticker on your ${input.productName} anytime for service: ${link}.`
+          : `Tap or scan the sticker on your ${input.productName} anytime for service: ${link}.`;
+
   const message =
     language === "hi"
-      ? `आपके ${input.productName} की वारंटी ${input.warrantyEndDateLabel} तक सक्रिय है। सेवा के लिए कभी भी QR स्कैन करें।${certificateSuffix}`
-      : `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. Scan QR anytime for service.${certificateSuffix}`;
+      ? `आपके ${input.productName} की वारंटी ${input.warrantyEndDateLabel} तक सक्रिय है। ${accessLine}${certificateSuffix}`
+      : `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. ${accessLine}${certificateSuffix}`;
 
   await sendSMS({
     to: input.customerPhone,

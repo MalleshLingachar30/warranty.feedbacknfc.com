@@ -15,6 +15,7 @@ interface ActivateWarrantyRequest {
   customerEmail?: string | null;
   customerAddress?: string | null;
   installationDate?: string;
+  activationSource?: string | null;
 }
 
 function normalizePhone(phone: string): string {
@@ -73,6 +74,12 @@ export async function POST(request: Request) {
         productModelId: true,
         warrantyStatus: true,
         metadata: true,
+        sticker: {
+          select: {
+            stickerNumber: true,
+            type: true,
+          },
+        },
       },
     });
 
@@ -151,6 +158,10 @@ export async function POST(request: Request) {
     const certificatePath = `/api/products/${product.id}/certificate?download=1`;
     const certificateUrl = buildAbsoluteWarrantyUrl(certificatePath);
     const existingMetadata = asRecord(product.metadata);
+    const activationSource =
+      body.activationSource === "qr" || body.activationSource === "nfc"
+        ? body.activationSource
+        : "unknown";
 
     await prisma.$transaction([
       prisma.product.update({
@@ -169,6 +180,7 @@ export async function POST(request: Request) {
             ...existingMetadata,
             warrantyCertificateUrl: certificateUrl,
             warrantyCertificatePath: certificatePath,
+            activationSource,
           },
         },
       }),
@@ -183,6 +195,8 @@ export async function POST(request: Request) {
         customerPhone: normalizedPhone,
         productName: model?.name ?? "product",
         warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
+        stickerNumber: product.sticker.stickerNumber,
+        stickerType: product.sticker.type,
         certificateUrl,
         languagePreference: customerUser.languagePreference,
       });

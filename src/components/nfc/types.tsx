@@ -15,8 +15,11 @@ export interface StickerView {
   stickerNumber: number;
   stickerSerial: string | null;
   status: string;
+  stickerType?: "qr_only" | "nfc_qr" | "nfc_only" | null;
   allocatedToOrg?: string | null;
   organizationName?: string | null;
+  showSupportPhone?: boolean;
+  supportPhone?: string | null;
 }
 
 export interface ProductModelView {

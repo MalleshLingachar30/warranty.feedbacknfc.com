@@ -52,6 +52,26 @@ function computeResolutionHours(
   return diff;
 }
 
+type GenericRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is GenericRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeActivationSource(metadata: unknown) {
+  const source = isRecord(metadata) ? metadata : {};
+  const activationSource =
+    typeof source.activationSource === "string"
+      ? source.activationSource.trim().toLowerCase()
+      : "";
+
+  if (activationSource === "qr" || activationSource === "nfc") {
+    return activationSource;
+  }
+
+  return "unknown";
+}
+
 export default async function ManufacturerAnalyticsPage() {
   const { organizationId } = await resolveManufacturerPageContext();
 
@@ -63,7 +83,10 @@ export default async function ManufacturerAnalyticsPage() {
     );
   }
 
-  const [modelRows, ticketRows] = await Promise.all([
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const [modelRows, ticketRows, activatedProductRows, stickerScanTop] = await Promise.all([
     db.productModel.findMany({
       where: {
         organizationId,
@@ -114,6 +137,41 @@ export default async function ManufacturerAnalyticsPage() {
         },
       },
     }),
+    db.product.findMany({
+      where: {
+        organizationId,
+        warrantyStatus: {
+          not: "pending_activation",
+        },
+      },
+      select: {
+        id: true,
+        metadata: true,
+      },
+    }),
+    db.stickerScanEvent
+      .groupBy({
+        by: ["stickerNumber"],
+        where: {
+          organizationId,
+          scannedAt: {
+            gte: thirtyDaysAgo,
+          },
+        },
+        _count: {
+          id: true,
+        },
+        orderBy: {
+          _count: {
+            id: "desc",
+          },
+        },
+        take: 10,
+      })
+      .catch((error) => {
+        console.error("Sticker scan analytics query failed", error);
+        return [];
+      }),
   ]);
 
   const totalTickets = ticketRows.length;
@@ -257,9 +315,33 @@ export default async function ManufacturerAnalyticsPage() {
       avgResolutionHours:
         row.hours.length > 0
           ? row.hours.reduce((sum, value) => sum + value, 0) / row.hours.length
-          : 0,
+      : 0,
     }))
     .sort((left, right) => right.tickets - left.tickets);
+
+  const activationCounts = {
+    qr: 0,
+    nfc: 0,
+    unknown: 0,
+  };
+
+  for (const product of activatedProductRows) {
+    const source = normalizeActivationSource(product.metadata);
+    activationCounts[source] += 1;
+  }
+
+  const totalActivations =
+    activationCounts.qr + activationCounts.nfc + activationCounts.unknown;
+
+  const topScannedStickers = stickerScanTop.map((row) => ({
+    stickerNumber: row.stickerNumber,
+    scans: row._count?.id ?? 0,
+  }));
+
+  const totalScansLast30Days = topScannedStickers.reduce(
+    (sum, row) => sum + row.scans,
+    0,
+  );
 
   return (
     <div>
@@ -296,6 +378,84 @@ export default async function ManufacturerAnalyticsPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sticker Activation Sources</CardTitle>
+            <CardDescription>
+              Warranty activations captured from sticker links with{" "}
+              <span className="font-mono text-xs">?src=qr</span> /{" "}
+              <span className="font-mono text-xs">?src=nfc</span>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs text-muted-foreground">QR</p>
+              <p className="text-xl font-semibold">
+                {activationCounts.qr.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatPercent(totalActivations > 0 ? (activationCounts.qr / totalActivations) * 100 : 0)}
+              </p>
+            </div>
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs text-muted-foreground">NFC</p>
+              <p className="text-xl font-semibold">
+                {activationCounts.nfc.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatPercent(totalActivations > 0 ? (activationCounts.nfc / totalActivations) * 100 : 0)}
+              </p>
+            </div>
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs text-muted-foreground">Unknown</p>
+              <p className="text-xl font-semibold">
+                {activationCounts.unknown.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatPercent(totalActivations > 0 ? (activationCounts.unknown / totalActivations) * 100 : 0)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Scanned Stickers</CardTitle>
+            <CardDescription>
+              Most frequently opened sticker URLs in the last 30 days (
+              {totalScansLast30Days.toLocaleString()} total scans tracked).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Sticker</TableHead>
+                  <TableHead className="text-right">Scans</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topScannedStickers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-muted-foreground">
+                      No scan data available yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  topScannedStickers.map((row) => (
+                    <TableRow key={row.stickerNumber}>
+                      <TableCell>#{row.stickerNumber}</TableCell>
+                      <TableCell className="text-right">
+                        {row.scans.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Product Reliability</CardTitle>
