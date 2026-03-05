@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sendEmail, sendSMS, sendWhatsApp } from "@/lib/notifications";
+import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 
 function inr(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
@@ -10,23 +11,20 @@ function inr(amount: number): string {
   }).format(amount);
 }
 
-function getWarrantyAppBaseUrl(): string {
-  const explicit =
-    process.env.NEXT_PUBLIC_WARRANTY_APP_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    "https://warranty.feedbacknfc.com";
-
-  return explicit.replace(/\/+$/, "");
-}
-
 export async function onWarrantyActivated(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  certificateUrl?: string | null;
 }): Promise<void> {
+  const certificateSuffix =
+    input.certificateUrl && input.certificateUrl.trim().length > 0
+      ? ` Certificate: ${input.certificateUrl}.`
+      : "";
+
   await sendSMS({
     to: input.customerPhone,
-    message: `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. Scan QR anytime for service.`,
+    message: `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. Scan QR anytime for service.${certificateSuffix}`,
   });
 }
 

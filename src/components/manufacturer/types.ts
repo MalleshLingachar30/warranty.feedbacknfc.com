@@ -103,9 +103,50 @@ export type ClaimStatusType =
 
 export type ClaimDocumentationView = {
   photos: string[];
+  beforePhotos: string[];
+  afterPhotos: string[];
   timestamps: string[];
+  timeline: Array<{
+    label: string;
+    at: string;
+  }>;
   partsUsed: string[];
+  partsDetailed: Array<{
+    partName: string;
+    partNumber: string;
+    quantity: number;
+    cost: number;
+    lineTotal: number;
+  }>;
   technicianNotes: string;
+  issueCategory: string;
+  issueDescription: string;
+  issueSeverity: string;
+  customer: {
+    name: string;
+    phone: string;
+    email: string | null;
+    address: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+  };
+  product: {
+    name: string;
+    modelNumber: string | null;
+    serialNumber: string | null;
+    warrantyStartDate: string | null;
+    warrantyEndDate: string | null;
+  };
+  costBreakdown: {
+    partsCost: number;
+    laborCost: number;
+    laborHours: number;
+    totalClaimAmount: number;
+    currency: string;
+  };
+  gpsLocation: string | null;
+  claimReportUrl: string | null;
 };
 
 export type ClaimQueueRow = {

@@ -25,6 +25,7 @@ interface ActivationFormState {
 
 interface ActivationSuccess {
   warrantyEndDate: string;
+  certificateUrl: string | null;
 }
 
 function monthLabel(months: number): string {
@@ -91,6 +92,7 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
       const payload = (await response.json()) as {
         error?: string;
         warrantyEndDate?: string;
+        certificateUrl?: string;
       };
 
       if (!response.ok || !payload.warrantyEndDate) {
@@ -98,7 +100,10 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
         return;
       }
 
-      setSuccess({ warrantyEndDate: payload.warrantyEndDate });
+      setSuccess({
+        warrantyEndDate: payload.warrantyEndDate,
+        certificateUrl: payload.certificateUrl ?? null,
+      });
     } catch {
       setError("Network error while activating warranty. Please try again.");
     } finally {
@@ -120,6 +125,13 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
           <p className="text-sm text-emerald-900">
             Warranty activation completed successfully.
           </p>
+          {success.certificateUrl ? (
+            <a href={success.certificateUrl} target="_blank" rel="noreferrer">
+              <Button className="mt-4" variant="outline">
+                Download Warranty Certificate
+              </Button>
+            </a>
+          ) : null}
         </div>
       </NfcPublicShell>
     );

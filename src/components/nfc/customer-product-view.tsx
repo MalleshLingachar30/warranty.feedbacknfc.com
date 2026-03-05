@@ -22,6 +22,7 @@ interface CustomerProductViewProps {
   productModel: WarrantyProductModel;
   openTicket: WarrantyTicket | null;
   serviceHistory: ServiceHistoryItem[];
+  certificateUrl: string | null;
 }
 
 const severityOptions: Array<{
@@ -92,6 +93,7 @@ export function CustomerProductView({
   productModel,
   openTicket,
   serviceHistory,
+  certificateUrl,
 }: CustomerProductViewProps) {
   const issueCategories = useMemo(() => {
     if (productModel.commonIssues.length > 0) {
@@ -215,6 +217,16 @@ export function CustomerProductView({
           {warrantyDaysRemaining} day{warrantyDaysRemaining === 1 ? "" : "s"} remaining
         </p>
       </section>
+
+      {certificateUrl && product.warrantyStatus === "active" ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <Button asChild variant="outline" className="h-11 w-full">
+            <a href={certificateUrl} target="_blank" rel="noreferrer">
+              Download Warranty Certificate
+            </a>
+          </Button>
+        </section>
+      ) : null}
 
       {openTicket ? (
         <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">

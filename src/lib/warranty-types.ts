@@ -66,6 +66,7 @@ export interface WarrantyProduct {
   customerCity: string;
   customerState: string;
   customerPincode: string;
+  warrantyCertificateUrl?: string | null;
 }
 
 export interface WarrantyTechnician {

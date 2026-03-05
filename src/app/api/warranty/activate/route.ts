@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db as prisma } from "@/lib/db";
+import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
   sendCustomerWarrantyActivatedEmail,
   sendWarrantyActivatedNotification,
@@ -43,6 +44,14 @@ function addMonths(input: Date, months: number): Date {
   return output;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ActivateWarrantyRequest;
@@ -63,6 +72,7 @@ export async function POST(request: Request) {
         stickerId: true,
         productModelId: true,
         warrantyStatus: true,
+        metadata: true,
       },
     });
 
@@ -136,6 +146,10 @@ export async function POST(request: Request) {
       ? now
       : parsedInstallationDate;
 
+    const certificatePath = `/api/products/${product.id}/certificate?download=1`;
+    const certificateUrl = buildAbsoluteWarrantyUrl(certificatePath);
+    const existingMetadata = asRecord(product.metadata);
+
     await prisma.$transaction([
       prisma.product.update({
         where: { id: product.id },
@@ -149,6 +163,11 @@ export async function POST(request: Request) {
           customerPhone: normalizedPhone,
           customerEmail: body.customerEmail ?? null,
           customerAddress: body.customerAddress ?? null,
+          metadata: {
+            ...existingMetadata,
+            warrantyCertificateUrl: certificateUrl,
+            warrantyCertificatePath: certificatePath,
+          },
         },
       }),
       prisma.sticker.updateMany({
@@ -162,6 +181,7 @@ export async function POST(request: Request) {
         customerPhone: normalizedPhone,
         productName: model?.name ?? "product",
         warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
+        certificateUrl,
       });
     }
 
@@ -171,6 +191,7 @@ export async function POST(request: Request) {
         customerName: body.customerName,
         productName: model?.name ?? "product",
         warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
+        certificateUrl,
       });
     }
 
@@ -179,6 +200,7 @@ export async function POST(request: Request) {
       message: `Warranty activated for ${model?.name ?? "product"}.`,
       warrantyStartDate: now.toISOString(),
       warrantyEndDate: warrantyEndDate.toISOString(),
+      certificateUrl,
     });
   } catch (error) {
     console.error("Warranty activation failed", error);

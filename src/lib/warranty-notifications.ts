@@ -98,6 +98,7 @@ export async function sendWarrantyActivatedNotification(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  certificateUrl?: string | null;
 }) {
   await onWarrantyActivated(input);
 }
@@ -115,11 +116,17 @@ export async function sendCustomerWarrantyActivatedEmail(input: {
   customerName: string;
   productName: string;
   warrantyEndDateLabel: string;
+  certificateUrl?: string | null;
 }) {
+  const certificateSuffix =
+    input.certificateUrl && input.certificateUrl.trim().length > 0
+      ? ` Download certificate: ${input.certificateUrl}`
+      : "";
+
   await sendEmail({
     to: input.customerEmail,
     subject: `${input.productName} warranty activated`,
-    body: `Hi ${input.customerName}, your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}.`,
+    body: `Hi ${input.customerName}, your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}.${certificateSuffix}`,
   });
 }
 

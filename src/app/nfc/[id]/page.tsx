@@ -72,6 +72,22 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function readCertificateUrl(metadata: unknown): string | null {
+  const record = asRecord(metadata);
+
+  const fromAbsolute = asString(record.warrantyCertificateUrl);
+  if (fromAbsolute) {
+    return fromAbsolute;
+  }
+
+  const fromPath = asString(record.warrantyCertificatePath);
+  if (fromPath) {
+    return fromPath;
+  }
+
+  return null;
+}
+
 function readEtaLabel(metadata: unknown): string | null {
   const record = asRecord(metadata);
   const etaLabel = asString(record.etaLabel);
@@ -315,6 +331,7 @@ function mapWarrantyProduct(product: {
   customerCity: string | null;
   customerState: string | null;
   customerPincode: string | null;
+  metadata: unknown;
   organization: {
     name: string;
   };
@@ -342,6 +359,7 @@ function mapWarrantyProduct(product: {
     customerCity: product.customerCity ?? "",
     customerState: product.customerState ?? "",
     customerPincode: product.customerPincode ?? "",
+    warrantyCertificateUrl: readCertificateUrl(product.metadata),
   };
 }
 
@@ -612,6 +630,10 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
         productModel={productModel}
         openTicket={openTicketMapped}
         serviceHistory={serviceHistory}
+        certificateUrl={
+          mappedProduct.warrantyCertificateUrl ??
+          `/api/products/${mappedProduct.id}/certificate?download=1`
+        }
       />
     );
   }
@@ -684,6 +706,10 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
       productModel={productModel}
       openTicket={openTicketMapped}
       serviceHistory={serviceHistory}
+      certificateUrl={
+        mappedProduct.warrantyCertificateUrl ??
+        `/api/products/${mappedProduct.id}/certificate?download=1`
+      }
     />
   );
 }

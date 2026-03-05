@@ -3,6 +3,7 @@ import { type Prisma } from "@prisma/client";
 
 import { db as prisma } from "@/lib/db";
 import { runSlaSweep } from "@/lib/sla-engine";
+import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
   sendManufacturerClaimSubmittedEmail,
   sendTechnicianResolutionConfirmedNotification,
@@ -42,6 +43,74 @@ function toNumber(value: unknown, fallback = 0): number {
   }
 
   return fallback;
+}
+
+type GenericRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): GenericRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as GenericRecord;
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => asString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function formatTimelineLabel(eventType: string): string {
+  return eventType
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (token) => token.toUpperCase());
+}
+
+function formatDateLabel(value: Date): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function readCompletionPhotos(metadata: unknown): {
+  beforePhotos: string[];
+  afterPhotos: string[];
+} {
+  const root = asRecord(metadata);
+  const completion = asRecord(root.completion);
+
+  return {
+    beforePhotos: asStringArray(completion.beforePhotos),
+    afterPhotos: asStringArray(completion.afterPhotos),
+  };
+}
+
+function firstFiniteNumber(candidates: number[]): number {
+  for (const candidate of candidates) {
+    if (Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+
+  return Number.NaN;
 }
 
 function parsePartsUsed(value: unknown): Array<{
@@ -137,18 +206,55 @@ export async function POST(request: Request, context: RouteContext) {
         status: true,
         productId: true,
         claimId: true,
+        issueCategory: true,
+        issueDescription: true,
+        issueSeverity: true,
+        reportedByName: true,
+        reportedByPhone: true,
+        assignedAt: true,
         product: {
           select: {
             organizationId: true,
+            customerName: true,
+            customerPhone: true,
+            customerEmail: true,
+            customerAddress: true,
+            customerCity: true,
+            customerState: true,
+            customerPincode: true,
+            warrantyStartDate: true,
+            warrantyEndDate: true,
+            serialNumber: true,
+            installationLocation: true,
+            metadata: true,
+            productModel: {
+              select: {
+                name: true,
+                modelNumber: true,
+              },
+            },
+            organization: {
+              select: {
+                name: true,
+                logoUrl: true,
+              },
+            },
+            sticker: {
+              select: {
+                stickerNumber: true,
+              },
+            },
           },
         },
         assignedServiceCenter: {
           select: {
             organizationId: true,
+            name: true,
           },
         },
         assignedTechnician: {
           select: {
+            name: true,
             phone: true,
             serviceCenter: {
               select: {
@@ -165,6 +271,20 @@ export async function POST(request: Request, context: RouteContext) {
         resolutionNotes: true,
         partsUsed: true,
         laborHours: true,
+        metadata: true,
+        timelineEntries: {
+          orderBy: {
+            createdAt: "asc",
+          },
+          select: {
+            eventType: true,
+            eventDescription: true,
+            actorName: true,
+            actorRole: true,
+            createdAt: true,
+            metadata: true,
+          },
+        },
       },
     });
 
@@ -236,10 +356,180 @@ export async function POST(request: Request, context: RouteContext) {
           const laborHours = Math.max(0, toNumber(ticket.laborHours, 0));
           const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
           const totalClaimAmount = Number((partsCost + laborCost).toFixed(2));
+          const partsDetailed = partsUsed.map((part) => ({
+            partName: part.partName,
+            partNumber: part.partNumber,
+            quantity: part.quantity,
+            cost: Number(part.cost.toFixed(2)),
+            lineTotal: Number((part.cost * part.quantity).toFixed(2)),
+          }));
+
+          const completionPhotos = readCompletionPhotos(ticket.metadata);
+          const locationRecord = asRecord(ticket.product.installationLocation);
+          const completionMetadata = asRecord(asRecord(ticket.metadata).completion);
+          const completionLocation = asRecord(completionMetadata.location);
+          const gpsLocation = {
+            latitude: firstFiniteNumber([
+              toNumber(locationRecord.lat, Number.NaN),
+              toNumber(locationRecord.latitude, Number.NaN),
+              toNumber(completionLocation.lat, Number.NaN),
+              toNumber(completionLocation.latitude, Number.NaN),
+            ]),
+            longitude: firstFiniteNumber([
+              toNumber(locationRecord.lng, Number.NaN),
+              toNumber(locationRecord.longitude, Number.NaN),
+              toNumber(completionLocation.lng, Number.NaN),
+              toNumber(completionLocation.longitude, Number.NaN),
+            ]),
+          };
+          const hasGpsLocation =
+            Number.isFinite(gpsLocation.latitude) &&
+            Number.isFinite(gpsLocation.longitude);
 
           const claimNumber = await generateClaimNumber(tx);
+          const claimId = crypto.randomUUID();
+          const reportPath = `/api/claim/${claimId}/report?download=1`;
+          const reportUrl = buildAbsoluteWarrantyUrl(reportPath);
+          const nfcPath = `/nfc/${ticket.product.sticker.stickerNumber}`;
+          const nfcUrl = buildAbsoluteWarrantyUrl(nfcPath);
+
+          const workflowTimestamps = [
+            { label: "Reported", at: ticket.reportedAt },
+            ticket.assignedAt
+              ? { label: "Assigned", at: ticket.assignedAt }
+              : null,
+            ticket.technicianStartedAt
+              ? {
+                  label: "Work Started",
+                  at: ticket.technicianStartedAt,
+                }
+              : null,
+            ticket.technicianCompletedAt
+              ? {
+                  label: "Work Completed",
+                  at: ticket.technicianCompletedAt,
+                }
+              : null,
+            { label: "Customer Confirmed", at: now },
+          ]
+            .filter((entry): entry is { label: string; at: Date } => Boolean(entry))
+            .map((entry) => ({
+              label: entry.label,
+              at: entry.at.toISOString(),
+              atLabel: formatDateLabel(entry.at),
+            }));
+
+          const timelineEvents = ticket.timelineEntries.map((entry) => ({
+            eventType: entry.eventType,
+            label: formatTimelineLabel(entry.eventType),
+            description:
+              entry.eventDescription ?? formatTimelineLabel(entry.eventType),
+            actorName: entry.actorName ?? "System",
+            actorRole: entry.actorRole ?? "system",
+            createdAt: entry.createdAt.toISOString(),
+            createdAtLabel: formatDateLabel(entry.createdAt),
+          }));
+
+          const issuePhotos = ticket.issuePhotos.filter(
+            (photo) => typeof photo === "string" && photo.trim().length > 0,
+          );
+          const resolutionPhotos = ticket.resolutionPhotos.filter(
+            (photo) => typeof photo === "string" && photo.trim().length > 0,
+          );
+
+          const documentationPayload: Prisma.InputJsonValue = {
+            claimNumber,
+            generatedAt: now.toISOString(),
+            generatedAtLabel: formatDateLabel(now),
+            ticket: {
+              ticketId: ticket.id,
+              ticketNumber: ticket.ticketNumber,
+              issueCategory: ticket.issueCategory ?? "General issue",
+              issueDescription: ticket.issueDescription,
+              issueSeverity: ticket.issueSeverity,
+              reportedByName: ticket.reportedByName,
+              reportedByPhone: ticket.reportedByPhone,
+            },
+            manufacturer: {
+              organizationId: ticket.product.organizationId,
+              name: ticket.product.organization.name,
+              logoUrl: ticket.product.organization.logoUrl,
+            },
+            serviceCenter: {
+              organizationId: serviceCenterOrgId,
+              name: ticket.assignedServiceCenter?.name ?? "Service Center",
+            },
+            product: {
+              productId: ticket.productId,
+              name: ticket.product.productModel.name,
+              modelNumber: ticket.product.productModel.modelNumber,
+              serialNumber: ticket.product.serialNumber,
+              warrantyStartDate: ticket.product.warrantyStartDate?.toISOString() ?? null,
+              warrantyEndDate: ticket.product.warrantyEndDate?.toISOString() ?? null,
+              stickerNumber: ticket.product.sticker.stickerNumber,
+            },
+            customer: {
+              name: ticket.product.customerName ?? ticket.reportedByName ?? "Customer",
+              phone: ticket.product.customerPhone ?? ticket.reportedByPhone,
+              email: ticket.product.customerEmail,
+              address: ticket.product.customerAddress,
+              city: ticket.product.customerCity,
+              state: ticket.product.customerState,
+              pincode: ticket.product.customerPincode,
+            },
+            technician: {
+              name: ticket.assignedTechnician?.name ?? null,
+              phone: ticket.assignedTechnician?.phone ?? null,
+            },
+            notes: {
+              technicianResolution: ticket.resolutionNotes ?? "",
+              customerConfirmation: body.comment ?? "Customer confirmed service resolution.",
+            },
+            photos: {
+              issue: issuePhotos,
+              before: completionPhotos.beforePhotos,
+              after: completionPhotos.afterPhotos,
+              resolution: resolutionPhotos,
+              all: [
+                ...issuePhotos,
+                ...completionPhotos.beforePhotos,
+                ...completionPhotos.afterPhotos,
+                ...resolutionPhotos,
+              ].filter((photo, index, all) => all.indexOf(photo) === index),
+            },
+            partsUsed: partsDetailed,
+            labor: {
+              hours: Number(laborHours.toFixed(2)),
+              ratePerHour: DEFAULT_LABOR_RATE_PER_HOUR,
+              cost: Number(laborCost.toFixed(2)),
+            },
+            claimAmount: {
+              partsCost: Number(partsCost.toFixed(2)),
+              laborCost: Number(laborCost.toFixed(2)),
+              total: totalClaimAmount,
+              currency: "INR",
+            },
+            timeline: {
+              workflow: workflowTimestamps,
+              events: timelineEvents,
+            },
+            links: {
+              claimReportPath: reportPath,
+              claimReportUrl: reportUrl,
+              nfcPath,
+              nfcUrl,
+            },
+            gpsLocation: hasGpsLocation
+              ? {
+                  latitude: Number(gpsLocation.latitude.toFixed(6)),
+                  longitude: Number(gpsLocation.longitude.toFixed(6)),
+                }
+              : null,
+          };
+
           const createdClaim = await tx.warrantyClaim.create({
             data: {
+              id: claimId,
               claimNumber,
               ticketId: ticket.id,
               productId: ticket.productId,
@@ -249,18 +539,8 @@ export async function POST(request: Request, context: RouteContext) {
               partsCost: Number(partsCost.toFixed(2)),
               laborCost: Number(laborCost.toFixed(2)),
               totalClaimAmount,
-              documentation: {
-                photos: [...ticket.issuePhotos, ...ticket.resolutionPhotos],
-                timestamps: [
-                  ticket.reportedAt.toISOString(),
-                  ticket.technicianStartedAt?.toISOString(),
-                  ticket.technicianCompletedAt?.toISOString(),
-                  now.toISOString(),
-                ].filter(Boolean),
-                partsUsed: partsUsed.map((part) => part.partName),
-                technicianNotes: ticket.resolutionNotes ?? "",
-                autoGeneratedAt: now.toISOString(),
-              } as Prisma.InputJsonValue,
+              documentation: documentationPayload,
+              documentationPdfUrl: reportPath,
               status: "auto_generated",
             },
             select: {
