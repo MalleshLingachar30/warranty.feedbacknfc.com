@@ -9,7 +9,7 @@
 
 Release reference:
 
-- Git commit: `1e6dc3d`
+- Git commit: `a568a8c`
 - Production URL: `https://warranty.feedbacknfc.com`
 
 ---
@@ -509,6 +509,19 @@ Use this sticker URL as a test card:
    - Activate product with phone only, then sign in with matching verified phone
    - Confirm product appears in `/dashboard/customer`
    - Create ticket anonymously from `/nfc/100` and confirm it appears in customer dashboard after sign-in
+
+### Batch 4 focused UAT (SLA + Settings)
+
+Use the dedicated runbook:
+
+- `docs/batch-4-uat-checklist.md`
+
+This includes:
+
+- SLA badge simulation (`On track` / `At risk` / `Breached`)
+- Manual SLA sweep trigger using `SLA_CRON_KEY`
+- Escalation/timeline DB validation
+- Manufacturer + service-center settings persistence checklist
 
 If you’re using the E2E seeding script locally, you may see output like:
 

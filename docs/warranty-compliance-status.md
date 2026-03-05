@@ -2,7 +2,7 @@
 
 **App:** `warranty.feedbacknfc.com`  
 **As of:** 2026-03-05  
-**Release baseline:** commit `1e6dc3d`  
+**Release baseline:** commit `a568a8c`  
 **Reference spec:** `warranty-dev-spec.md`
 
 ---
@@ -90,6 +90,10 @@ Implementation references:
 ---
 
 ## Batch 4 specific validation (GAP 7 + GAP 9)
+
+Detailed UAT runbook:
+
+- `docs/batch-4-uat-checklist.md`
 
 ### GAP 7 — SLA tracking and auto-escalation
 

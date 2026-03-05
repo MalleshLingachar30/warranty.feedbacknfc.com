@@ -8,6 +8,7 @@ Core docs:
 - `docs/user-manual.md` — end-to-end role-based operating manual (manufacturer, service center, technician, customer), QA flow, and GAP compliance status (Batch 1 + Batch 2 + Batch 3 + Batch 4).
 - `docs/clerk-auth-flow.md` — Clerk auth setup and role-testing flow.
 - `docs/warranty-compliance-status.md` — GAP-by-GAP implementation status and implementation evidence paths.
+- `docs/batch-4-uat-checklist.md` — manual UAT runbook for Batch 4 (SLA breach simulation + settings verification).
 
 ## Key implemented batches (as of 2026-03-05)
 
