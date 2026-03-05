@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "seed:e2e": "node scripts/seed-e2e.js",
+    "bootstrap:clerk-users": "node scripts/bootstrap-clerk-db-users.js",
     "test:api:e2e": "node scripts/run-e2e-api-tests.js"
   },
   "dependencies": {
