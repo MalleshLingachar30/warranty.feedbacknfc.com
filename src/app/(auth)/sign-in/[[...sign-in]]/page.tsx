@@ -1,4 +1,10 @@
-import { ClerkDegraded, ClerkFailed, SignIn } from "@clerk/nextjs";
+import {
+  ClerkDegraded,
+  ClerkFailed,
+  ClerkLoaded,
+  ClerkLoading,
+  SignIn,
+} from "@clerk/nextjs";
 
 const loadingState = (
   <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
@@ -19,18 +25,18 @@ const unavailableState = (
 export default function SignInPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
-      <SignIn
-        routing="path"
-        path="/sign-in"
-        fallback={loadingState}
-        fallbackRedirectUrl="/dashboard"
-        signUpFallbackRedirectUrl="/dashboard"
-      />
-
+      <ClerkLoading>{loadingState}</ClerkLoading>
       <ClerkDegraded>{unavailableState}</ClerkDegraded>
-      <ClerkFailed>
-        {unavailableState}
-      </ClerkFailed>
+      <ClerkFailed>{unavailableState}</ClerkFailed>
+      <ClerkLoaded>
+        <SignIn
+          routing="path"
+          path="/sign-in"
+          fallback={loadingState}
+          fallbackRedirectUrl="/dashboard"
+          signUpFallbackRedirectUrl="/dashboard"
+        />
+      </ClerkLoaded>
     </main>
   );
 }
