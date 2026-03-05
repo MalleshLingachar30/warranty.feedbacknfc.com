@@ -3,21 +3,10 @@ import "server-only";
 import { type IssueSeverity, type Prisma, type TicketStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { DEFAULT_SLA_HOURS, type SlaHours, type SeverityHours } from "@/lib/sla-config";
 import { sendSlaBreachNotification } from "@/lib/warranty-notifications";
 
 type GenericRecord = Record<string, unknown>;
-
-type SeverityHours = {
-  low: number;
-  medium: number;
-  high: number;
-  critical: number;
-};
-
-type SlaHours = {
-  responseHoursBySeverity: SeverityHours;
-  resolutionHoursBySeverity: SeverityHours;
-};
 
 interface ComputeSlaDeadlineInput {
   reportedAt: Date;
@@ -44,21 +33,6 @@ export interface SlaSweepResult {
   breachedTicketIds: string[];
 }
 
-const DEFAULT_SLA_HOURS: SlaHours = {
-  responseHoursBySeverity: {
-    low: 48,
-    medium: 24,
-    high: 8,
-    critical: 4,
-  },
-  resolutionHoursBySeverity: {
-    low: 120,
-    medium: 72,
-    high: 24,
-    critical: 12,
-  },
-};
-
 const ACTIVE_TICKET_STATUSES: TicketStatus[] = [
   "reported",
   "assigned",
@@ -74,6 +48,7 @@ const RESOLUTION_SLA_TRACKED_STATUSES: TicketStatus[] = [
   "assigned",
   "technician_enroute",
   "work_in_progress",
+  "pending_confirmation",
   "reopened",
   "escalated",
 ];
@@ -135,6 +110,7 @@ function needsEscalatedStatus(status: TicketStatus): boolean {
     status === "assigned" ||
     status === "technician_enroute" ||
     status === "work_in_progress" ||
+    status === "pending_confirmation" ||
     status === "reopened"
   );
 }
@@ -157,10 +133,26 @@ function getBreachReason(
     ticket.slaResolutionDeadline instanceof Date &&
     ticket.slaResolutionDeadline.getTime() < now.getTime()
   ) {
-    return "SLA resolution deadline breached before issue closure.";
+    return "SLA resolution deadline breached before ticket resolution.";
   }
 
   return null;
+}
+
+function isSlaBreachNotificationEnabled(settings: Prisma.JsonValue): boolean {
+  if (!isRecord(settings)) {
+    return true;
+  }
+
+  const notifications = isRecord(settings.notifications)
+    ? settings.notifications
+    : {};
+
+  if (typeof notifications.notifyOnSlaBreach === "boolean") {
+    return notifications.notifyOnSlaBreach;
+  }
+
+  return true;
 }
 
 export function computeSlaDeadlines(input: ComputeSlaDeadlineInput) {
@@ -216,6 +208,7 @@ export async function runSlaSweep(options?: {
           organization: {
             select: {
               contactEmail: true,
+              settings: true,
             },
           },
         },
@@ -270,16 +263,13 @@ export async function runSlaSweep(options?: {
       data.slaResolutionDeadline = resolutionDeadline;
     }
 
-    if (shouldMarkBreached) {
+    if (shouldMarkBreached && !ticket.slaBreached) {
       data.slaBreached = true;
       data.escalationReason = breachReason;
       data.escalatedAt = now;
-
-      if (!ticket.slaBreached) {
-        data.escalationLevel = {
-          increment: 1,
-        };
-      }
+      data.escalationLevel = {
+        increment: 1,
+      };
 
       if (needsEscalatedStatus(ticket.status)) {
         data.status = "escalated";
@@ -318,12 +308,22 @@ export async function runSlaSweep(options?: {
       breachedCount += 1;
       breachedTicketIds.push(ticket.id);
 
+      const manufacturerWantsNotification = isSlaBreachNotificationEnabled(
+        ticket.product.organization.settings,
+      );
+      const serviceCenterWantsNotification = isSlaBreachNotificationEnabled(
+        ticket.assignedServiceCenter?.organization.settings ?? {},
+      );
+
       void sendSlaBreachNotification({
         ticketNumber: ticket.ticketNumber,
-        manufacturerEmail: ticket.product.organization.contactEmail,
-        serviceCenterEmail:
-          ticket.assignedServiceCenter?.email ??
-          ticket.assignedServiceCenter?.organization.contactEmail,
+        manufacturerEmail: manufacturerWantsNotification
+          ? ticket.product.organization.contactEmail
+          : undefined,
+        serviceCenterEmail: serviceCenterWantsNotification
+          ? ticket.assignedServiceCenter?.email ??
+            ticket.assignedServiceCenter?.organization.contactEmail
+          : undefined,
       });
     }
   }

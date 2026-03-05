@@ -5,9 +5,9 @@ Landing page to manage equipment warranty by resellers and manufacturers
 
 Core docs:
 
-- `docs/user-manual.md` — end-to-end role-based operating manual (manufacturer, service center, technician, customer), QA flow, and GAP compliance status (Batch 1 + Batch 2 + Batch 3).
+- `docs/user-manual.md` — end-to-end role-based operating manual (manufacturer, service center, technician, customer), QA flow, and GAP compliance status (Batch 1 + Batch 2 + Batch 3 + Batch 4).
 - `docs/clerk-auth-flow.md` — Clerk auth setup and role-testing flow.
-- `docs/warranty-compliance-status.md` — GAP-by-GAP implementation status and Batch 3 evidence paths.
+- `docs/warranty-compliance-status.md` — GAP-by-GAP implementation status and implementation evidence paths.
 
 ## Key implemented batches (as of 2026-03-05)
 
@@ -21,3 +21,6 @@ Core docs:
 - Batch 3: GAP 4 + GAP 6
   - Dedicated customer dashboard at `/dashboard/customer`
   - NFC customer flow localization (English/Hindi) + language-aware customer SMS templates
+- Batch 4: GAP 7 + GAP 9
+  - SLA policy defaults, auto-escalation sweep every 30 minutes, and on-track/at-risk/breached indicators
+  - Expanded manufacturer/service-center settings (logo/profile, notification events, team members, operating hours, categories, radius)

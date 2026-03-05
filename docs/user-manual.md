@@ -3,13 +3,13 @@
 **App:** `warranty.feedbacknfc.com`  
 **Last updated:** 2026-03-05  
 **Scope:** Manufacturer Admin, Service Center Admin, Technician, Customer  
-**Current release snapshot:** Batch 1 + Batch 2 + Batch 3 on production
+**Current release snapshot:** Batch 1 + Batch 2 + Batch 3 + Batch 4
 
 > This is a living document. Some screens/metrics may change as features ship.
 
 Release reference:
 
-- Git commit: `3cb6a78`
+- Git commit: `1e6dc3d`
 - Production URL: `https://warranty.feedbacknfc.com`
 
 ---
@@ -26,7 +26,7 @@ Release reference:
 8. Customer guide (NFC/QR tap flow)
 9. Analytics & KPIs (how it’s calculated)
 10. Manual QA flow (using test sticker `100`)
-11. GAP compliance update (Batch 1 + Batch 2 + Batch 3)
+11. GAP compliance update (Batch 1 + Batch 2 + Batch 3 + Batch 4)
 12. Troubleshooting
 
 ---
@@ -183,6 +183,19 @@ Key sections:
   Product performance + cost trends (derived from tickets/claims).
 - **Settings** (`/dashboard/manufacturer/settings`)
 
+### Manufacturer settings (GAP 9 expansion)
+
+`/dashboard/manufacturer/settings` now includes:
+
+- Organization profile (name, logo URL, GST, contacts, address)
+- SLA configuration (response/resolution per severity)
+- Notification channel preferences (SMS/email/WhatsApp)
+- Notification event toggles (activation, ticket, technician updates, claims, warranty expiry, SLA breach)
+- API key/integration metadata placeholders
+- Team members section:
+  - add member by Clerk user ID
+  - activate/deactivate manufacturer admin members
+
 ### Common manufacturer tasks (step-by-step)
 
 1. **Create Product Models**
@@ -230,6 +243,18 @@ Service center admins use:
 - `Technicians` (`/dashboard/technicians`) — roster + availability
 - `Claims` (`/dashboard/claims`) — pipeline and outcomes
 - `Settings` (`/dashboard/settings`)
+
+### Service-center settings (GAP 9 expansion)
+
+`/dashboard/settings` for service-center admins now includes:
+
+- Organization profile
+- Notification preferences
+- Per-center operations controls:
+  - service radius (km)
+  - supported categories
+  - operating hours (Mon–Sun open/close schedule)
+  - active/inactive center toggle
 
 ### Add technicians (where you onboard more technicians)
 
@@ -491,7 +516,7 @@ If you’re using the E2E seeding script locally, you may see output like:
 
 ---
 
-## 11) GAP compliance update (Batch 1 + Batch 2 + Batch 3)
+## 11) GAP compliance update (Batch 1 + Batch 2 + Batch 3 + Batch 4)
 
 Detailed tracker document:
 
@@ -610,6 +635,30 @@ Status: **Implemented (MVP scope)**
 - Added language detection via query + user preference + browser header
 - Customer SMS templates now respect `users.language_preference` (`hi` → Hindi, fallback English)
 
+### Batch 4 (implemented in current release)
+
+#### GAP 7: SLA tracking and auto-escalation
+
+Status: **Implemented**
+
+- SLA defaults aligned to spec:
+  - low: 48h / 72h
+  - medium: 24h / 48h
+  - high: 8h / 24h
+  - critical: 2h / 8h
+- Auto-escalation runs via cron + API sweep (`/api/ticket/sla/sweep`)
+- Service-center and manufacturer ticket queues show SLA state badges:
+  - On track
+  - At risk
+  - Breached
+
+#### GAP 9: Settings pages content
+
+Status: **Implemented**
+
+- Manufacturer settings expanded with profile + logo, SLA, notifications (events/channels), API key placeholders, and team member management.
+- Service-center settings expanded with profile, notifications, service radius, supported categories, and operating-hours management.
+
 ### Notification events currently wired
 
 - Warranty activated → customer SMS (+ certificate link when available, language-aware)
@@ -633,13 +682,8 @@ Cron endpoints:
 
 Current `vercel.json` schedules:
 
-- SLA sweep: daily at `00:30` UTC
+- SLA sweep: every 30 minutes (`*/30 * * * *`)
 - Warranty expiry sweep: daily at `09:00` UTC
-
-Note:
-
-- Vercel Hobby plan does not allow high-frequency cron (for example, every 30 minutes).
-- With Vercel Pro, SLA sweep can be changed to `*/30 * * * *`.
 
 ### Required environment variables (notifications)
 

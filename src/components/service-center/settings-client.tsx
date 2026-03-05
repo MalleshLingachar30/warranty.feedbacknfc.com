@@ -30,7 +30,26 @@ type ServiceCenterSettingsPayload = {
   };
 };
 
-type CenterPayload = {
+type OperatingDayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+type OperatingDay = {
+  enabled: boolean;
+  open: string;
+  close: string;
+};
+
+type OperatingHours = Record<OperatingDayKey, OperatingDay>;
+
+const OPERATING_DAYS: Array<{ key: OperatingDayKey; label: string }> = [
+  { key: "mon", label: "Monday" },
+  { key: "tue", label: "Tuesday" },
+  { key: "wed", label: "Wednesday" },
+  { key: "thu", label: "Thursday" },
+  { key: "fri", label: "Friday" },
+  { key: "sat", label: "Saturday" },
+  { key: "sun", label: "Sunday" },
+];
+
+type CenterInputPayload = {
   id: string;
   name: string;
   address: string;
@@ -41,17 +60,22 @@ type CenterPayload = {
   email: string;
   serviceRadiusKm: number;
   supportedCategories: string[];
+  operatingHours:
+    | Partial<Record<OperatingDayKey, Partial<OperatingDay>>>
+    | null
+    | undefined;
   isActive: boolean;
 };
 
-type CenterDraft = CenterPayload & {
+type CenterDraft = Omit<CenterInputPayload, "operatingHours"> & {
+  operatingHours: OperatingHours;
   supportedCategoriesText: string;
 };
 
 interface ServiceCenterSettingsClientProps {
   initialOrganization: OrganizationPayload;
   initialSettings: ServiceCenterSettingsPayload;
-  initialCenters: CenterPayload[];
+  initialCenters: CenterInputPayload[];
 }
 
 function parseRadius(value: string) {
@@ -61,6 +85,95 @@ function parseRadius(value: string) {
   }
 
   return parsed;
+}
+
+function defaultOperatingHours(): OperatingHours {
+  return {
+    mon: { enabled: true, open: "09:00", close: "18:00" },
+    tue: { enabled: true, open: "09:00", close: "18:00" },
+    wed: { enabled: true, open: "09:00", close: "18:00" },
+    thu: { enabled: true, open: "09:00", close: "18:00" },
+    fri: { enabled: true, open: "09:00", close: "18:00" },
+    sat: { enabled: true, open: "09:00", close: "16:00" },
+    sun: { enabled: false, open: "09:00", close: "13:00" },
+  };
+}
+
+function sanitizeTime(value: string, fallback: string) {
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
+    return fallback;
+  }
+
+  return value;
+}
+
+function normalizeOperatingHours(
+  value: Partial<Record<OperatingDayKey, Partial<OperatingDay>>> | null | undefined,
+) {
+  const fallback = defaultOperatingHours();
+
+  if (!value) {
+    return fallback;
+  }
+
+  return {
+    mon: {
+      enabled: Boolean(value.mon?.enabled),
+      open: sanitizeTime(value.mon?.open ?? fallback.mon.open, fallback.mon.open),
+      close: sanitizeTime(
+        value.mon?.close ?? fallback.mon.close,
+        fallback.mon.close,
+      ),
+    },
+    tue: {
+      enabled: Boolean(value.tue?.enabled),
+      open: sanitizeTime(value.tue?.open ?? fallback.tue.open, fallback.tue.open),
+      close: sanitizeTime(
+        value.tue?.close ?? fallback.tue.close,
+        fallback.tue.close,
+      ),
+    },
+    wed: {
+      enabled: Boolean(value.wed?.enabled),
+      open: sanitizeTime(value.wed?.open ?? fallback.wed.open, fallback.wed.open),
+      close: sanitizeTime(
+        value.wed?.close ?? fallback.wed.close,
+        fallback.wed.close,
+      ),
+    },
+    thu: {
+      enabled: Boolean(value.thu?.enabled),
+      open: sanitizeTime(value.thu?.open ?? fallback.thu.open, fallback.thu.open),
+      close: sanitizeTime(
+        value.thu?.close ?? fallback.thu.close,
+        fallback.thu.close,
+      ),
+    },
+    fri: {
+      enabled: Boolean(value.fri?.enabled),
+      open: sanitizeTime(value.fri?.open ?? fallback.fri.open, fallback.fri.open),
+      close: sanitizeTime(
+        value.fri?.close ?? fallback.fri.close,
+        fallback.fri.close,
+      ),
+    },
+    sat: {
+      enabled: Boolean(value.sat?.enabled),
+      open: sanitizeTime(value.sat?.open ?? fallback.sat.open, fallback.sat.open),
+      close: sanitizeTime(
+        value.sat?.close ?? fallback.sat.close,
+        fallback.sat.close,
+      ),
+    },
+    sun: {
+      enabled: Boolean(value.sun?.enabled),
+      open: sanitizeTime(value.sun?.open ?? fallback.sun.open, fallback.sun.open),
+      close: sanitizeTime(
+        value.sun?.close ?? fallback.sun.close,
+        fallback.sun.close,
+      ),
+    },
+  };
 }
 
 function ToggleRow({
@@ -97,6 +210,7 @@ export function ServiceCenterSettingsClient({
   const [centers, setCenters] = useState<CenterDraft[]>(
     initialCenters.map((center) => ({
       ...center,
+      operatingHours: normalizeOperatingHours(center.operatingHours),
       supportedCategoriesText: center.supportedCategories.join(", "),
     })),
   );
@@ -136,6 +250,7 @@ export function ServiceCenterSettingsClient({
               .split(",")
               .map((value) => value.trim())
               .filter((value) => value.length > 0),
+            operatingHours: center.operatingHours,
             isActive: center.isActive,
           })),
         }),
@@ -145,7 +260,7 @@ export function ServiceCenterSettingsClient({
         error?: string;
         organization?: OrganizationPayload;
         settings?: ServiceCenterSettingsPayload;
-        centers?: CenterPayload[];
+        centers?: CenterInputPayload[];
       };
 
       if (
@@ -162,6 +277,7 @@ export function ServiceCenterSettingsClient({
       setCenters(
         payload.centers.map((center) => ({
           ...center,
+          operatingHours: normalizeOperatingHours(center.operatingHours),
           supportedCategoriesText: center.supportedCategories.join(", "),
         })),
       );
@@ -387,10 +503,7 @@ export function ServiceCenterSettingsClient({
             </p>
           ) : (
             centers.map((center) => (
-              <div
-                key={center.id}
-                className="rounded-lg border p-4"
-              >
+              <div key={center.id} className="space-y-4 rounded-lg border p-4">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   <label className="space-y-1 text-sm sm:col-span-2 lg:col-span-1">
                     <span>Center Name</span>
@@ -553,6 +666,95 @@ export function ServiceCenterSettingsClient({
                     />
                     Active center
                   </label>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-slate-900">
+                    Operating Hours
+                  </p>
+                  {OPERATING_DAYS.map((day) => {
+                    const hours = center.operatingHours[day.key];
+
+                    return (
+                      <div
+                        key={`${center.id}-${day.key}`}
+                        className="grid items-center gap-3 rounded-md border p-3 md:grid-cols-[140px_120px_1fr_1fr]"
+                      >
+                        <p className="text-sm font-medium">{day.label}</p>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={hours.enabled}
+                            onChange={(event) =>
+                              setCenters((current) =>
+                                current.map((item) =>
+                                  item.id === center.id
+                                    ? {
+                                        ...item,
+                                        operatingHours: {
+                                          ...item.operatingHours,
+                                          [day.key]: {
+                                            ...item.operatingHours[day.key],
+                                            enabled: event.target.checked,
+                                          },
+                                        },
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                          Open
+                        </label>
+                        <Input
+                          type="time"
+                          value={hours.open}
+                          onChange={(event) =>
+                            setCenters((current) =>
+                              current.map((item) =>
+                                item.id === center.id
+                                  ? {
+                                      ...item,
+                                      operatingHours: {
+                                        ...item.operatingHours,
+                                        [day.key]: {
+                                          ...item.operatingHours[day.key],
+                                          open: event.target.value,
+                                        },
+                                      },
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          disabled={!hours.enabled}
+                        />
+                        <Input
+                          type="time"
+                          value={hours.close}
+                          onChange={(event) =>
+                            setCenters((current) =>
+                              current.map((item) =>
+                                item.id === center.id
+                                  ? {
+                                      ...item,
+                                      operatingHours: {
+                                        ...item.operatingHours,
+                                        [day.key]: {
+                                          ...item.operatingHours[day.key],
+                                          close: event.target.value,
+                                        },
+                                      },
+                                    }
+                                  : item,
+                              ),
+                            )
+                          }
+                          disabled={!hours.enabled}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))

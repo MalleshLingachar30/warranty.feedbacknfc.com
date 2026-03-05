@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { type Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { DEFAULT_SLA_HOURS } from "@/lib/sla-config";
 
 import {
   ApiError,
@@ -65,10 +66,50 @@ function normalizeSeverityHours(value: unknown) {
   const source = isRecord(value) ? value : {};
 
   return {
-    low: asPositiveInteger(source.low) ?? 0,
-    medium: asPositiveInteger(source.medium) ?? 0,
-    high: asPositiveInteger(source.high) ?? 0,
-    critical: asPositiveInteger(source.critical) ?? 0,
+    low: asPositiveInteger(source.low) ?? DEFAULT_SLA_HOURS.responseHoursBySeverity.low,
+    medium:
+      asPositiveInteger(source.medium) ??
+      DEFAULT_SLA_HOURS.responseHoursBySeverity.medium,
+    high: asPositiveInteger(source.high) ?? DEFAULT_SLA_HOURS.responseHoursBySeverity.high,
+    critical:
+      asPositiveInteger(source.critical) ??
+      DEFAULT_SLA_HOURS.responseHoursBySeverity.critical,
+  };
+}
+
+function normalizeResolutionSeverityHours(value: unknown) {
+  const source = isRecord(value) ? value : {};
+
+  return {
+    low:
+      asPositiveInteger(source.low) ??
+      DEFAULT_SLA_HOURS.resolutionHoursBySeverity.low,
+    medium:
+      asPositiveInteger(source.medium) ??
+      DEFAULT_SLA_HOURS.resolutionHoursBySeverity.medium,
+    high:
+      asPositiveInteger(source.high) ??
+      DEFAULT_SLA_HOURS.resolutionHoursBySeverity.high,
+    critical:
+      asPositiveInteger(source.critical) ??
+      DEFAULT_SLA_HOURS.resolutionHoursBySeverity.critical,
+  };
+}
+
+function normalizeNotificationEvents(value: unknown) {
+  const source = isRecord(value) ? value : {};
+
+  return {
+    warrantyActivated:
+      asOptionalBoolean(source.warrantyActivated) ?? true,
+    ticketCreated: asOptionalBoolean(source.ticketCreated) ?? true,
+    technicianUpdates:
+      asOptionalBoolean(source.technicianUpdates) ?? true,
+    claimSubmitted: asOptionalBoolean(source.claimSubmitted) ?? true,
+    claimDecision: asOptionalBoolean(source.claimDecision) ?? true,
+    warrantyExpiring:
+      asOptionalBoolean(source.warrantyExpiring) ?? true,
+    slaBreached: asOptionalBoolean(source.slaBreached) ?? true,
   };
 }
 
@@ -81,6 +122,7 @@ function normalizeNotifications(value: unknown) {
     whatsappEnabled: asOptionalBoolean(source.whatsappEnabled) ?? false,
     notifyOnSlaBreach: asOptionalBoolean(source.notifyOnSlaBreach) ?? true,
     weeklyDigest: asOptionalBoolean(source.weeklyDigest) ?? false,
+    events: normalizeNotificationEvents(source.events),
   };
 }
 
@@ -90,6 +132,7 @@ function normalizeIntegrations(value: unknown) {
   return {
     erpWebhookUrl: asString(source.erpWebhookUrl) ?? "",
     apiKeyLabel: asString(source.apiKeyLabel) ?? "",
+    erpApiKeyMasked: asString(source.erpApiKeyMasked) ?? "",
   };
 }
 
@@ -101,7 +144,7 @@ function normalizeSettings(settings: Prisma.JsonValue) {
       responseHoursBySeverity: normalizeSeverityHours(
         isRecord(source.sla) ? source.sla.responseHoursBySeverity : undefined,
       ),
-      resolutionHoursBySeverity: normalizeSeverityHours(
+      resolutionHoursBySeverity: normalizeResolutionSeverityHours(
         isRecord(source.sla) ? source.sla.resolutionHoursBySeverity : undefined,
       ),
     },
@@ -127,6 +170,7 @@ export async function GET() {
         country: true,
         pincode: true,
         gstNumber: true,
+        logoUrl: true,
         settings: true,
       },
     });
@@ -147,6 +191,7 @@ export async function GET() {
         country: organization.country ?? "IN",
         pincode: organization.pincode ?? "",
         gstNumber: organization.gstNumber ?? "",
+        logoUrl: organization.logoUrl ?? "",
       },
       settings: normalizeSettings(organization.settings),
     });
@@ -190,7 +235,7 @@ export async function PUT(request: Request) {
           slaPatch.responseHoursBySeverity ??
             existingSettings.sla.responseHoursBySeverity,
         ),
-        resolutionHoursBySeverity: normalizeSeverityHours(
+        resolutionHoursBySeverity: normalizeResolutionSeverityHours(
           slaPatch.resolutionHoursBySeverity ??
             existingSettings.sla.resolutionHoursBySeverity,
         ),
@@ -231,6 +276,9 @@ export async function PUT(request: Request) {
         gstNumber:
           asString(organizationPatch.gstNumber) ??
           (organizationPatch.gstNumber === "" ? null : undefined),
+        logoUrl:
+          asString(organizationPatch.logoUrl) ??
+          (organizationPatch.logoUrl === "" ? null : undefined),
         settings: nextSettings as Prisma.InputJsonValue,
       },
       select: {
@@ -244,6 +292,7 @@ export async function PUT(request: Request) {
         country: true,
         pincode: true,
         gstNumber: true,
+        logoUrl: true,
         settings: true,
       },
     });
@@ -260,6 +309,7 @@ export async function PUT(request: Request) {
         country: updated.country ?? "IN",
         pincode: updated.pincode ?? "",
         gstNumber: updated.gstNumber ?? "",
+        logoUrl: updated.logoUrl ?? "",
       },
       settings: normalizeSettings(updated.settings),
     });

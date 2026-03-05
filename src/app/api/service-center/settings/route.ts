@@ -12,6 +12,9 @@ import {
 
 type GenericRecord = Record<string, unknown>;
 
+const OPERATING_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+type OperatingDayKey = (typeof OPERATING_DAYS)[number];
+
 type SettingsPayload = {
   organization?: unknown;
   settings?: unknown;
@@ -60,6 +63,45 @@ function parseStringArray(value: unknown) {
   return value
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
+}
+
+function sanitizeTime(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const trimmed = value.trim();
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmed)) {
+    return fallback;
+  }
+
+  return trimmed;
+}
+
+function normalizeOperatingHours(value: unknown) {
+  const source = isRecord(value) ? value : {};
+
+  const result: Record<OperatingDayKey, { enabled: boolean; open: string; close: string }> = {
+    mon: { enabled: true, open: "09:00", close: "18:00" },
+    tue: { enabled: true, open: "09:00", close: "18:00" },
+    wed: { enabled: true, open: "09:00", close: "18:00" },
+    thu: { enabled: true, open: "09:00", close: "18:00" },
+    fri: { enabled: true, open: "09:00", close: "18:00" },
+    sat: { enabled: true, open: "09:00", close: "16:00" },
+    sun: { enabled: false, open: "09:00", close: "13:00" },
+  };
+
+  for (const day of OPERATING_DAYS) {
+    const dayConfig = isRecord(source[day]) ? source[day] : {};
+
+    result[day] = {
+      enabled: asOptionalBoolean(dayConfig.enabled) ?? result[day].enabled,
+      open: sanitizeTime(dayConfig.open, result[day].open),
+      close: sanitizeTime(dayConfig.close, result[day].close),
+    };
+  }
+
+  return result;
 }
 
 function asJsonRecord(value: Prisma.JsonValue): GenericRecord {
@@ -126,6 +168,7 @@ export async function GET() {
           email: true,
           serviceRadiusKm: true,
           supportedCategories: true,
+          operatingHours: true,
           isActive: true,
         },
       }),
@@ -159,6 +202,7 @@ export async function GET() {
         email: center.email ?? "",
         serviceRadiusKm: center.serviceRadiusKm,
         supportedCategories: center.supportedCategories,
+        operatingHours: normalizeOperatingHours(center.operatingHours),
         isActive: center.isActive,
       })),
     });
@@ -230,6 +274,7 @@ export async function PUT(request: Request) {
         hasEmail: "email" in entry,
         hasServiceRadiusKm: "serviceRadiusKm" in entry,
         hasSupportedCategories: "supportedCategories" in entry,
+        hasOperatingHours: "operatingHours" in entry,
         hasIsActive: "isActive" in entry,
         name: asString(entry.name),
         address: asString(entry.address),
@@ -240,6 +285,7 @@ export async function PUT(request: Request) {
         email: asString(entry.email),
         serviceRadiusKm: asPositiveInteger(entry.serviceRadiusKm),
         supportedCategories: parseStringArray(entry.supportedCategories),
+        operatingHours: normalizeOperatingHours(entry.operatingHours),
         isActive: asOptionalBoolean(entry.isActive),
       }))
       .filter((entry) => Boolean(entry.id));
@@ -299,8 +345,12 @@ export async function PUT(request: Request) {
         if (patch.hasServiceRadiusKm && patch.serviceRadiusKm !== null) {
           centerUpdateData.serviceRadiusKm = patch.serviceRadiusKm;
         }
-        if (patch.hasSupportedCategories && patch.supportedCategories.length > 0) {
+        if (patch.hasSupportedCategories) {
           centerUpdateData.supportedCategories = patch.supportedCategories;
+        }
+        if (patch.hasOperatingHours) {
+          centerUpdateData.operatingHours =
+            patch.operatingHours as unknown as Prisma.InputJsonValue;
         }
         if (patch.hasIsActive && patch.isActive !== null) {
           centerUpdateData.isActive = patch.isActive;
@@ -350,6 +400,7 @@ export async function PUT(request: Request) {
           email: true,
           serviceRadiusKm: true,
           supportedCategories: true,
+          operatingHours: true,
           isActive: true,
         },
       }),
@@ -383,6 +434,7 @@ export async function PUT(request: Request) {
         email: center.email ?? "",
         serviceRadiusKm: center.serviceRadiusKm,
         supportedCategories: center.supportedCategories,
+        operatingHours: normalizeOperatingHours(center.operatingHours),
         isActive: center.isActive,
       })),
     });

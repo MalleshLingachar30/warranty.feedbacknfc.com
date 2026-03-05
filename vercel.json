@@ -7,7 +7,7 @@
   "crons": [
     {
       "path": "/api/ticket/sla/sweep",
-      "schedule": "30 0 * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/warranty/expiry/sweep",

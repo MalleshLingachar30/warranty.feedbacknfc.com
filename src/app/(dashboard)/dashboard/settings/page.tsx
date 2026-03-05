@@ -361,6 +361,7 @@ export default async function SettingsPage() {
         email: true,
         serviceRadiusKm: true,
         supportedCategories: true,
+        operatingHours: true,
         isActive: true,
       },
     }),
@@ -399,6 +400,10 @@ export default async function SettingsPage() {
         email: center.email ?? "",
         serviceRadiusKm: center.serviceRadiusKm,
         supportedCategories: center.supportedCategories,
+        operatingHours:
+          center.operatingHours && typeof center.operatingHours === "object"
+            ? (center.operatingHours as Record<string, unknown>)
+            : null,
         isActive: center.isActive,
       }))}
     />

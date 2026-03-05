@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
+import { getSlaIndicator, type SlaIndicatorState } from "@/lib/sla-config";
 
 import { resolveManufacturerPageContext } from "../_lib/server-context";
 
@@ -73,6 +74,32 @@ function formatHours(value: number) {
   return `${value.toFixed(1)}h`;
 }
 
+function slaIndicatorClass(state: SlaIndicatorState) {
+  switch (state) {
+    case "on_track":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "at_risk":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "breached":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+}
+
+function slaIndicatorLabel(state: SlaIndicatorState) {
+  switch (state) {
+    case "on_track":
+      return "On track";
+    case "at_risk":
+      return "At risk";
+    case "breached":
+      return "Breached";
+    default:
+      return "No SLA";
+  }
+}
+
 export default async function ManufacturerTicketsPage() {
   const { organizationId } = await resolveManufacturerPageContext();
 
@@ -106,6 +133,8 @@ export default async function ManufacturerTicketsPage() {
         technicianStartedAt: true,
         technicianCompletedAt: true,
         slaBreached: true,
+        slaResponseDeadline: true,
+        slaResolutionDeadline: true,
         assignedServiceCenter: {
           select: {
             name: true,
@@ -240,12 +269,13 @@ export default async function ManufacturerTicketsPage() {
                 <TableHead>Technician</TableHead>
                 <TableHead>Region</TableHead>
                 <TableHead>Reported</TableHead>
+                <TableHead>SLA</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tickets.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground">
+                  <TableCell colSpan={9} className="text-muted-foreground">
                     No tickets have been created for this organization yet.
                   </TableCell>
                 </TableRow>
@@ -281,14 +311,39 @@ export default async function ManufacturerTicketsPage() {
                       >
                         {statusLabel(ticket.status)}
                       </Badge>
-                      {ticket.slaBreached ? (
-                        <p className="mt-1 text-xs text-rose-700">SLA breached</p>
-                      ) : null}
                     </TableCell>
                     <TableCell>{ticket.assignedServiceCenter?.name ?? "-"}</TableCell>
                     <TableCell>{ticket.assignedTechnician?.name ?? "-"}</TableCell>
                     <TableCell>{ticket.product.customerCity ?? "-"}</TableCell>
                     <TableCell>{formatDateTime(ticket.reportedAt)}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const indicator = getSlaIndicator({
+                          status: ticket.status,
+                          assignedAt: ticket.assignedAt,
+                          reportedAt: ticket.reportedAt,
+                          slaResponseDeadline: ticket.slaResponseDeadline,
+                          slaResolutionDeadline: ticket.slaResolutionDeadline,
+                          slaBreached: ticket.slaBreached,
+                        });
+
+                        return (
+                          <div className="space-y-1">
+                            <Badge
+                              variant="outline"
+                              className={slaIndicatorClass(indicator.state)}
+                            >
+                              {slaIndicatorLabel(indicator.state)}
+                            </Badge>
+                            {indicator.deadline ? (
+                              <p className="text-xs text-muted-foreground">
+                                Due {formatDateTime(indicator.deadline)}
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
                   </TableRow>
                 ))
               )}

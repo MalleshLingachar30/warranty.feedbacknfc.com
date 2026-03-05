@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, UserPlus } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,16 @@ type SeverityHours = {
   medium: number;
   high: number;
   critical: number;
+};
+
+type NotificationEvents = {
+  warrantyActivated: boolean;
+  ticketCreated: boolean;
+  technicianUpdates: boolean;
+  claimSubmitted: boolean;
+  claimDecision: boolean;
+  warrantyExpiring: boolean;
+  slaBreached: boolean;
 };
 
 type SettingsPayload = {
@@ -26,10 +37,12 @@ type SettingsPayload = {
     whatsappEnabled: boolean;
     notifyOnSlaBreach: boolean;
     weeklyDigest: boolean;
+    events: NotificationEvents;
   };
   integrations: {
     erpWebhookUrl: string;
     apiKeyLabel: string;
+    erpApiKeyMasked: string;
   };
 };
 
@@ -44,11 +57,22 @@ type OrganizationPayload = {
   country: string;
   pincode: string;
   gstNumber: string;
+  logoUrl: string;
+};
+
+type TeamMemberPayload = {
+  id: string;
+  name: string;
+  email: string;
+  clerkId: string;
+  isActive: boolean;
+  createdAt: string;
 };
 
 interface ManufacturerSettingsClientProps {
   initialOrganization: OrganizationPayload;
   initialSettings: SettingsPayload;
+  initialTeamMembers: TeamMemberPayload[];
 }
 
 function sanitizeHours(value: string): number {
@@ -147,14 +171,32 @@ function ToggleRow({
   );
 }
 
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 export function ManufacturerSettingsClient({
   initialOrganization,
   initialSettings,
+  initialTeamMembers,
 }: ManufacturerSettingsClientProps) {
   const [organization, setOrganization] =
     useState<OrganizationPayload>(initialOrganization);
   const [settings, setSettings] = useState<SettingsPayload>(initialSettings);
+  const [teamMembers, setTeamMembers] =
+    useState<TeamMemberPayload[]>(initialTeamMembers);
+  const [inviteDraft, setInviteDraft] = useState({
+    clerkId: "",
+    name: "",
+    email: "",
+  });
   const [isSaving, setIsSaving] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [togglingMemberId, setTogglingMemberId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
@@ -203,11 +245,104 @@ export function ManufacturerSettingsClient({
     }
   };
 
+  const inviteTeamMember = async () => {
+    setIsInviting(true);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      if (!inviteDraft.clerkId.trim()) {
+        throw new Error("Clerk user ID is required.");
+      }
+
+      const response = await fetch("/api/manufacturer/team-members", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clerkId: inviteDraft.clerkId,
+          name: inviteDraft.name,
+          email: inviteDraft.email,
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        member?: TeamMemberPayload;
+      };
+
+      if (!response.ok || !payload.member) {
+        throw new Error(payload.error ?? "Unable to add team member.");
+      }
+
+      setTeamMembers((current) => {
+        const existingIndex = current.findIndex(
+          (entry) => entry.id === payload.member!.id,
+        );
+
+        if (existingIndex >= 0) {
+          const next = [...current];
+          next[existingIndex] = payload.member!;
+          return next;
+        }
+
+        return [...current, payload.member!];
+      });
+      setInviteDraft({ clerkId: "", name: "", email: "" });
+      setSaveMessage("Team member linked successfully.");
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Unable to add team member.",
+      );
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
+  const toggleTeamMemberStatus = async (memberId: string, isActive: boolean) => {
+    setTogglingMemberId(memberId);
+    setSaveError(null);
+    setSaveMessage(null);
+
+    try {
+      const response = await fetch(`/api/manufacturer/team-members/${memberId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isActive }),
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        member?: TeamMemberPayload;
+      };
+
+      if (!response.ok || !payload.member) {
+        throw new Error(payload.error ?? "Unable to update team member.");
+      }
+
+      setTeamMembers((current) =>
+        current.map((entry) =>
+          entry.id === payload.member!.id ? payload.member! : entry,
+        ),
+      );
+      setSaveMessage("Team member status updated.");
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Unable to update team member.",
+      );
+    } finally {
+      setTogglingMemberId(null);
+    }
+  };
+
   return (
     <div>
       <PageHeader
         title="Settings"
-        description="Manage organization profile, SLA thresholds, notifications, and integration metadata."
+        description="Manage organization profile, SLA configuration, notifications, API integrations, and team members."
         actions={
           <Button
             onClick={() => void saveSettings()}
@@ -240,6 +375,19 @@ export function ManufacturerSettingsClient({
                     name: event.target.value,
                   }))
                 }
+              />
+            </label>
+            <label className="space-y-1 text-sm sm:col-span-2">
+              <span>Logo URL</span>
+              <Input
+                value={organization.logoUrl}
+                onChange={(event) =>
+                  setOrganization((current) => ({
+                    ...current,
+                    logoUrl: event.target.value,
+                  }))
+                }
+                placeholder="https://cdn.example.com/logo.png"
               />
             </label>
             <label className="space-y-1 text-sm">
@@ -451,7 +599,127 @@ export function ManufacturerSettingsClient({
 
         <Card>
           <CardHeader>
-            <CardTitle>Integrations</CardTitle>
+            <CardTitle>Notification Events</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ToggleRow
+              label="Warranty Activated"
+              checked={settings.notifications.events.warrantyActivated}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      warrantyActivated: checked,
+                    },
+                  },
+                }))
+              }
+            />
+            <ToggleRow
+              label="Ticket Created"
+              checked={settings.notifications.events.ticketCreated}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      ticketCreated: checked,
+                    },
+                  },
+                }))
+              }
+            />
+            <ToggleRow
+              label="Technician Updates"
+              checked={settings.notifications.events.technicianUpdates}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      technicianUpdates: checked,
+                    },
+                  },
+                }))
+              }
+            />
+            <ToggleRow
+              label="Claim Submitted"
+              checked={settings.notifications.events.claimSubmitted}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      claimSubmitted: checked,
+                    },
+                  },
+                }))
+              }
+            />
+            <ToggleRow
+              label="Claim Decision"
+              checked={settings.notifications.events.claimDecision}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      claimDecision: checked,
+                    },
+                  },
+                }))
+              }
+            />
+            <ToggleRow
+              label="Warranty Expiring"
+              checked={settings.notifications.events.warrantyExpiring}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      warrantyExpiring: checked,
+                    },
+                  },
+                }))
+              }
+            />
+            <ToggleRow
+              label="SLA Breached"
+              checked={settings.notifications.events.slaBreached}
+              onChange={(checked) =>
+                setSettings((current) => ({
+                  ...current,
+                  notifications: {
+                    ...current.notifications,
+                    events: {
+                      ...current.notifications.events,
+                      slaBreached: checked,
+                    },
+                  },
+                }))
+              }
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>API Keys & Integrations</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <label className="space-y-1 text-sm">
@@ -471,7 +739,7 @@ export function ManufacturerSettingsClient({
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span>Integration Label</span>
+              <span>API Key Label</span>
               <Input
                 value={settings.integrations.apiKeyLabel}
                 onChange={(event) =>
@@ -486,9 +754,160 @@ export function ManufacturerSettingsClient({
                 placeholder="Primary ERP Key"
               />
             </label>
+            <label className="space-y-1 text-sm">
+              <span>Stored API Key (masked)</span>
+              <Input
+                value={settings.integrations.erpApiKeyMasked}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    integrations: {
+                      ...current.integrations,
+                      erpApiKeyMasked: event.target.value,
+                    },
+                  }))
+                }
+                placeholder="sk_live_****************"
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Key vault integration is a placeholder for MVP. Use this section to
+              track active key labels and rotation metadata.
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Team Members</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Create the user in Clerk first, then link them here as a manufacturer
+            admin.
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <Input
+              value={inviteDraft.clerkId}
+              onChange={(event) =>
+                setInviteDraft((current) => ({
+                  ...current,
+                  clerkId: event.target.value,
+                }))
+              }
+              placeholder="Clerk User ID (user_...)"
+            />
+            <Input
+              value={inviteDraft.name}
+              onChange={(event) =>
+                setInviteDraft((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
+              }
+              placeholder="Name (optional)"
+            />
+            <Input
+              value={inviteDraft.email}
+              onChange={(event) =>
+                setInviteDraft((current) => ({
+                  ...current,
+                  email: event.target.value,
+                }))
+              }
+              placeholder="Email (optional)"
+              type="email"
+            />
+            <Button
+              onClick={() => void inviteTeamMember()}
+              disabled={isInviting}
+              className="gap-2"
+            >
+              {isInviting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <UserPlus className="size-4" />
+              )}
+              Add Member
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-2 py-2 text-left font-medium">Name</th>
+                  <th className="px-2 py-2 text-left font-medium">Email</th>
+                  <th className="px-2 py-2 text-left font-medium">Clerk ID</th>
+                  <th className="px-2 py-2 text-left font-medium">Status</th>
+                  <th className="px-2 py-2 text-left font-medium">Linked</th>
+                  <th className="px-2 py-2 text-left font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamMembers.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-2 py-4 text-muted-foreground"
+                    >
+                      No manufacturer admin members linked yet.
+                    </td>
+                  </tr>
+                ) : (
+                  teamMembers.map((member) => (
+                    <tr key={member.id} className="border-b">
+                      <td className="px-2 py-2">{member.name || "-"}</td>
+                      <td className="px-2 py-2">{member.email || "-"}</td>
+                      <td className="px-2 py-2 font-mono text-xs">
+                        {member.clerkId}
+                      </td>
+                      <td className="px-2 py-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            member.isActive
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-slate-50 text-slate-700"
+                          }
+                        >
+                          {member.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </td>
+                      <td className="px-2 py-2 text-xs text-muted-foreground">
+                        {formatDate(member.createdAt)}
+                      </td>
+                      <td className="px-2 py-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={togglingMemberId === member.id}
+                          onClick={() =>
+                            void toggleTeamMemberStatus(
+                              member.id,
+                              !member.isActive,
+                            )
+                          }
+                        >
+                          {togglingMemberId === member.id ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : member.isActive ? (
+                            "Deactivate"
+                          ) : (
+                            "Activate"
+                          )}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       {saveError ? (
         <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
