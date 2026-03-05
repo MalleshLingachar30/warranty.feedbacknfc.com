@@ -70,6 +70,7 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
     { label: "Settings", href: "/dashboard/settings", icon: Settings },
   ],
   customer: [
+    { label: "Dashboard", href: "/dashboard/customer", icon: Gauge },
     { label: "My Products", href: "/dashboard/my-products", icon: Package },
     { label: "My Tickets", href: "/dashboard/my-tickets", icon: Ticket },
     { label: "Support", href: "/dashboard/support", icon: LifeBuoy },

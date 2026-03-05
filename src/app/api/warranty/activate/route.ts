@@ -119,6 +119,7 @@ export async function POST(request: Request) {
             },
             select: {
               id: true,
+              languagePreference: true,
             },
           })
         : null;
@@ -135,6 +136,7 @@ export async function POST(request: Request) {
         },
         select: {
           id: true,
+          languagePreference: true,
         },
       }));
 
@@ -182,6 +184,7 @@ export async function POST(request: Request) {
         productName: model?.name ?? "product",
         warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
         certificateUrl,
+        languagePreference: customerUser.languagePreference,
       });
     }
 

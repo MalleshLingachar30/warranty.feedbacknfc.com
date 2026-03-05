@@ -20,7 +20,7 @@
 8. Customer guide (NFC/QR tap flow)
 9. Analytics & KPIs (how it’s calculated)
 10. Manual QA flow (using test sticker `100`)
-11. GAP compliance update (GAP 1 + GAP 2)
+11. GAP compliance update (Batch 1 + Batch 2 + Batch 3)
 12. Troubleshooting
 
 ---
@@ -102,7 +102,8 @@ Your summary is correct with two important clarifications:
 
 ### Claim states (simplified)
 
-- `auto_generated` → created by system after customer confirmation
+- `auto_generated` → created by system after customer confirmation (internal service-center draft stage)
+- `submitted` → service center reviewed and submitted to manufacturer
 - `under_review` / `approved` / `rejected` → manufacturer decision
 - `paid` / `closed` → settlement bookkeeping
 
@@ -171,7 +172,7 @@ Key sections:
 - **Service Network** (`/dashboard/manufacturer/service-network`)  
   Authorize service centers and view their technician roster + performance metrics.
 - **Claims** (`/dashboard/manufacturer/claims`)  
-  Review auto-generated claims and approve/reject amounts.
+  Review submitted claims and approve/reject amounts.
 - **Analytics** (`/dashboard/manufacturer/analytics`)  
   Product performance + cost trends (derived from tickets/claims).
 - **Settings** (`/dashboard/manufacturer/settings`)
@@ -237,6 +238,31 @@ Steps:
 3. `Dashboard → Technicians → Add Technician`.
 4. Save.
 
+### Service-center claim review & submit (new flow)
+
+Claims now follow this path:
+
+- `auto_generated` (system-generated after customer confirmation)
+- Service-center **Review & Submit**
+- Manufacturer review (`approved` / `rejected`)
+
+Where to do it:
+
+1. Open `Dashboard → Claims`
+2. For `auto_generated` claims, click **Review & Submit**
+3. This opens `Dashboard → Claims → /dashboard/claims/{claimId}`
+4. Review/update:
+   - Review notes
+   - Labor hours
+   - Parts list (name, part number, unit cost, quantity)
+5. Click **Review & Submit to Manufacturer**
+
+After submission:
+
+- Claim status becomes `submitted`
+- Manufacturer receives notification
+- Claim PDF can be opened from service-center claims table (`PDF` action)
+
 ### Tickets (what you should monitor)
 
 In `Tickets`, watch:
@@ -271,6 +297,19 @@ Technicians work from the dashboard + sticker tap flow.
    - Upload before/after photos (optional)
 5. Ticket becomes **Pending Confirmation**
 
+### Sticker tap flow for technicians (`/nfc/{stickerNumber}`)
+
+When a technician scans the sticker while signed in:
+
+- `assigned` / `technician_enroute` → shows **Technician Work Start**
+- `work_in_progress` → shows **Technician Completion** form with:
+  - resolution notes
+  - labor hours
+  - before photos (camera upload)
+  - after photos (camera upload)
+  - parts used (from model parts catalog)
+- `pending_confirmation` and later → shows summary + customer confirmation guidance
+
 ### When customer confirmation is pending (what to do)
 
 If you see **Pending Confirmation**, the customer still needs to confirm.
@@ -291,17 +330,64 @@ Customers do not need to sign in to start:
 
 - Sticker route: `https://warranty.feedbacknfc.com/nfc/{stickerNumber}`
 
+### Customer dashboard (`/dashboard/customer`)
+
+Signed-in customers now have a dedicated dashboard:
+
+- **My Products** summary cards with:
+  - warranty status
+  - open-ticket snippet
+  - QR quick-open for each sticker
+  - warranty certificate download
+- **My Tickets** summary with open/closed counts + quick links
+- **Support** quick links
+- **Register Another Product** entry card
+
 ### Customer actions by state
 
 1. **Pending activation**
    - First scan/tap → fills activation info → warranty becomes active
 2. **Active + no open ticket**
    - Customer sees product details + can create a service request
+   - Customer can download **Warranty Certificate PDF**
 3. **Open ticket exists**
    - Customer sees tracker (status timeline + technician details)
 4. **Pending confirmation**
    - Customer sees **Confirm Resolution**
    - Confirming resolution triggers automatic claim generation
+
+### Customer language support (MVP: English + Hindi)
+
+On customer-facing sticker pages (`/nfc/{id}`):
+
+- Language toggle is available in the page header (`English` / `हिंदी`)
+- Language can be forced via URL query:
+  - `/nfc/100?lang=en`
+  - `/nfc/100?lang=hi`
+- If query is not set, language is selected from:
+  1. customer `language_preference` (if known)
+  2. browser `Accept-Language`
+  3. default English
+- Localized customer surfaces include:
+  - activation form
+  - product view
+  - ticket tracker
+  - resolution confirmation page
+
+### Warranty certificate PDF
+
+Certificate endpoint:
+
+- `GET /api/products/{productId}/certificate?download=1`
+
+Certificate includes:
+
+- product/model/serial details
+- manufacturer name/logo
+- customer name
+- warranty start/end dates
+- certificate reference number
+- QR that resolves to `/nfc/{stickerNumber}`
 
 ---
 
@@ -351,8 +437,10 @@ Use this sticker URL as a test card:
    - Confirm resolution
    - Verify claim is auto-generated
 6. **Claims**
-   - Service center: `Dashboard → Claims` shows new claim
-   - Manufacturer: `Dashboard → Claims` can approve/reject
+   - Service center: `Dashboard → Claims` shows new `auto_generated` claim
+   - Service center: open **Review & Submit**, finalize notes/parts/labor, submit
+   - Manufacturer: `Dashboard → Claims` sees `submitted` claims and can approve/reject
+   - Verify claim PDF downloads from both service-center/manufacturer views
 7. **Notification checks (GAP 2)**
    - Verify customer receives SMS on activation
    - Verify technician receives SMS on ticket assignment
@@ -361,7 +449,19 @@ Use this sticker URL as a test card:
    - Verify completed SMS contains direct link to `/nfc/100`
    - Verify technician receives SMS when customer confirms
    - Verify manufacturer gets email when claim is created
+8. **Warranty certificate checks**
+   - After activation, verify **Download Warranty Certificate** button is visible
+   - Open certificate PDF and verify product/customer/warranty fields + QR
    - Verify service center gets email+SMS on claim approve/reject
+9. **Customer dashboard checks (GAP 4)**
+   - Sign in as customer and open `/dashboard/customer`
+   - Verify products list, ticket summary, support links, and register-product card
+   - Verify product card QR opens the same sticker route
+10. **Language checks (GAP 6 MVP)**
+   - Open `/nfc/100?lang=hi` and verify Hindi labels on customer pages
+   - Switch back to English using header toggle
+   - Set customer language preference to Hindi in customer settings
+   - Trigger customer SMS events (activation / enroute / started / completed) and verify Hindi template
 
 If you’re using the E2E seeding script locally, you may see output like:
 
@@ -369,56 +469,134 @@ If you’re using the E2E seeding script locally, you may see output like:
 
 ---
 
-## 11) GAP compliance update (GAP 1 + GAP 2)
+## 11) GAP compliance update (Batch 1 + Batch 2 + Batch 3)
 
-### GAP 1: Bulk allocation serial binding
+### Batch 1 (already implemented)
+
+#### GAP 1: Bulk allocation serial binding
 
 Status: **Implemented**
 
-Implemented components:
+- Wizard flow + mapping preview: `/dashboard/manufacturer/stickers`
+- Backend binding: `POST /api/manufacturer/allocate`
+- Persists serial range fields in `sticker_allocations`
 
-- UI wizard flow and preview: `/dashboard/manufacturer/stickers`
-- API binding logic: `POST /api/manufacturer/allocate`
-- Persistence fields: `sticker_allocations.appliance_serial_prefix`, `sticker_allocations.appliance_serial_start`, `sticker_allocations.appliance_serial_end`
+#### GAP 2: Notifications (SMS + Email + trigger layer)
 
-Result:
+Status: **Implemented (core flow)**
 
-- Manufacturer can bulk-bind sticker ranges to serial ranges in one operation.
-- Serial mapping is sequential and deterministic.
+- Transport layer: `src/lib/notifications.ts`
+- Trigger layer: `src/lib/notification-triggers.ts`
+- Wrapper: `src/lib/warranty-notifications.ts`
 
-### GAP 2: Notification system (SMS + Email + trigger layer)
+### Batch 2 (implemented in current release)
 
-Status: **Implemented for core flow**
+#### GAP 3: AI assignment scoring improvements
 
-Notification transport layer:
+Status: **Implemented (MVP scope)**
 
-- `src/lib/notifications.ts`
-  - `sendSMS(phone, message)` via Twilio
-  - `sendEmail(to, subject, body)` via Resend
-  - `sendWhatsApp(phone, message)` via Twilio WhatsApp (optional)
+- Enforces skill matching before assignment
+- Keeps availability/capacity filtering
+- Uses workload-first fallback sorting when customer pincode is unavailable
+- Notifies service center for manual assignment when no match
 
-Event trigger layer:
+#### GAP 12: Report issue form completeness
 
-- `src/lib/notification-triggers.ts`
-  - Event-template mapping for warranty, ticket, claim, SLA, and expiry reminders
+Status: **Implemented**
 
-Compatibility wrapper (existing imports retained):
+Customer `/nfc/{id}` report form includes:
 
-- `src/lib/warranty-notifications.ts`
+- issue category (from model common issues)
+- issue description
+- severity selector
+- photo upload (`accept="image/*" capture="environment"`)
+- customer phone (prefilled when known)
+- fallback category (`General issue`) if model has no configured issues
+
+#### GAP 5: Warranty certificate PDF
+
+Status: **Implemented**
+
+- API: `GET /api/products/{id}/certificate`
+- UI buttons:
+  - activation success view
+  - active customer product view
+- Activation notification now includes certificate link when available
+
+#### GAP 8: Claim documentation completeness + claim PDF
+
+Status: **Implemented (MVP scope)**
+
+On customer confirmation, claim auto-generation now captures:
+
+- product details, customer details, issue metadata
+- technician details and resolution notes
+- before/after/issue photos
+- parts (detailed lines), labor, computed totals
+- timeline events + workflow timestamps
+- location object when present
+
+Claim report PDF:
+
+- API: `GET /api/claim/{id}/report`
+- Link surfaced in service-center and manufacturer claim views
+
+#### GAP 10: Service-center review-and-submit step
+
+Status: **Implemented**
+
+- Service-center claims table now has **Review & Submit** for `auto_generated`
+- Review page: `/dashboard/claims/{claimId}`
+- Submit API: `POST /api/claim/{id}/submit`
+- Manufacturer queue now targets submitted+ claims (not raw auto-generated drafts)
+
+#### GAP 11: Technician sticker tap experience
+
+Status: **Implemented (MVP scope)**
+
+Technician branch on `/nfc/{id}` now supports:
+
+- start flow for `assigned` / `technician_enroute`
+- completion flow for `work_in_progress` with notes, photos, parts, labor
+- summary + customer confirmation guidance for later stages
+- read-only asset view when technician is not assigned
+
+### Batch 3 (implemented in current release)
+
+#### GAP 4: Customer portal dashboard
+
+Status: **Implemented**
+
+- Route: `/dashboard/customer`
+- Includes:
+  - My Products summary
+  - My Tickets summary
+  - Support quick links
+  - Register Another Product card
+- Customer role navigation now links directly to `/dashboard/customer`
+
+#### GAP 6: Multi-language support (MVP scope)
+
+Status: **Implemented (MVP scope)**
+
+- Customer-facing sticker pages now support English + Hindi
+- Added header language toggle on `/nfc/{id}`
+- Added language detection via query + user preference + browser header
+- Customer SMS templates now respect `users.language_preference` (`hi` → Hindi, fallback English)
 
 ### Notification events currently wired
 
-- Warranty activated → customer SMS
+- Warranty activated → customer SMS (+ certificate link when available, language-aware)
 - Ticket created → technician SMS + service center email
-- Technician en route → customer SMS (includes ETA)
-- Work started → customer SMS
-- Work completed → customer SMS with direct confirmation link (`/nfc/[stickerNumber]`)
+- Technician en route → customer SMS (includes ETA, language-aware)
+- Work started → customer SMS (language-aware)
+- Work completed → customer SMS with direct confirmation link (`/nfc/[stickerNumber]`, language-aware)
 - Customer confirmed → technician SMS
-- Claim submitted (auto-generated) → manufacturer email
+- Claim submitted → manufacturer email
 - Claim approved → service center email + SMS
 - Claim rejected → service center email + SMS
 - SLA breach → service center + manufacturer email
-- Warranty expiring reminder (30-day window) → customer SMS (daily sweep)
+- Warranty expiring reminder (30-day window) → customer SMS (daily sweep, language-aware)
 
 ### Cron routes and schedules (current production configuration)
 
@@ -505,6 +683,7 @@ If you want a “complete” manual PDF/handbook, capture and add screenshots fo
   - `/dashboard/tickets` (service queue)
   - `/dashboard/technicians` (with “Add Technician” dialog open)
   - `/dashboard/claims`
+  - `/dashboard/claims/{claimId}` (review & submit form)
 - Technician
   - `/dashboard/my-jobs` (assigned tab + job detail sheet)
   - `/dashboard/schedule`
@@ -513,7 +692,9 @@ If you want a “complete” manual PDF/handbook, capture and add screenshots fo
 - Customer
   - `/nfc/100` pending activation (activation form)
   - `/nfc/100` active product view (no open ticket)
+  - `/nfc/100` active product view with certificate button
   - `/nfc/100` ticket tracker (open ticket)
   - `/nfc/100` confirm resolution screen
+  - Certificate PDF opened from `/api/products/{id}/certificate`
 
 Tip: keep screenshots to ~1200–1600px width and crop out browser bookmarks for a cleaner manual.

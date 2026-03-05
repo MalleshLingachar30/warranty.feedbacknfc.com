@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { CalendarDays, CheckCircle2, Loader2, Shield } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,13 @@ import { Input } from "@/components/ui/input";
 import { NfcPublicShell } from "@/components/nfc/public-shell";
 import type { ProductView } from "@/components/nfc/types";
 import { formatDate, toDate } from "@/components/nfc/types";
+import type { NfcLanguage } from "@/lib/nfc-i18n";
+import { getNfcCopy } from "@/lib/nfc-i18n";
 
 interface WarrantyActivationProps {
   product: ProductView;
+  language: NfcLanguage;
+  languageToggle?: ReactNode;
 }
 
 interface ActivationFormState {
@@ -28,16 +32,28 @@ interface ActivationSuccess {
   certificateUrl: string | null;
 }
 
-function monthLabel(months: number): string {
+function monthLabel(months: number, language: NfcLanguage, suffix: string) {
   if (months % 12 === 0) {
     const years = months / 12;
-    return `${years} Year${years > 1 ? "s" : ""} Manufacturer Warranty`;
+    if (language === "hi") {
+      return `${years} वर्ष ${suffix}`;
+    }
+    return `${years} Year${years > 1 ? "s" : ""} ${suffix}`;
   }
 
-  return `${months} Month Manufacturer Warranty`;
+  if (language === "hi") {
+    return `${months} माह ${suffix}`;
+  }
+
+  return `${months} Month ${suffix}`;
 }
 
-export function WarrantyActivation({ product }: WarrantyActivationProps) {
+export function WarrantyActivation({
+  product,
+  language,
+  languageToggle,
+}: WarrantyActivationProps) {
+  const copy = getNfcCopy(language);
   const defaultInstallationDate = useMemo(() => {
     const existingDate = toDate(product.installationDate);
     if (existingDate) {
@@ -60,7 +76,11 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<ActivationSuccess | null>(null);
 
-  const warrantyDuration = monthLabel(product.model?.warrantyDurationMonths ?? 12);
+  const warrantyDuration = monthLabel(
+    product.model?.warrantyDurationMonths ?? 12,
+    language,
+    copy.warrantyActivation.warrantyDurationSuffix,
+  );
 
   const onFieldChange = (field: keyof ActivationFormState, value: string) => {
     setFormState((prev) => ({ ...prev, [field]: value }));
@@ -96,7 +116,12 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
       };
 
       if (!response.ok || !payload.warrantyEndDate) {
-        setError(payload.error ?? "Unable to activate warranty. Please try again.");
+        setError(
+          payload.error ??
+            (language === "hi"
+              ? "वारंटी सक्रिय नहीं हो सकी। कृपया दोबारा प्रयास करें।"
+              : "Unable to activate warranty. Please try again."),
+        );
         return;
       }
 
@@ -105,7 +130,7 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
         certificateUrl: payload.certificateUrl ?? null,
       });
     } catch {
-      setError("Network error while activating warranty. Please try again.");
+      setError(copy.warrantyActivation.networkError);
     } finally {
       setIsSubmitting(false);
     }
@@ -114,21 +139,23 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
   if (success) {
     return (
       <NfcPublicShell
-        title="Warranty Activated"
-        description={`Warranty Activated! Valid until ${formatDate(success.warrantyEndDate)}.`}
-        footer="You can scan this sticker anytime to raise a service request and track progress."
+        title={copy.warrantyActivation.activatedTitle}
+        description={`${copy.warrantyActivation.activatedDescription} ${formatDate(success.warrantyEndDate)}.`}
+        footer={copy.warrantyActivation.activatedFooter}
+        subtitle={copy.shellSubtitle}
+        headerActions={languageToggle}
       >
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 animate-pulse items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
             <CheckCircle2 className="h-8 w-8" />
           </div>
           <p className="text-sm text-emerald-900">
-            Warranty activation completed successfully.
+            {copy.warrantyActivation.activatedSuccess}
           </p>
           {success.certificateUrl ? (
             <a href={success.certificateUrl} target="_blank" rel="noreferrer">
               <Button className="mt-4" variant="outline">
-                Download Warranty Certificate
+                {copy.warrantyActivation.downloadCertificate}
               </Button>
             </a>
           ) : null}
@@ -139,9 +166,11 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
 
   return (
     <NfcPublicShell
-      title="Activate Product Warranty"
-      description="Complete this one-time form to activate your warranty and unlock service support."
-      footer="OTP verification is currently stubbed for MVP testing."
+      title={copy.warrantyActivation.title}
+      description={copy.warrantyActivation.description}
+      footer={copy.warrantyActivation.footer}
+      subtitle={copy.shellSubtitle}
+      headerActions={languageToggle}
     >
       <Card className="border-slate-200">
         <CardContent className="space-y-4 p-4">
@@ -154,15 +183,26 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
             />
           ) : (
             <div className="flex h-36 w-full items-center justify-center rounded-lg bg-slate-100 text-sm text-slate-500">
-              Product Image
+              {copy.warrantyActivation.productImage}
             </div>
           )}
 
           <div className="grid grid-cols-1 gap-2 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">{product.model?.name ?? "Product"}</p>
-            <p>Model: {product.model?.modelNumber ?? "Not available"}</p>
-            <p>Manufacturer: {product.organizationName ?? "Not available"}</p>
-            <p>Serial Number: {product.serialNumber ?? "Not available"}</p>
+            <p className="font-semibold text-slate-900">
+              {product.model?.name ?? copy.customerProductView.productLabel}
+            </p>
+            <p>
+              {copy.warrantyActivation.modelLabel}:{" "}
+              {product.model?.modelNumber ?? (language === "hi" ? "उपलब्ध नहीं" : "Not available")}
+            </p>
+            <p>
+              {copy.warrantyActivation.manufacturerLabel}:{" "}
+              {product.organizationName ?? (language === "hi" ? "उपलब्ध नहीं" : "Not available")}
+            </p>
+            <p>
+              {copy.warrantyActivation.serialLabel}:{" "}
+              {product.serialNumber ?? (language === "hi" ? "उपलब्ध नहीं" : "Not available")}
+            </p>
             <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900">
               <Shield className="h-4 w-4" />
               <p>{warrantyDuration}</p>
@@ -174,40 +214,42 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
       <form className="space-y-4" onSubmit={onSubmit}>
         <div className="space-y-2">
           <label htmlFor="customerName" className="text-sm font-medium text-slate-700">
-            Customer Name <span className="text-rose-600">*</span>
+            {copy.warrantyActivation.customerName}{" "}
+            <span className="text-rose-600">{copy.warrantyActivation.requiredIndicator}</span>
           </label>
           <Input
             id="customerName"
             required
             value={formState.customerName}
             onChange={(event) => onFieldChange("customerName", event.target.value)}
-            placeholder="Enter your full name"
+            placeholder={copy.warrantyActivation.customerName}
           />
         </div>
 
         <div className="space-y-2">
           <label htmlFor="customerPhone" className="text-sm font-medium text-slate-700">
-            Phone Number <span className="text-rose-600">*</span>
+            {copy.warrantyActivation.phoneNumber}{" "}
+            <span className="text-rose-600">{copy.warrantyActivation.requiredIndicator}</span>
           </label>
           <Input
             id="customerPhone"
             required
             value={formState.customerPhone}
             onChange={(event) => onFieldChange("customerPhone", event.target.value)}
-            placeholder="Enter mobile number"
+            placeholder={copy.warrantyActivation.phoneNumber}
             inputMode="tel"
           />
           <Input
             value={formState.otpCode}
             onChange={(event) => onFieldChange("otpCode", event.target.value)}
-            placeholder="Enter OTP (stubbed for now)"
+            placeholder={copy.warrantyActivation.otpPlaceholder}
             inputMode="numeric"
           />
         </div>
 
         <div className="space-y-2">
           <label htmlFor="customerEmail" className="text-sm font-medium text-slate-700">
-            Email (Optional)
+            {copy.warrantyActivation.emailOptional}
           </label>
           <Input
             id="customerEmail"
@@ -220,20 +262,20 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
 
         <div className="space-y-2">
           <label htmlFor="customerAddress" className="text-sm font-medium text-slate-700">
-            Address (Optional)
+            {copy.warrantyActivation.addressOptional}
           </label>
           <textarea
             id="customerAddress"
             value={formState.customerAddress}
             onChange={(event) => onFieldChange("customerAddress", event.target.value)}
-            placeholder="Installation address"
+            placeholder={copy.warrantyActivation.addressOptional}
             className="min-h-24 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none ring-offset-white focus-visible:ring-2 focus-visible:ring-blue-500"
           />
         </div>
 
         <div className="space-y-2">
           <label htmlFor="installationDate" className="text-sm font-medium text-slate-700">
-            Installation Date
+            {copy.warrantyActivation.installationDate}
           </label>
           <div className="relative">
             <CalendarDays className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
@@ -241,9 +283,7 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
               id="installationDate"
               type="date"
               value={formState.installationDate}
-              onChange={(event) =>
-                onFieldChange("installationDate", event.target.value)
-              }
+              onChange={(event) => onFieldChange("installationDate", event.target.value)}
               className="pl-9"
             />
           </div>
@@ -257,7 +297,9 @@ export function WarrantyActivation({ product }: WarrantyActivationProps) {
 
         <Button type="submit" className="h-11 w-full" disabled={isSubmitting}>
           {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Activate Warranty
+          {isSubmitting
+            ? copy.warrantyActivation.activatingButton
+            : copy.warrantyActivation.activateButton}
         </Button>
       </form>
     </NfcPublicShell>

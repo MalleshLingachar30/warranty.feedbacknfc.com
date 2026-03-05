@@ -73,6 +73,11 @@ async function handleSweep(request: Request) {
         customerPhone: true,
         warrantyEndDate: true,
         metadata: true,
+        customer: {
+          select: {
+            languagePreference: true,
+          },
+        },
         productModel: {
           select: {
             name: true,
@@ -105,6 +110,7 @@ async function handleSweep(request: Request) {
         customerPhone: product.customerPhone,
         productName: product.productModel.name,
         warrantyEndDateLabel: formatWarrantyEndDate(product.warrantyEndDate),
+        languagePreference: product.customer?.languagePreference,
       });
 
       await db.product.update({

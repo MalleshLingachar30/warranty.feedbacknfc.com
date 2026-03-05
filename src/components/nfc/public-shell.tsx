@@ -8,6 +8,8 @@ interface NfcPublicShellProps {
   description: string;
   children?: ReactNode;
   footer?: ReactNode;
+  subtitle?: string;
+  headerActions?: ReactNode;
 }
 
 export function NfcPublicShell({
@@ -15,21 +17,26 @@ export function NfcPublicShell({
   description,
   children,
   footer,
+  subtitle = "Warranty Smart Sticker",
+  headerActions,
 }: NfcPublicShellProps) {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50 px-4 py-6 sm:px-6">
       <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
         <header className="rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-4 shadow-sm backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-              <ShieldCheck className="h-5 w-5" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700">
+                  FeedbackNFC
+                </p>
+                <p className="text-sm text-slate-600">{subtitle}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-700">
-                FeedbackNFC
-              </p>
-              <p className="text-sm text-slate-600">Warranty Smart Sticker</p>
-            </div>
+            {headerActions ? <div>{headerActions}</div> : null}
           </div>
         </header>
 

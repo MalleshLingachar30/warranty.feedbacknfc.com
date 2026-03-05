@@ -3,6 +3,20 @@ import "server-only";
 import { sendEmail, sendSMS, sendWhatsApp } from "@/lib/notifications";
 import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 
+type NotificationLanguage = "en" | "hi";
+
+function normalizeNotificationLanguage(
+  preference: string | null | undefined,
+): NotificationLanguage {
+  const normalized = preference?.trim().toLowerCase();
+
+  if (normalized?.startsWith("hi")) {
+    return "hi";
+  }
+
+  return "en";
+}
+
 function inr(amount: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -16,15 +30,24 @@ export async function onWarrantyActivated(input: {
   productName: string;
   warrantyEndDateLabel: string;
   certificateUrl?: string | null;
+  languagePreference?: string | null;
 }): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
   const certificateSuffix =
     input.certificateUrl && input.certificateUrl.trim().length > 0
-      ? ` Certificate: ${input.certificateUrl}.`
+      ? language === "hi"
+        ? ` प्रमाणपत्र: ${input.certificateUrl}.`
+        : ` Certificate: ${input.certificateUrl}.`
       : "";
+
+  const message =
+    language === "hi"
+      ? `आपके ${input.productName} की वारंटी ${input.warrantyEndDateLabel} तक सक्रिय है। सेवा के लिए कभी भी QR स्कैन करें।${certificateSuffix}`
+      : `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. Scan QR anytime for service.${certificateSuffix}`;
 
   await sendSMS({
     to: input.customerPhone,
-    message: `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. Scan QR anytime for service.${certificateSuffix}`,
+    message,
   });
 }
 
@@ -68,10 +91,15 @@ export async function onTechnicianEnRoute(input: {
   technicianPhone: string;
   ticketNumber: string;
   etaLabel: string;
+  languagePreference?: string | null;
 }): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
   await sendSMS({
     to: input.customerPhone,
-    message: `${input.technicianName} is on the way. ETA: ${input.etaLabel}. Call: ${input.technicianPhone}. Ticket: ${input.ticketNumber}.`,
+    message:
+      language === "hi"
+        ? `${input.technicianName} रास्ते में हैं। ETA: ${input.etaLabel}. कॉल करें: ${input.technicianPhone}. टिकट: ${input.ticketNumber}.`
+        : `${input.technicianName} is on the way. ETA: ${input.etaLabel}. Call: ${input.technicianPhone}. Ticket: ${input.ticketNumber}.`,
   });
 }
 
@@ -79,11 +107,20 @@ export async function onWorkStarted(input: {
   customerPhone: string;
   ticketNumber: string;
   productName?: string;
+  languagePreference?: string | null;
 }): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
   const productLabel = input.productName ? ` on your ${input.productName}` : "";
+  const message =
+    language === "hi"
+      ? input.productName
+        ? `आपके ${input.productName} पर सेवा शुरू हो गई है। टिकट: ${input.ticketNumber}.`
+        : `सेवा कार्य शुरू हो गया है। टिकट: ${input.ticketNumber}.`
+      : `Service has begun${productLabel}. Ticket: ${input.ticketNumber}.`;
+
   await sendSMS({
     to: input.customerPhone,
-    message: `Service has begun${productLabel}. Ticket: ${input.ticketNumber}.`,
+    message,
   });
 }
 
@@ -91,11 +128,16 @@ export async function onWorkCompleted(input: {
   customerPhone: string;
   ticketNumber: string;
   stickerNumber: number;
+  languagePreference?: string | null;
 }): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
   const link = `${getWarrantyAppBaseUrl()}/nfc/${input.stickerNumber}`;
   await sendSMS({
     to: input.customerPhone,
-    message: `Service complete! Confirm resolution: ${link} (Ticket: ${input.ticketNumber})`,
+    message:
+      language === "hi"
+        ? `सेवा पूरी हो गई! पुष्टि के लिए यहाँ क्लिक करें: ${link} (टिकट: ${input.ticketNumber})`
+        : `Service complete! Confirm resolution: ${link} (Ticket: ${input.ticketNumber})`,
   });
 }
 
@@ -201,10 +243,15 @@ export async function onWarrantyExpiring30Days(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  languagePreference?: string | null;
 }): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
   await sendSMS({
     to: input.customerPhone,
-    message: `Your ${input.productName} warranty expires in 30 days (${input.warrantyEndDateLabel}).`,
+    message:
+      language === "hi"
+        ? `आपके ${input.productName} की वारंटी 30 दिनों में समाप्त होगी (${input.warrantyEndDateLabel}).`
+        : `Your ${input.productName} warranty expires in 30 days (${input.warrantyEndDateLabel}).`,
   });
 }
 
@@ -212,9 +259,14 @@ export async function onWarrantyExpiring30DaysWhatsApp(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  languagePreference?: string | null;
 }): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
   await sendWhatsApp({
     to: input.customerPhone,
-    message: `Your ${input.productName} warranty expires in 30 days (${input.warrantyEndDateLabel}).`,
+    message:
+      language === "hi"
+        ? `आपके ${input.productName} की वारंटी 30 दिनों में समाप्त होगी (${input.warrantyEndDateLabel}).`
+        : `Your ${input.productName} warranty expires in 30 days (${input.warrantyEndDateLabel}).`,
   });
 }

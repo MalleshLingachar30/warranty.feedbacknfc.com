@@ -48,6 +48,7 @@ export async function sendCustomerEnRouteNotification(input: {
   technicianPhone: string;
   ticketNumber: string;
   etaLabel?: string;
+  languagePreference?: string | null;
 }) {
   await onTechnicianEnRoute({
     customerPhone: input.customerPhone,
@@ -55,6 +56,7 @@ export async function sendCustomerEnRouteNotification(input: {
     technicianPhone: input.technicianPhone,
     ticketNumber: input.ticketNumber,
     etaLabel: input.etaLabel ?? "45 mins",
+    languagePreference: input.languagePreference,
   });
 }
 
@@ -63,11 +65,13 @@ export async function sendCustomerWorkStartedNotification(input: {
   customerName: string;
   ticketNumber: string;
   productName?: string;
+  languagePreference?: string | null;
 }) {
   await onWorkStarted({
     customerPhone: input.customerPhone,
     ticketNumber: input.ticketNumber,
     productName: input.productName,
+    languagePreference: input.languagePreference,
   });
 }
 
@@ -76,11 +80,13 @@ export async function sendCustomerCompletionPrompt(input: {
   customerName: string;
   ticketNumber: string;
   stickerNumber: number;
+  languagePreference?: string | null;
 }) {
   await onWorkCompleted({
     customerPhone: input.customerPhone,
     ticketNumber: input.ticketNumber,
     stickerNumber: input.stickerNumber,
+    languagePreference: input.languagePreference,
   });
 }
 
@@ -99,6 +105,7 @@ export async function sendWarrantyActivatedNotification(input: {
   productName: string;
   warrantyEndDateLabel: string;
   certificateUrl?: string | null;
+  languagePreference?: string | null;
 }) {
   await onWarrantyActivated(input);
 }
@@ -107,6 +114,7 @@ export async function sendWarrantyExpiryReminderNotification(input: {
   customerPhone: string;
   productName: string;
   warrantyEndDateLabel: string;
+  languagePreference?: string | null;
 }) {
   await onWarrantyExpiring30Days(input);
 }

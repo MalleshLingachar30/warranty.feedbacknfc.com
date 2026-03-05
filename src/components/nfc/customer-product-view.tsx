@@ -1,13 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertCircle, Camera, Clock3, MapPin, Phone, ShieldCheck } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Camera,
+  Clock3,
+  MapPin,
+  Phone,
+  ShieldCheck,
+} from "lucide-react";
 
 import { NfcPublicShell } from "@/components/nfc/public-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type { NfcLanguage } from "@/lib/nfc-i18n";
+import {
+  getNfcCopy,
+  translateSeverityLabel,
+  translateTicketStatus,
+} from "@/lib/nfc-i18n";
 import type {
   ServiceHistoryItem,
   WarrantyProduct,
@@ -23,53 +36,42 @@ interface CustomerProductViewProps {
   openTicket: WarrantyTicket | null;
   serviceHistory: ServiceHistoryItem[];
   certificateUrl: string | null;
+  language: NfcLanguage;
+  languageToggle?: ReactNode;
 }
 
-const severityOptions: Array<{
+const severityOptionsBase: Array<{
   value: WarrantyTicketSeverity;
-  label: string;
   indicatorClass: string;
 }> = [
-  { value: "low", label: "Low", indicatorClass: "bg-emerald-500" },
-  { value: "medium", label: "Medium", indicatorClass: "bg-amber-500" },
-  { value: "high", label: "High", indicatorClass: "bg-orange-500" },
-  { value: "critical", label: "Critical", indicatorClass: "bg-red-500" },
+  { value: "low", indicatorClass: "bg-emerald-500" },
+  { value: "medium", indicatorClass: "bg-amber-500" },
+  { value: "high", indicatorClass: "bg-orange-500" },
+  { value: "critical", indicatorClass: "bg-red-500" },
 ];
 
-function formatDate(dateValue: string) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(dateValue));
-}
-
-function formatDurationFromNow(dateValue: string) {
+function formatDurationFromNow(dateValue: string, language: NfcLanguage) {
   const now = Date.now();
   const then = new Date(dateValue).getTime();
   const diffInMs = Math.max(0, now - then);
   const hours = Math.floor(diffInMs / (1000 * 60 * 60));
 
   if (hours < 1) {
-    return "just now";
+    return language === "hi" ? "अभी" : "just now";
   }
 
   if (hours < 24) {
-    return `${hours}h ago`;
+    return language === "hi" ? `${hours} घंटे पहले` : `${hours}h ago`;
   }
 
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return language === "hi" ? `${days} दिन पहले` : `${days}d ago`;
 }
 
 function daysUntil(dateValue: string) {
   const end = new Date(dateValue).getTime();
   const now = Date.now();
   return Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
-}
-
-function ticketStatusLabel(status: string) {
-  return status.replace(/_/g, " ");
 }
 
 function fileToDataUrl(file: File) {
@@ -82,7 +84,8 @@ function fileToDataUrl(file: File) {
         reject(new Error("Failed to read photo"));
       }
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read photo"));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Failed to read photo"));
     reader.readAsDataURL(file);
   });
 }
@@ -94,33 +97,63 @@ export function CustomerProductView({
   openTicket,
   serviceHistory,
   certificateUrl,
+  language,
+  languageToggle,
 }: CustomerProductViewProps) {
+  const copy = getNfcCopy(language);
+  const unavailable = language === "hi" ? "उपलब्ध नहीं" : "Not available";
+
   const issueCategories = useMemo(() => {
     if (productModel.commonIssues.length > 0) {
       return productModel.commonIssues;
     }
 
-    return ["General issue"];
-  }, [productModel.commonIssues]);
+    return [copy.customerProductView.generalIssue];
+  }, [copy.customerProductView.generalIssue, productModel.commonIssues]);
+
+  const severityOptions = useMemo(
+    () =>
+      severityOptionsBase.map((option) => ({
+        ...option,
+        label: translateSeverityLabel(option.value, language),
+      })),
+    [language],
+  );
 
   const [showReportForm, setShowReportForm] = useState(false);
-  const [issueCategory, setIssueCategory] = useState(issueCategories[0] ?? "General issue");
+  const [issueCategory, setIssueCategory] = useState(
+    issueCategories[0] ?? copy.customerProductView.generalIssue,
+  );
   const [issueDescription, setIssueDescription] = useState("");
   const [severity, setSeverity] = useState<WarrantyTicketSeverity>("medium");
   const [phoneNumber, setPhoneNumber] = useState(product.customerPhone ?? "");
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(null);
+  const [submitSuccessMessage, setSubmitSuccessMessage] = useState<string | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const warrantyDaysRemaining = useMemo(() => daysUntil(product.warrantyEndDate), [product.warrantyEndDate]);
+  const warrantyDaysRemaining = useMemo(
+    () => daysUntil(product.warrantyEndDate),
+    [product.warrantyEndDate],
+  );
   const canReportIssue = product.warrantyStatus === "active" && !openTicket;
+  const formatDateByLanguage = (dateValue: string) =>
+    new Intl.DateTimeFormat(language === "hi" ? "hi-IN" : "en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(dateValue));
+
+  const managedByLabel =
+    language === "hi" ? "वारंटी प्रबंधन" : "Warranty managed by";
 
   const handlePhotoSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
 
     if (files.length > 5) {
-      setSubmitError("You can upload up to 5 photos.");
+      setSubmitError(copy.customerProductView.uploadLimitError);
       setPhotoFiles(files.slice(0, 5));
       return;
     }
@@ -141,24 +174,26 @@ export function CustomerProductView({
     setSubmitSuccessMessage(null);
 
     if (!issueCategory) {
-      setSubmitError("Select an issue category.");
+      setSubmitError(copy.customerProductView.selectIssueCategoryError);
       return;
     }
 
     if (issueDescription.trim().length < 10) {
-      setSubmitError("Describe the issue with at least 10 characters.");
+      setSubmitError(copy.customerProductView.issueDescriptionError);
       return;
     }
 
     if (phoneNumber.trim().length < 8) {
-      setSubmitError("Enter a valid phone number.");
+      setSubmitError(copy.customerProductView.phoneValidationError);
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const photoPayload = await Promise.all(photoFiles.map((file) => fileToDataUrl(file)));
+      const photoPayload = await Promise.all(
+        photoFiles.map((file) => fileToDataUrl(file)),
+      );
 
       const response = await fetch("/api/ticket/create", {
         method: "POST",
@@ -184,13 +219,18 @@ export function CustomerProductView({
       }
 
       setSubmitSuccessMessage(
-        payload.message ??
-          "Service request submitted! Ticket #WRT-2026-XXXXXX. A technician will be assigned shortly."
+        payload.message ?? copy.customerProductView.reportSuccessFallback,
       );
       resetForm();
       setShowReportForm(false);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to submit service request.");
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : language === "hi"
+            ? "सर्विस अनुरोध भेजा नहीं जा सका।"
+            : "Unable to submit service request.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -199,22 +239,29 @@ export function CustomerProductView({
   return (
     <NfcPublicShell
       title={productModel.name}
-      description={`Model ${productModel.modelNumber} • Serial ${product.serialNumber}`}
-      footer={`Sticker #${stickerNumber} • Warranty managed by ${product.organizationName}`}
+      description={`${copy.customerProductView.modelLabel} ${productModel.modelNumber ?? unavailable} • ${copy.customerProductView.serialLabel} ${product.serialNumber ?? unavailable}`}
+      footer={`Sticker #${stickerNumber} • ${managedByLabel} ${product.organizationName}`}
+      subtitle={copy.shellSubtitle}
+      headerActions={languageToggle}
     >
       <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Warranty Status</p>
-            <p className="text-xs text-slate-600">Valid until {formatDate(product.warrantyEndDate)}</p>
+            <p className="text-sm font-semibold text-slate-900">
+              {copy.customerProductView.warrantyStatus}
+            </p>
+            <p className="text-xs text-slate-600">
+              {copy.customerProductView.validUntil}{" "}
+              {formatDateByLanguage(product.warrantyEndDate)}
+            </p>
           </div>
           <Badge className="bg-emerald-600 text-white">
             <ShieldCheck className="h-3.5 w-3.5" />
-            Active
+            {copy.customerProductView.activeBadge}
           </Badge>
         </div>
         <p className="text-sm text-slate-700">
-          {warrantyDaysRemaining} day{warrantyDaysRemaining === 1 ? "" : "s"} remaining
+          {warrantyDaysRemaining} {copy.customerProductView.daysRemaining}
         </p>
       </section>
 
@@ -222,7 +269,7 @@ export function CustomerProductView({
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <Button asChild variant="outline" className="h-11 w-full">
             <a href={certificateUrl} target="_blank" rel="noreferrer">
-              Download Warranty Certificate
+              {copy.customerProductView.downloadCertificate}
             </a>
           </Button>
         </section>
@@ -232,17 +279,22 @@ export function CustomerProductView({
         <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-amber-900">Open Service Request</p>
-              <p className="text-xs text-amber-800">Ticket #{openTicket.ticketNumber}</p>
+              <p className="text-sm font-semibold text-amber-900">
+                {copy.customerProductView.openServiceRequest}
+              </p>
+              <p className="text-xs text-amber-800">
+                {copy.customerProductView.ticketLabel} #{openTicket.ticketNumber}
+              </p>
             </div>
             <Badge variant="outline" className="border-amber-300 text-amber-800">
-              {ticketStatusLabel(openTicket.status)}
+              {translateTicketStatus(openTicket.status, language)}
             </Badge>
           </div>
           <p className="text-sm text-amber-900">{openTicket.issueDescription}</p>
           <div className="flex items-center gap-2 text-xs text-amber-800">
             <Clock3 className="h-3.5 w-3.5" />
-            Reported {formatDurationFromNow(openTicket.reportedAt)}
+            {copy.customerProductView.reported}{" "}
+            {formatDurationFromNow(openTicket.reportedAt, language)}
           </div>
         </section>
       ) : null}
@@ -255,15 +307,18 @@ export function CustomerProductView({
               className="h-12 w-full rounded-xl text-base"
               onClick={() => setShowReportForm(true)}
             >
-              Report Issue
+              {copy.customerProductView.reportIssue}
             </Button>
           ) : null}
 
           {showReportForm ? (
-            <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4 rounded-xl border border-slate-200 bg-white p-4"
+            >
               <div className="space-y-2">
                 <label htmlFor="issue-category" className="text-sm font-medium text-slate-800">
-                  Issue category
+                  {copy.customerProductView.issueCategory}
                 </label>
                 <select
                   id="issue-category"
@@ -281,21 +336,26 @@ export function CustomerProductView({
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="issue-description" className="text-sm font-medium text-slate-800">
-                  Issue description
+                <label
+                  htmlFor="issue-description"
+                  className="text-sm font-medium text-slate-800"
+                >
+                  {copy.customerProductView.issueDescription}
                 </label>
                 <Textarea
                   id="issue-description"
                   value={issueDescription}
                   onChange={(event) => setIssueDescription(event.target.value)}
-                  placeholder="Describe what is happening with the product"
+                  placeholder={copy.customerProductView.issueDescriptionPlaceholder}
                   className="min-h-24"
                   required
                 />
               </div>
 
               <fieldset className="space-y-2">
-                <legend className="text-sm font-medium text-slate-800">Issue severity</legend>
+                <legend className="text-sm font-medium text-slate-800">
+                  {copy.customerProductView.issueSeverity}
+                </legend>
                 <div className="grid grid-cols-2 gap-2">
                   {severityOptions.map((option) => {
                     const isSelected = severity === option.value;
@@ -311,7 +371,9 @@ export function CustomerProductView({
                         onClick={() => setSeverity(option.value)}
                       >
                         <span>{option.label}</span>
-                        <span className={`h-2.5 w-2.5 rounded-full ${option.indicatorClass}`} />
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full ${option.indicatorClass}`}
+                        />
                       </button>
                     );
                   })}
@@ -320,7 +382,7 @@ export function CustomerProductView({
 
               <div className="space-y-2">
                 <label htmlFor="photo-upload" className="text-sm font-medium text-slate-800">
-                  Upload photos (up to 5)
+                  {copy.customerProductView.uploadPhotos}
                 </label>
                 <Input
                   id="photo-upload"
@@ -344,14 +406,14 @@ export function CustomerProductView({
 
               <div className="space-y-2">
                 <label htmlFor="phone-number" className="text-sm font-medium text-slate-800">
-                  Phone number
+                  {copy.customerProductView.phoneNumber}
                 </label>
                 <Input
                   id="phone-number"
                   type="tel"
                   value={phoneNumber}
                   onChange={(event) => setPhoneNumber(event.target.value)}
-                  placeholder="Enter contact number"
+                  placeholder={copy.customerProductView.phonePlaceholder}
                   required
                 />
               </div>
@@ -370,10 +432,12 @@ export function CustomerProductView({
                   className="h-11 flex-1"
                   onClick={() => setShowReportForm(false)}
                 >
-                  Cancel
+                  {copy.customerProductView.cancel}
                 </Button>
                 <Button type="submit" className="h-11 flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? "Submitting..." : "Submit Request"}
+                  {isSubmitting
+                    ? copy.customerProductView.submitting
+                    : copy.customerProductView.submit}
                 </Button>
               </div>
             </form>
@@ -388,7 +452,9 @@ export function CustomerProductView({
       ) : null}
 
       <section className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Product Information</h2>
+        <h2 className="text-sm font-semibold text-slate-900">
+          {copy.customerProductView.productInformation}
+        </h2>
         <div className="space-y-1 text-sm text-slate-700">
           <p className="flex items-center gap-2">
             <Phone className="h-4 w-4 text-slate-500" />
@@ -402,9 +468,13 @@ export function CustomerProductView({
       </section>
 
       <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Service History</h2>
+        <h2 className="text-sm font-semibold text-slate-900">
+          {copy.customerProductView.serviceHistory}
+        </h2>
         {serviceHistory.length === 0 ? (
-          <p className="text-sm text-slate-600">No prior service activity found for this product.</p>
+          <p className="text-sm text-slate-600">
+            {copy.customerProductView.noServiceHistory}
+          </p>
         ) : (
           <ul className="space-y-2">
             {serviceHistory.map((entry) => (
@@ -412,11 +482,13 @@ export function CustomerProductView({
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium text-slate-900">{entry.issueCategory}</p>
                   <Badge variant="outline" className="capitalize">
-                    {ticketStatusLabel(entry.status)}
+                    {translateTicketStatus(entry.status, language)}
                   </Badge>
                 </div>
                 <p className="mt-1 text-xs text-slate-600">{entry.ticketNumber}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatDate(entry.reportedAt)}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {formatDateByLanguage(entry.reportedAt)}
+                </p>
               </li>
             ))}
           </ul>

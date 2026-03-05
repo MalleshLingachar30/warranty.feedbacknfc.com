@@ -57,6 +57,11 @@ export async function POST(
           select: {
             customerPhone: true,
             customerName: true,
+            customer: {
+              select: {
+                languagePreference: true,
+              },
+            },
           },
         },
       },
@@ -149,6 +154,7 @@ export async function POST(
         customerPhone: ticket.product.customerPhone,
         customerName: ticket.product.customerName ?? "Customer",
         ticketNumber: ticket.ticketNumber,
+        languagePreference: ticket.product.customer?.languagePreference,
       });
     }
 

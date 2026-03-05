@@ -80,6 +80,11 @@ export async function POST(
           select: {
             customerPhone: true,
             customerName: true,
+            customer: {
+              select: {
+                languagePreference: true,
+              },
+            },
           },
         },
       },
@@ -186,6 +191,7 @@ export async function POST(
         technicianPhone: technician.phone,
         ticketNumber: ticket.ticketNumber,
         etaLabel,
+        languagePreference: ticket.product.customer?.languagePreference,
       });
     }
 

@@ -1,6 +1,7 @@
 import { CustomerConfirmResolution } from "@/components/nfc/customer-confirm-resolution";
 import { CustomerProductView } from "@/components/nfc/customer-product-view";
 import { CustomerTicketTracker } from "@/components/nfc/customer-ticket-tracker";
+import { NfcLanguageToggle } from "@/components/nfc/language-toggle";
 import {
   ManagerAssetView,
   TechnicianAssetInfo,
@@ -15,8 +16,10 @@ import { UnregisteredSticker } from "@/components/nfc/unregistered-sticker";
 import { WarrantyActivation } from "@/components/nfc/warranty-activation";
 import { auth } from "@clerk/nextjs/server";
 import type { TicketStatus } from "@prisma/client";
+import { headers } from "next/headers";
 
 import { db } from "@/lib/db";
+import { detectNfcLanguage } from "@/lib/nfc-i18n";
 import {
   parseAppRole,
   parseAppRoleFromClaims,
@@ -35,6 +38,7 @@ import type {
 
 interface NfcStickerPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ lang?: string | string[] }>;
 }
 
 const OPEN_TICKET_STATUSES: TicketStatus[] = [
@@ -70,6 +74,21 @@ function asString(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function firstQueryValue(
+  value: string | string[] | null | undefined,
+): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const candidate = value.find((entry) => typeof entry === "string");
+    return candidate ?? null;
+  }
+
+  return null;
 }
 
 function readCertificateUrl(metadata: unknown): string | null {
@@ -462,8 +481,12 @@ function toServiceHistoryItems(
   }));
 }
 
-export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
+export default async function NfcStickerPage({
+  params,
+  searchParams,
+}: NfcStickerPageProps) {
   const { id } = await params;
+  const resolvedSearchParams = await searchParams;
   const stickerNumber = Number.parseInt(id, 10);
 
   if (!Number.isFinite(stickerNumber)) {
@@ -517,6 +540,11 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
       organization: {
         select: {
           name: true,
+        },
+      },
+      customer: {
+        select: {
+          languagePreference: true,
         },
       },
     },
@@ -579,9 +607,13 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
   const serviceHistory = toServiceHistoryItems(tickets);
 
   const { userId, sessionClaims } = await auth();
+  const requestHeaders = await headers();
+  const queryLanguage = firstQueryValue(resolvedSearchParams.lang);
 
   let role: AppRole | "anonymous_customer" = "anonymous_customer";
   let technicianProfileId: string | null = null;
+  let preferredCustomerLanguage: string | null =
+    product.customer?.languagePreference ?? null;
 
   if (userId) {
     const dbUser = await db.user.findUnique({
@@ -590,6 +622,7 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
       },
       select: {
         role: true,
+        languagePreference: true,
         technicianProfile: {
           select: {
             id: true,
@@ -606,8 +639,29 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
       role = claimsRole;
     }
 
+    if (role === "customer") {
+      preferredCustomerLanguage =
+        dbUser?.languagePreference ??
+        product.customer?.languagePreference ??
+        null;
+    }
+
     technicianProfileId = dbUser?.technicianProfile?.id ?? null;
   }
+
+  const nfcLanguage = detectNfcLanguage({
+    queryLang: queryLanguage,
+    preferredLanguage: preferredCustomerLanguage,
+    acceptLanguageHeader: requestHeaders.get("accept-language"),
+  });
+
+  const languageToggle = (
+    <NfcLanguageToggle
+      currentLanguage={nfcLanguage}
+      englishHref={`/nfc/${sticker.stickerNumber}?lang=en`}
+      hindiHref={`/nfc/${sticker.stickerNumber}?lang=hi`}
+    />
+  );
 
   if (
     role === "anonymous_customer" ||
@@ -617,16 +671,30 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
       return (
         <WarrantyActivation
           product={mapActivationProduct(mappedProduct, productModel)}
+          language={nfcLanguage}
+          languageToggle={languageToggle}
         />
       );
     }
 
     if (ticketView?.status === "pending_confirmation") {
-      return <CustomerConfirmResolution ticket={ticketView} />;
+      return (
+        <CustomerConfirmResolution
+          ticket={ticketView}
+          language={nfcLanguage}
+          languageToggle={languageToggle}
+        />
+      );
     }
 
     if (ticketView) {
-      return <CustomerTicketTracker ticket={ticketView} />;
+      return (
+        <CustomerTicketTracker
+          ticket={ticketView}
+          language={nfcLanguage}
+          languageToggle={languageToggle}
+        />
+      );
     }
 
     return (
@@ -640,6 +708,8 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
           mappedProduct.warrantyCertificateUrl ??
           `/api/products/${mappedProduct.id}/certificate?download=1`
         }
+        language={nfcLanguage}
+        languageToggle={languageToggle}
       />
     );
   }
@@ -716,6 +786,8 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
         mappedProduct.warrantyCertificateUrl ??
         `/api/products/${mappedProduct.id}/certificate?download=1`
       }
+      language={nfcLanguage}
+      languageToggle={languageToggle}
     />
   );
 }

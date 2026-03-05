@@ -28,6 +28,10 @@ export default async function DashboardPage() {
     redirect("/dashboard/manufacturer");
   }
 
+  if (role === "customer") {
+    redirect("/dashboard/customer");
+  }
+
   const showDevRoleSwitcher = process.env.NODE_ENV === "development";
 
   return (

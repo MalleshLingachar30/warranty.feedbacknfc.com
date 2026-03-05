@@ -1,21 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { CheckCircle2, Loader2, RefreshCcw, ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NfcPublicShell } from "@/components/nfc/public-shell";
 import type { TicketView } from "@/components/nfc/types";
-import { formatDate } from "@/components/nfc/types";
+import type { NfcLanguage } from "@/lib/nfc-i18n";
+import { getNfcCopy } from "@/lib/nfc-i18n";
 
 interface CustomerConfirmResolutionProps {
   ticket: TicketView;
+  language: NfcLanguage;
+  languageToggle?: ReactNode;
 }
 
 export function CustomerConfirmResolution({
   ticket,
+  language,
+  languageToggle,
 }: CustomerConfirmResolutionProps) {
+  const copy = getNfcCopy(language);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,13 +46,13 @@ export function CustomerConfirmResolution({
       };
 
       if (!response.ok) {
-        setError(payload.error ?? "Unable to update ticket status.");
+        setError(payload.error ?? copy.customerConfirmResolution.updateError);
         return;
       }
 
-      setMessage(payload.message ?? "Ticket updated successfully.");
+      setMessage(payload.message ?? copy.customerConfirmResolution.updateSuccess);
     } catch {
-      setError("Network error while updating resolution status.");
+      setError(copy.customerConfirmResolution.networkError);
     } finally {
       setIsSubmitting(false);
     }
@@ -54,19 +60,32 @@ export function CustomerConfirmResolution({
 
   return (
     <NfcPublicShell
-      title="Confirm Service Resolution"
-      description="Your technician marked this request as completed. Please confirm whether the issue is fully resolved."
-      footer="Your confirmation closes the service request and helps improve service quality."
+      title={copy.customerConfirmResolution.title}
+      description={copy.customerConfirmResolution.description}
+      footer={copy.customerConfirmResolution.footer}
+      subtitle={copy.shellSubtitle}
+      headerActions={languageToggle}
     >
       <Card className="border-slate-200">
         <CardHeader>
           <CardTitle className="text-base">{ticket.ticketNumber}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-slate-700">
-          <p>Issue: {ticket.issueDescription}</p>
-          <p>Reported on: {formatDate(ticket.reportedAt)}</p>
           <p>
-            Technician: {ticket.assignedTechnicianName ?? "Assigned technician"}
+            {copy.customerConfirmResolution.issueLabel}: {ticket.issueDescription}
+          </p>
+          <p>
+            {copy.customerConfirmResolution.reportedOnLabel}:{" "}
+            {new Intl.DateTimeFormat(language === "hi" ? "hi-IN" : "en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }).format(new Date(ticket.reportedAt))}
+          </p>
+          <p>
+            {copy.customerConfirmResolution.technicianLabel}:{" "}
+            {ticket.assignedTechnicianName ??
+              copy.customerConfirmResolution.assignedTechnician}
             {ticket.assignedTechnicianPhone
               ? ` (${ticket.assignedTechnicianPhone})`
               : ""}
@@ -76,15 +95,19 @@ export function CustomerConfirmResolution({
 
       <Card className="border-slate-200">
         <CardHeader>
-          <CardTitle className="text-base">Resolution Summary</CardTitle>
+          <CardTitle className="text-base">
+            {copy.customerConfirmResolution.resolutionSummary}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-slate-700">
-          <p>{ticket.resolutionNotes ?? "No technician notes provided."}</p>
+          <p>{ticket.resolutionNotes ?? copy.customerConfirmResolution.noNotes}</p>
 
           <div className="space-y-2">
-            <p className="font-medium text-slate-900">Resolution Photos</p>
+            <p className="font-medium text-slate-900">
+              {copy.customerConfirmResolution.resolutionPhotos}
+            </p>
             {ticket.resolutionPhotos.length === 0 ? (
-              <p className="text-slate-500">No photos uploaded.</p>
+              <p className="text-slate-500">{copy.customerConfirmResolution.noPhotos}</p>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {ticket.resolutionPhotos.map((photoUrl, index) => (
@@ -101,9 +124,11 @@ export function CustomerConfirmResolution({
           </div>
 
           <div className="space-y-2">
-            <p className="font-medium text-slate-900">Parts Used</p>
+            <p className="font-medium text-slate-900">
+              {copy.customerConfirmResolution.partsUsed}
+            </p>
             {ticket.partsUsed.length === 0 ? (
-              <p className="text-slate-500">No parts listed.</p>
+              <p className="text-slate-500">{copy.customerConfirmResolution.noParts}</p>
             ) : (
               <ul className="space-y-1">
                 {ticket.partsUsed.map((part, index) => (
@@ -138,7 +163,7 @@ export function CustomerConfirmResolution({
           onClick={() => submitAction("confirm")}
         >
           {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Confirm Resolution
+          {copy.customerConfirmResolution.confirmResolution}
         </Button>
         <Button
           variant="destructive"
@@ -147,13 +172,13 @@ export function CustomerConfirmResolution({
           onClick={() => submitAction("reopen")}
         >
           {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-          Issue Not Resolved
+          {copy.customerConfirmResolution.issueNotResolved}
         </Button>
       </div>
 
       <p className="inline-flex items-center gap-2 text-xs text-slate-500">
         <ShieldAlert className="h-4 w-4" />
-        If unresolved, the ticket will be reopened for further action.
+        {copy.customerConfirmResolution.unresolvedHint}
       </p>
     </NfcPublicShell>
   );
