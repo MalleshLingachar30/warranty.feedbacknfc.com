@@ -1,5 +1,5 @@
-import { db } from "@/lib/db";
 import { ensureManufacturerAdmin } from "@/lib/auth";
+import { resolveOrganizationContext } from "@/lib/org-context";
 
 export type ManufacturerPageContext = {
   organizationId: string | null;
@@ -15,38 +15,16 @@ export async function resolveManufacturerPageContext(): Promise<ManufacturerPage
     throw new Error("Authenticated clerk user id is required.");
   }
 
-  const userRecord = await db.user.findUnique({
-    where: {
-      clerkId: clerkUserId,
-    },
-    select: {
-      id: true,
-      organizationId: true,
-    },
+  const { organizationId, dbUserId } = await resolveOrganizationContext({
+    clerkUserId,
+    clerkOrgId: authData.orgId ?? null,
+    requiredOrganizationType: "manufacturer",
   });
-
-  let organizationId = authData.orgId ?? userRecord?.organizationId ?? null;
-
-  if (!organizationId && process.env.NODE_ENV !== "production") {
-    const fallbackOrg = await db.organization.findFirst({
-      where: {
-        type: "manufacturer",
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    organizationId = fallbackOrg?.id ?? null;
-  }
 
   return {
     organizationId,
     clerkUserId,
-    dbUserId: userRecord?.id ?? null,
+    dbUserId,
   };
 }
 

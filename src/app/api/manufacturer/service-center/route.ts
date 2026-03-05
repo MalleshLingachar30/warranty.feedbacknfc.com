@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ClaimStatus } from "@prisma/client";
+import { ClaimStatus, type Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 
@@ -59,6 +59,19 @@ function toNumberValue(value: unknown) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function asOptionalString(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function mergeUnique(values: string[]) {
+  return Array.from(new Set(values.filter((entry) => entry.trim().length > 0)));
 }
 
 function normalizeClaimStats(
@@ -199,8 +212,8 @@ export async function POST(request: Request) {
     const { organizationId } = await requireManufacturerContext();
     const body = parseJsonBody<ServiceCenterPayload>(await request.json());
 
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    const city = typeof body.city === "string" ? body.city.trim() : "";
+    const name = asOptionalString(body.name) ?? "";
+    const city = asOptionalString(body.city) ?? "";
 
     if (!name) {
       throw new ApiError("Service center name is required.", 400);
@@ -211,50 +224,175 @@ export async function POST(request: Request) {
     }
 
     const supportedCategories = parseStringArray(body.supportedCategories);
+    const state = asOptionalString(body.state);
+    const address = asOptionalString(body.address);
+    const pincode = asOptionalString(body.pincode);
+    const phone = asOptionalString(body.phone);
+    const email = asOptionalString(body.email);
 
-    const created = await db.serviceCenter.create({
-      data: {
-        organizationId,
-        name,
-        city,
-        state:
-          typeof body.state === "string" ? body.state.trim() || null : null,
-        address:
-          typeof body.address === "string" ? body.address.trim() || null : null,
-        pincode:
-          typeof body.pincode === "string" ? body.pincode.trim() || null : null,
-        phone:
-          typeof body.phone === "string" ? body.phone.trim() || null : null,
-        email:
-          typeof body.email === "string" ? body.email.trim() || null : null,
-        supportedCategories,
-        manufacturerAuthorizations: [organizationId],
+    const centerMatchFilters: Prisma.ServiceCenterWhereInput[] = [];
+    if (email) {
+      centerMatchFilters.push({
+        email: {
+          equals: email,
+          mode: "insensitive",
+        },
+      });
+    }
+
+    centerMatchFilters.push({
+      name: {
+        equals: name,
+        mode: "insensitive",
       },
-      select: {
-        id: true,
-        name: true,
-        city: true,
-        supportedCategories: true,
-        rating: true,
-        totalJobsCompleted: true,
-        averageResolutionHours: true,
+      city: {
+        equals: city,
+        mode: "insensitive",
       },
+    });
+
+    const savedCenter = await db.$transaction(async (tx) => {
+      const existing = await tx.serviceCenter.findFirst({
+        where: {
+          OR: centerMatchFilters,
+        },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          state: true,
+          address: true,
+          pincode: true,
+          phone: true,
+          email: true,
+          supportedCategories: true,
+          manufacturerAuthorizations: true,
+          rating: true,
+          totalJobsCompleted: true,
+          averageResolutionHours: true,
+          organizationId: true,
+          organization: {
+            select: {
+              type: true,
+            },
+          },
+        },
+      });
+
+      let serviceCenterOrgId: string;
+      if (existing) {
+        if (existing.organization.type === "service_center") {
+          serviceCenterOrgId = existing.organizationId;
+        } else {
+          const createdOrg = await tx.organization.create({
+            data: {
+              name,
+              type: "service_center",
+              city,
+              state,
+              address,
+              pincode,
+              contactEmail: email,
+              contactPhone: phone,
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          serviceCenterOrgId = createdOrg.id;
+        }
+
+        return tx.serviceCenter.update({
+          where: { id: existing.id },
+          data: {
+            organizationId: serviceCenterOrgId,
+            name,
+            city,
+            state,
+            address,
+            pincode,
+            phone,
+            email,
+            supportedCategories:
+              supportedCategories.length > 0
+                ? mergeUnique([
+                    ...existing.supportedCategories,
+                    ...supportedCategories,
+                  ])
+                : existing.supportedCategories,
+            manufacturerAuthorizations: mergeUnique([
+              ...existing.manufacturerAuthorizations,
+              organizationId,
+            ]),
+          },
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            supportedCategories: true,
+            rating: true,
+            totalJobsCompleted: true,
+            averageResolutionHours: true,
+          },
+        });
+      }
+
+      const createdOrg = await tx.organization.create({
+        data: {
+          name,
+          type: "service_center",
+          city,
+          state,
+          address,
+          pincode,
+          contactEmail: email,
+          contactPhone: phone,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      return tx.serviceCenter.create({
+        data: {
+          organizationId: createdOrg.id,
+          name,
+          city,
+          state,
+          address,
+          pincode,
+          phone,
+          email,
+          supportedCategories,
+          manufacturerAuthorizations: [organizationId],
+        },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          supportedCategories: true,
+          rating: true,
+          totalJobsCompleted: true,
+          averageResolutionHours: true,
+        },
+      });
     });
 
     return NextResponse.json(
       {
         center: {
-          id: created.id,
-          name: created.name,
-          city: created.city ?? "-",
-          supportedCategories: created.supportedCategories,
-          rating: toNumberValue(created.rating),
-          totalJobsCompleted: created.totalJobsCompleted,
+          id: savedCenter.id,
+          name: savedCenter.name,
+          city: savedCenter.city ?? "-",
+          supportedCategories: savedCenter.supportedCategories,
+          rating: toNumberValue(savedCenter.rating),
+          totalJobsCompleted: savedCenter.totalJobsCompleted,
           technicians: [],
           performance: {
-            avgResolutionHours: toNumberValue(created.averageResolutionHours),
+            avgResolutionHours: toNumberValue(savedCenter.averageResolutionHours),
             claimAccuracy: 0,
-            customerSatisfaction: toNumberValue(created.rating),
+            customerSatisfaction: toNumberValue(savedCenter.rating),
           },
         } satisfies ServiceCenterRow,
       },

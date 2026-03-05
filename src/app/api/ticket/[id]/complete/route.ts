@@ -145,6 +145,7 @@ export async function POST(
         status: true,
         ticketNumber: true,
         assignedTechnicianId: true,
+        assignedServiceCenterId: true,
         metadata: true,
         product: {
           select: {
@@ -198,6 +199,7 @@ export async function POST(
       select: {
         id: true,
         name: true,
+        serviceCenterId: true,
         activeJobCount: true,
       },
     });
@@ -206,6 +208,16 @@ export async function POST(
       return NextResponse.json(
         { error: "Technician profile not found." },
         { status: 404 },
+      );
+    }
+
+    if (
+      ticket.assignedServiceCenterId &&
+      ticket.assignedServiceCenterId !== technician.serviceCenterId
+    ) {
+      return NextResponse.json(
+        { error: "Technician does not belong to the assigned service center." },
+        { status: 403 },
       );
     }
 

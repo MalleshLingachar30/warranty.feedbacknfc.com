@@ -117,6 +117,16 @@ export async function POST(
       );
     }
 
+    if (
+      ticket.assignedServiceCenterId &&
+      ticket.assignedServiceCenterId !== technician.serviceCenterId
+    ) {
+      return NextResponse.json(
+        { error: "Technician does not belong to the assigned service center." },
+        { status: 403 },
+      );
+    }
+
     const etaMinutes = readEtaMinutes(body.etaMinutes);
     const etaLabel = `${etaMinutes} mins`;
     const metadata = metadataAsObject(ticket.metadata);
