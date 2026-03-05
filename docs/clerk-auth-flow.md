@@ -5,7 +5,7 @@ This project already includes Clerk integration in these paths:
 - `src/app/layout.tsx` uses `ClerkProvider`
 - `src/proxy.ts` protects `/dashboard/*`
 - `src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`
-- `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx` (redirects to `/sign-in`)
+- `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx`
 
 ## 1) Configure Clerk app and env vars
 
@@ -19,9 +19,9 @@ This project already includes Clerk integration in these paths:
    - `CLERK_SECRET_KEY`
 4. Ensure these are present:
    - `CLERK_SIGN_IN_URL=/sign-in`
-   - `CLERK_SIGN_UP_URL=/sign-in`
+   - `CLERK_SIGN_UP_URL=/sign-up`
    - `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in`
-   - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-in`
+   - `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up`
    - `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/dashboard`
    - `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/dashboard`
 
@@ -33,7 +33,7 @@ npm run dev
 
 ## 2) Basic auth test
 
-1. Open `http://localhost:3000/sign-in` and use the sign-up link within Clerk's single flow.
+1. Open `http://localhost:3000/sign-in` and use the sign-up link, or open `http://localhost:3000/sign-up` directly.
 2. After sign-up, the app redirects to `/dashboard`.
 3. Open `http://localhost:3000/dashboard` while signed out to confirm redirect to sign-in.
 
