@@ -6,3 +6,4 @@ Landing page to manage equipment warranty by resellers and manufacturers
 For the complete Clerk setup and role-testing flow, see:
 
 - `docs/clerk-auth-flow.md`
+- `docs/user-manual.md`
