@@ -682,8 +682,13 @@ Cron endpoints:
 
 Current `vercel.json` schedules:
 
-- SLA sweep: every 30 minutes (`*/30 * * * *`)
+- SLA sweep: daily at `00:30` UTC (Hobby plan limit)
 - Warranty expiry sweep: daily at `09:00` UTC
+
+Cadence note:
+
+- SLA sweep endpoint is implemented for high-frequency execution.
+- On Vercel Pro, update schedule to `*/30 * * * *` for every 30 minutes.
 
 ### Required environment variables (notifications)
 

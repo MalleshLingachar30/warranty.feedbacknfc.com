@@ -22,5 +22,5 @@ Core docs:
   - Dedicated customer dashboard at `/dashboard/customer`
   - NFC customer flow localization (English/Hindi) + language-aware customer SMS templates
 - Batch 4: GAP 7 + GAP 9
-  - SLA policy defaults, auto-escalation sweep every 30 minutes, and on-track/at-risk/breached indicators
+  - SLA policy defaults, auto-escalation sweep engine (30-minute cadence ready for Pro / daily cron on Hobby), and on-track/at-risk/breached indicators
   - Expanded manufacturer/service-center settings (logo/profile, notification events, team members, operating hours, categories, radius)

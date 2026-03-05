@@ -102,7 +102,9 @@ Implemented:
   - critical: response 2h / resolution 8h
 - Ticket creation stores SLA deadlines from severity + manufacturer settings.
 - SLA sweep endpoint supports auto-escalation and breach notifications.
-- Cron schedule configured every 30 minutes.
+- Cron cadence:
+  - production Hobby deployment: daily sweep
+  - ready for Pro upgrade to every 30 minutes (`*/30 * * * *`)
 - Service-center and manufacturer ticket queues show SLA indicator states:
   - on track
   - at risk
