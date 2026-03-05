@@ -1,30 +1,34 @@
-import { auth } from "@clerk/nextjs/server"
-import { redirect } from "next/navigation"
-import { sessionHasRole } from "@/lib/org-context"
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 
-const REQUIRED_ROLE = "manufacturer_admin"
+import { clerkOrDbHasRole } from "@/lib/rbac";
+
+const REQUIRED_ROLE = "manufacturer_admin";
 
 export async function ensureManufacturerAdmin() {
-  const authData = await auth()
+  const authData = await auth();
 
   if (!authData.userId) {
-    authData.redirectToSignIn()
+    authData.redirectToSignIn();
   }
 
   // Optional escape hatch for local UI work before auth claims are wired.
   if (process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true") {
-    return authData
+    return authData;
   }
 
-  const hasRequiredRole = sessionHasRole({
-    orgRole: authData.orgRole,
-    sessionClaims: authData.sessionClaims,
-    requiredRole: REQUIRED_ROLE,
-  })
+  const hasRequiredRole = authData.userId
+    ? await clerkOrDbHasRole({
+        clerkUserId: authData.userId,
+        orgRole: authData.orgRole,
+        sessionClaims: authData.sessionClaims,
+        requiredRole: REQUIRED_ROLE,
+      })
+    : false;
 
   if (!hasRequiredRole) {
-    redirect("/dashboard?access=denied&required=manufacturer_admin")
+    redirect("/dashboard?access=denied&required=manufacturer_admin");
   }
 
-  return authData
+  return authData;
 }

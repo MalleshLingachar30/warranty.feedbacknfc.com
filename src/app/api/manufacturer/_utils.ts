@@ -2,7 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { type ClaimStatus, type TicketStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
-import { resolveOrganizationContext, sessionHasRole } from "@/lib/org-context";
+import { resolveOrganizationContext } from "@/lib/org-context";
+import { clerkOrDbHasRole } from "@/lib/rbac";
 
 const REQUIRED_ROLE = "manufacturer_admin";
 
@@ -53,7 +54,8 @@ export async function requireManufacturerContext(): Promise<ManufacturerContext>
     process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
 
   if (!roleGuardDisabled) {
-    const hasRequiredRole = sessionHasRole({
+    const hasRequiredRole = await clerkOrDbHasRole({
+      clerkUserId: authData.userId,
       orgRole: authData.orgRole,
       sessionClaims: authData.sessionClaims,
       requiredRole: REQUIRED_ROLE,

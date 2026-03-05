@@ -3,17 +3,25 @@ import { auth } from "@clerk/nextjs/server";
 import { ArrowRightIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { resolveAppRoleForSession } from "@/lib/app-user";
 import { DevRoleSwitcher } from "@/components/dashboard/dev-role-switcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   NAVIGATION_BY_ROLE,
   getRoleLabel,
-  parseAppRoleFromClaims,
 } from "@/lib/roles";
 
 export default async function DashboardPage() {
-  const { sessionClaims } = await auth();
-  const role = parseAppRoleFromClaims(sessionClaims);
+  const { userId, sessionClaims } = await auth();
+
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
+  const { role } = await resolveAppRoleForSession({
+    clerkUserId: userId,
+    sessionClaims,
+  });
   const navItems = NAVIGATION_BY_ROLE[role] ?? [];
 
   if (role === "manufacturer_admin") {

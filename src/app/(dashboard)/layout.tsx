@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/layout/dashboard-shell";
-import { parseAppRoleFromClaims } from "@/lib/roles";
+import { resolveAppRoleForSession } from "@/lib/app-user";
 
 export default async function DashboardLayout({
   children,
@@ -15,7 +15,10 @@ export default async function DashboardLayout({
     redirect("/sign-in");
   }
 
-  const role = parseAppRoleFromClaims(sessionClaims);
+  const { role } = await resolveAppRoleForSession({
+    clerkUserId: userId,
+    sessionClaims,
+  });
 
   return <DashboardShell role={role}>{children}</DashboardShell>;
 }

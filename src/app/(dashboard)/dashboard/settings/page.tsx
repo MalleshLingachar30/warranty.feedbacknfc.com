@@ -20,9 +20,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { resolveAppRoleForSession } from "@/lib/app-user";
 import { db } from "@/lib/db";
 import { requireCustomerContext } from "@/lib/customer-context";
-import { parseAppRoleFromClaims } from "@/lib/roles";
 
 import { resolveServiceCenterPageContext } from "../_lib/service-center-context";
 
@@ -56,8 +56,21 @@ function normalizeSettings(value: unknown) {
 }
 
 export default async function SettingsPage() {
-  const { sessionClaims } = await auth();
-  const role = parseAppRoleFromClaims(sessionClaims);
+  const { userId, sessionClaims } = await auth();
+
+  if (!userId) {
+    return (
+      <ComingSoonCard
+        title="Settings"
+        description="Sign in to manage your account settings."
+      />
+    );
+  }
+
+  const { role } = await resolveAppRoleForSession({
+    clerkUserId: userId,
+    sessionClaims,
+  });
 
   if (role === "customer") {
     const context = await requireCustomerContext();

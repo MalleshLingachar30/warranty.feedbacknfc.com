@@ -1,7 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-import { resolveOrganizationContext, sessionHasRole } from "@/lib/org-context";
+import { resolveOrganizationContext } from "@/lib/org-context";
+import { clerkOrDbHasRole } from "@/lib/rbac";
 
 const REQUIRED_ROLE = "service_center_admin";
 
@@ -52,7 +53,8 @@ export async function requireServiceCenterContext(): Promise<ServiceCenterContex
     process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
 
   if (!roleGuardDisabled) {
-    const hasRequiredRole = sessionHasRole({
+    const hasRequiredRole = await clerkOrDbHasRole({
+      clerkUserId: authData.userId,
       orgRole: authData.orgRole,
       sessionClaims: authData.sessionClaims,
       requiredRole: REQUIRED_ROLE,

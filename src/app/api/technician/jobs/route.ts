@@ -1,8 +1,9 @@
 import { type Prisma, type TicketStatus } from "@prisma/client";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/db";
-import { resolveTechnicianId } from "@/lib/technician-context";
+import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
 
@@ -233,48 +234,52 @@ function averageResolutionHours(
   return Number((sum / durations.length).toFixed(2));
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const requestedTechnicianId = resolveTechnicianId(request);
+    const authData = await auth();
 
-    const technician =
-      (requestedTechnicianId
-        ? await db.technician.findFirst({
-            where: {
-              OR: [
-                { id: requestedTechnicianId },
-                { userId: requestedTechnicianId },
-                {
-                  user: {
-                    clerkId: requestedTechnicianId,
-                  },
-                },
-              ],
-            },
-            include: {
-              serviceCenter: {
-                select: {
-                  name: true,
-                },
-              },
-            },
-          })
-        : null) ??
-      (await db.technician.findFirst({
-        include: {
-          serviceCenter: {
-            select: {
-              name: true,
-            },
+    if (!authData.userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const roleGuardDisabled =
+      process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
+
+    if (!roleGuardDisabled) {
+      const hasRequiredRole = await clerkOrDbHasRole({
+        clerkUserId: authData.userId,
+        orgRole: authData.orgRole,
+        sessionClaims: authData.sessionClaims,
+        requiredRole: "technician",
+      });
+
+      if (!hasRequiredRole) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
+    const technician = await db.technician.findFirst({
+      where: {
+        user: {
+          clerkId: authData.userId,
+        },
+      },
+      include: {
+        serviceCenter: {
+          select: {
+            name: true,
           },
         },
-        orderBy: [{ isAvailable: "desc" }, { createdAt: "asc" }],
-      }));
+      },
+    });
 
     if (!technician) {
       return NextResponse.json(
-        { error: "No technician profile found." },
-        { status: 404 },
+        {
+          error:
+            "No technician profile found for this account. Ask your service center admin to add you.",
+        },
+        { status: 400 },
       );
     }
 

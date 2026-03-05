@@ -1,9 +1,10 @@
 import { type Prisma } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/db";
+import { clerkOrDbHasRole } from "@/lib/rbac";
 import { runSlaSweep } from "@/lib/sla-engine";
-import { resolveTechnicianId } from "@/lib/technician-context";
 import { sendCustomerCompletionPrompt } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
@@ -19,7 +20,6 @@ interface CompleteTicketPartInput {
 }
 
 interface CompleteTicketRequest {
-  technicianId?: string;
   resolutionNotes?: string;
   beforePhotos?: string[];
   afterPhotos?: string[];
@@ -104,6 +104,28 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
+    const authData = await auth();
+
+    if (!authData.userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const roleGuardDisabled =
+      process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
+
+    if (!roleGuardDisabled) {
+      const hasRequiredRole = await clerkOrDbHasRole({
+        clerkUserId: authData.userId,
+        orgRole: authData.orgRole,
+        sessionClaims: authData.sessionClaims,
+        requiredRole: "technician",
+      });
+
+      if (!hasRequiredRole) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
     const { id: ticketId } = await context.params;
     const body = (await request.json()) as CompleteTicketRequest;
 
@@ -135,8 +157,6 @@ export async function POST(
 
     const partsUsed = sanitizeParts(body.partsUsed);
     const laborHours = Math.max(0, toNumber(body.laborHours, 0));
-
-    const requestedTechnicianId = resolveTechnicianId(request, body);
 
     const ticket = await db.ticket.findUnique({
       where: { id: ticketId },
@@ -174,28 +194,12 @@ export async function POST(
       );
     }
 
-    const actingTechnicianId =
-      ticket.assignedTechnicianId ?? requestedTechnicianId;
-
-    if (!actingTechnicianId) {
-      return NextResponse.json(
-        { error: "technicianId is required to complete this ticket." },
-        { status: 400 },
-      );
-    }
-
-    if (
-      ticket.assignedTechnicianId &&
-      ticket.assignedTechnicianId !== actingTechnicianId
-    ) {
-      return NextResponse.json(
-        { error: "Ticket is assigned to another technician." },
-        { status: 403 },
-      );
-    }
-
-    const technician = await db.technician.findUnique({
-      where: { id: actingTechnicianId },
+    const technician = await db.technician.findFirst({
+      where: {
+        user: {
+          clerkId: authData.userId,
+        },
+      },
       select: {
         id: true,
         name: true,
@@ -206,8 +210,21 @@ export async function POST(
 
     if (!technician) {
       return NextResponse.json(
-        { error: "Technician profile not found." },
-        { status: 404 },
+        {
+          error:
+            "Technician profile not found for this account. Ask your service center admin to add you.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      ticket.assignedTechnicianId &&
+      ticket.assignedTechnicianId !== technician.id
+    ) {
+      return NextResponse.json(
+        { error: "Ticket is assigned to another technician." },
+        { status: 403 },
       );
     }
 
