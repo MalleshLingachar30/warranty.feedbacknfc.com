@@ -458,7 +458,8 @@ Use this sticker URL as a test card:
 
 - `https://warranty.feedbacknfc.com/nfc/100`
 
-> If you must use `https://feedbacknfc.com/nfc/100`, ensure the root-domain router redirects warranty stickers to `warranty.feedbacknfc.com`. That redirect may be managed outside this repository.
+> Root-domain sticker links are now handled in-app: requests to `feedbacknfc.com/nfc/*` and `www.feedbacknfc.com/nfc/*` are redirected to `https://warranty.feedbacknfc.com/nfc/*` via `next.config.ts`.  
+> Deployment prerequisite: both root domains must be added to this Vercel project for the redirect rule to execute.
 
 ### Recommended QA checklist
 

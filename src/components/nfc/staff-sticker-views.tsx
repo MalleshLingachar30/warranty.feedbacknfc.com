@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 
 function statusLabel(status: string) {
   return status.replace(/_/g, " ");
@@ -632,11 +633,7 @@ function buildStickerUrl(stickerNumber: number | null) {
     return null;
   }
 
-  if (typeof window === "undefined") {
-    return `/nfc/${stickerNumber}`;
-  }
-
-  return `${window.location.origin}/nfc/${stickerNumber}`;
+  return `${getWarrantyAppBaseUrl()}/nfc/${stickerNumber}`;
 }
 
 export function TechnicianTicketView({
