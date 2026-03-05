@@ -2,6 +2,7 @@ import { Gauge, Star, UserCheck, Users } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { AddTechnicianDialog } from "@/components/service-center/add-technician-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -40,7 +41,7 @@ export default async function ServiceCenterTechniciansPage() {
     );
   }
 
-  const [technicians, resolvedTickets] = await Promise.all([
+  const [technicians, resolvedTickets, serviceCenters] = await Promise.all([
     db.technician.findMany({
       where: {
         serviceCenter: {
@@ -87,6 +88,19 @@ export default async function ServiceCenterTechniciansPage() {
         assignedTechnicianId: true,
         technicianStartedAt: true,
         technicianCompletedAt: true,
+      },
+    }),
+    db.serviceCenter.findMany({
+      where: {
+        organizationId,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      select: {
+        id: true,
+        name: true,
+        city: true,
       },
     }),
   ]);
@@ -143,6 +157,11 @@ export default async function ServiceCenterTechniciansPage() {
       <PageHeader
         title="Technicians"
         description="Track technician availability, workload, and service execution performance."
+        actions={
+          serviceCenters.length > 0 ? (
+            <AddTechnicianDialog serviceCenters={serviceCenters} />
+          ) : null
+        }
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
