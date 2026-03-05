@@ -20,7 +20,8 @@
 8. Customer guide (NFC/QR tap flow)
 9. Analytics & KPIs (how it’s calculated)
 10. Manual QA flow (using test sticker `100`)
-11. Troubleshooting
+11. GAP compliance update (GAP 1 + GAP 2)
+12. Troubleshooting
 
 ---
 
@@ -190,6 +191,26 @@ Key sections:
    - Go to `Claims`
    - Open a claim → review documentation → approve/reject
 
+### Sticker allocation wizard (GAP 1 compliant)
+
+The bulk allocation wizard at `/dashboard/manufacturer/stickers` follows the required 5-step flow:
+
+1. **Sticker Range** — enter start and end sticker numbers
+2. **Product Model** — select model from catalog
+3. **Serial Range** — enter appliance serial prefix/start/end
+4. **Review** — preview mapping table (first 5 + last 5) and summary
+5. **Success/Confirm** — execute allocation
+
+On confirm, backend performs one-to-one binding:
+
+- Creates/updates one `products` row per sticker in range
+- Sets `stickers.status = bound`
+- Sets `products.warranty_status = pending_activation`
+- Stores allocation in `sticker_allocations` with:
+  - `appliance_serial_prefix`
+  - `appliance_serial_start`
+  - `appliance_serial_end`
+
 ---
 
 ## 6) Service Center Admin guide
@@ -332,6 +353,15 @@ Use this sticker URL as a test card:
 6. **Claims**
    - Service center: `Dashboard → Claims` shows new claim
    - Manufacturer: `Dashboard → Claims` can approve/reject
+7. **Notification checks (GAP 2)**
+   - Verify customer receives SMS on activation
+   - Verify technician receives SMS on ticket assignment
+   - Verify service center receives email on ticket assignment
+   - Verify customer receives SMS for enroute / started / completed
+   - Verify completed SMS contains direct link to `/nfc/100`
+   - Verify technician receives SMS when customer confirms
+   - Verify manufacturer gets email when claim is created
+   - Verify service center gets email+SMS on claim approve/reject
 
 If you’re using the E2E seeding script locally, you may see output like:
 
@@ -339,7 +369,97 @@ If you’re using the E2E seeding script locally, you may see output like:
 
 ---
 
-## 11) Troubleshooting
+## 11) GAP compliance update (GAP 1 + GAP 2)
+
+### GAP 1: Bulk allocation serial binding
+
+Status: **Implemented**
+
+Implemented components:
+
+- UI wizard flow and preview: `/dashboard/manufacturer/stickers`
+- API binding logic: `POST /api/manufacturer/allocate`
+- Persistence fields: `sticker_allocations.appliance_serial_prefix`, `sticker_allocations.appliance_serial_start`, `sticker_allocations.appliance_serial_end`
+
+Result:
+
+- Manufacturer can bulk-bind sticker ranges to serial ranges in one operation.
+- Serial mapping is sequential and deterministic.
+
+### GAP 2: Notification system (SMS + Email + trigger layer)
+
+Status: **Implemented for core flow**
+
+Notification transport layer:
+
+- `src/lib/notifications.ts`
+  - `sendSMS(phone, message)` via Twilio
+  - `sendEmail(to, subject, body)` via Resend
+  - `sendWhatsApp(phone, message)` via Twilio WhatsApp (optional)
+
+Event trigger layer:
+
+- `src/lib/notification-triggers.ts`
+  - Event-template mapping for warranty, ticket, claim, SLA, and expiry reminders
+
+Compatibility wrapper (existing imports retained):
+
+- `src/lib/warranty-notifications.ts`
+
+### Notification events currently wired
+
+- Warranty activated → customer SMS
+- Ticket created → technician SMS + service center email
+- Technician en route → customer SMS (includes ETA)
+- Work started → customer SMS
+- Work completed → customer SMS with direct confirmation link (`/nfc/[stickerNumber]`)
+- Customer confirmed → technician SMS
+- Claim submitted (auto-generated) → manufacturer email
+- Claim approved → service center email + SMS
+- Claim rejected → service center email + SMS
+- SLA breach → service center + manufacturer email
+- Warranty expiring reminder (30-day window) → customer SMS (daily sweep)
+
+### Cron routes and schedules (current production configuration)
+
+Cron endpoints:
+
+- `/api/ticket/sla/sweep`
+- `/api/warranty/expiry/sweep`
+
+Current `vercel.json` schedules:
+
+- SLA sweep: daily at `00:30` UTC
+- Warranty expiry sweep: daily at `09:00` UTC
+
+Note:
+
+- Vercel Hobby plan does not allow high-frequency cron (for example, every 30 minutes).
+- With Vercel Pro, SLA sweep can be changed to `*/30 * * * *`.
+
+### Required environment variables (notifications)
+
+Twilio:
+
+- `TWILIO_ACCOUNT_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_PHONE_NUMBER` (or `TWILIO_FROM_NUMBER`)
+- `TWILIO_WHATSAPP_NUMBER` (optional)
+
+Resend:
+
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+
+App URL and cron keys:
+
+- `NEXT_PUBLIC_WARRANTY_APP_URL` (optional override for confirmation link base URL)
+- `SLA_CRON_KEY` (optional if not using Vercel Cron header auth)
+- `WARRANTY_EXPIRY_CRON_KEY` (optional if not using Vercel Cron header auth)
+
+---
+
+## 12) Troubleshooting
 
 ### “Sign-in is temporarily unavailable”
 
