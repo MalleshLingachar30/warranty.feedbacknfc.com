@@ -451,7 +451,11 @@ export function StickerWizardClient({
                   />
                 </div>
               </div>
+            </div>
+          ) : null}
 
+          {step === 4 ? (
+            <div className="space-y-4">
               <Card className="bg-muted/20">
                 <CardHeader>
                   <CardTitle className="text-base">Mapping Preview</CardTitle>
@@ -489,53 +493,57 @@ export function StickerWizardClient({
                   </Table>
                 </CardContent>
               </Card>
-            </div>
-          ) : null}
 
-          {step === 4 ? (
-            <Card className="bg-muted/20">
-              <CardHeader>
-                <CardTitle className="text-base">
-                  Review Allocation Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-md border bg-background p-3">
-                  <p className="text-xs text-muted-foreground">Sticker Range</p>
-                  <p className="font-medium">
-                    {wizard.stickerStart} - {wizard.stickerEnd}
-                  </p>
-                </div>
-                <div className="rounded-md border bg-background p-3">
-                  <p className="text-xs text-muted-foreground">Product Model</p>
-                  <p className="font-medium">
-                    {selectedProductModel
-                      ? `${selectedProductModel.name} (${selectedProductModel.modelNumber})`
-                      : "-"}
-                  </p>
-                </div>
-                <div className="rounded-md border bg-background p-3">
-                  <p className="text-xs text-muted-foreground">Serial Range</p>
-                  <p className="font-medium">
-                    {formatSerial(
-                      wizard.serialPrefix,
-                      parsedSerialStart,
-                      serialPadLength,
-                    )}{" "}
-                    -{" "}
-                    {formatSerial(
-                      wizard.serialPrefix,
-                      parsedSerialEnd,
-                      serialPadLength,
-                    )}
-                  </p>
-                </div>
-                <div className="rounded-md border bg-background p-3">
-                  <p className="text-xs text-muted-foreground">Total Count</p>
-                  <p className="font-medium">{stickerCount.toLocaleString()}</p>
-                </div>
-              </CardContent>
-            </Card>
+              <Card className="bg-muted/20">
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    Review Allocation Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Sticker Range
+                    </p>
+                    <p className="font-medium">
+                      {wizard.stickerStart} - {wizard.stickerEnd}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Product Model
+                    </p>
+                    <p className="font-medium">
+                      {selectedProductModel
+                        ? `${selectedProductModel.name} (${selectedProductModel.modelNumber})`
+                        : "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">Serial Range</p>
+                    <p className="font-medium">
+                      {formatSerial(
+                        wizard.serialPrefix,
+                        parsedSerialStart,
+                        serialPadLength,
+                      )}{" "}
+                      -{" "}
+                      {formatSerial(
+                        wizard.serialPrefix,
+                        parsedSerialEnd,
+                        serialPadLength,
+                      )}
+                    </p>
+                  </div>
+                  <div className="rounded-md border bg-background p-3">
+                    <p className="text-xs text-muted-foreground">Total Count</p>
+                    <p className="font-medium">
+                      {stickerCount.toLocaleString()}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ) : null}
 
           {step === 5 ? (

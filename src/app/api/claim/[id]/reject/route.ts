@@ -46,6 +46,7 @@ export async function POST(
           select: {
             name: true,
             contactEmail: true,
+            contactPhone: true,
           },
         },
       },
@@ -79,13 +80,15 @@ export async function POST(
     });
 
     const serviceCenterEmail = claim.serviceCenterOrg.contactEmail ?? "";
+    const serviceCenterPhone = claim.serviceCenterOrg.contactPhone ?? "";
 
-    if (serviceCenterEmail) {
+    if (serviceCenterEmail || serviceCenterPhone) {
       void sendServiceCenterClaimRejectedEmail({
         serviceCenterEmail,
         serviceCenterName: claim.serviceCenterOrg.name,
         claimNumber: updated.claimNumber,
         reason,
+        serviceCenterPhone: serviceCenterPhone || undefined,
       });
     }
 

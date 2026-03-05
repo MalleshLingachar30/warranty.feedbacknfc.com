@@ -5,6 +5,10 @@ import { runSlaSweep } from "@/lib/sla-engine";
 export const runtime = "nodejs";
 
 function isAuthorized(request: Request) {
+  if (request.headers.get("x-vercel-cron") === "1") {
+    return true;
+  }
+
   const configuredKey = process.env.SLA_CRON_KEY;
 
   if (!configuredKey) {
@@ -15,7 +19,7 @@ function isAuthorized(request: Request) {
   return providedKey === configuredKey;
 }
 
-export async function POST(request: Request) {
+async function handleSweep(request: Request) {
   try {
     if (!isAuthorized(request)) {
       return NextResponse.json(
@@ -39,4 +43,12 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function POST(request: Request) {
+  return handleSweep(request);
+}
+
+export async function GET(request: Request) {
+  return handleSweep(request);
 }

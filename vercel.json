@@ -3,5 +3,15 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev:vercel"
+  "devCommand": "npm run dev:vercel",
+  "crons": [
+    {
+      "path": "/api/ticket/sla/sweep",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/warranty/expiry/sweep",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

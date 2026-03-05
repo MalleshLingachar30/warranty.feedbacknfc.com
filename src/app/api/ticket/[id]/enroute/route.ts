@@ -185,6 +185,7 @@ export async function POST(
         technicianName: technician.name,
         technicianPhone: technician.phone,
         ticketNumber: ticket.ticketNumber,
+        etaLabel,
       });
     }
 

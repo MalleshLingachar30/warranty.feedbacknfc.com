@@ -3,6 +3,7 @@ import "server-only";
 import { type IssueSeverity, type Prisma, type TicketStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { sendSlaBreachNotification } from "@/lib/warranty-notifications";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -203,7 +204,18 @@ export async function runSlaSweep(options?: {
         select: {
           organization: {
             select: {
+              contactEmail: true,
               settings: true,
+            },
+          },
+        },
+      },
+      assignedServiceCenter: {
+        select: {
+          email: true,
+          organization: {
+            select: {
+              contactEmail: true,
             },
           },
         },
@@ -305,6 +317,14 @@ export async function runSlaSweep(options?: {
     if (shouldMarkBreached && !ticket.slaBreached) {
       breachedCount += 1;
       breachedTicketIds.push(ticket.id);
+
+      void sendSlaBreachNotification({
+        ticketNumber: ticket.ticketNumber,
+        manufacturerEmail: ticket.product.organization.contactEmail,
+        serviceCenterEmail:
+          ticket.assignedServiceCenter?.email ??
+          ticket.assignedServiceCenter?.organization.contactEmail,
+      });
     }
   }
 

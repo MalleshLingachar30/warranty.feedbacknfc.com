@@ -3,7 +3,10 @@ import { type Prisma } from "@prisma/client";
 
 import { db as prisma } from "@/lib/db";
 import { runSlaSweep } from "@/lib/sla-engine";
-import { sendManufacturerClaimSubmittedEmail } from "@/lib/warranty-notifications";
+import {
+  sendManufacturerClaimSubmittedEmail,
+  sendTechnicianResolutionConfirmedNotification,
+} from "@/lib/warranty-notifications";
 
 interface TicketConfirmationRequest {
   action?: "confirm" | "reopen";
@@ -146,6 +149,7 @@ export async function POST(request: Request, context: RouteContext) {
         },
         assignedTechnician: {
           select: {
+            phone: true,
             serviceCenter: {
               select: {
                 organizationId: true,
@@ -326,6 +330,13 @@ export async function POST(request: Request, context: RouteContext) {
             claimAmount: toNumber(claimNotification.totalClaimAmount),
           });
         }
+      }
+
+      if (ticket.assignedTechnician?.phone) {
+        void sendTechnicianResolutionConfirmedNotification({
+          technicianPhone: ticket.assignedTechnician.phone,
+          ticketNumber: ticket.ticketNumber,
+        });
       }
 
       return NextResponse.json({

@@ -1,93 +1,21 @@
 import "server-only";
 
-import twilio from "twilio";
+import { sendEmail } from "@/lib/notifications";
+import {
+  onClaimApproved,
+  onClaimRejected,
+  onClaimSubmitted,
+  onCustomerConfirmed,
+  onSlaBreached,
+  onTechnicianEnRoute,
+  onTicketCreated,
+  onWarrantyActivated,
+  onWarrantyExpiring30Days,
+  onWorkCompleted,
+  onWorkStarted,
+} from "@/lib/notification-triggers";
 
-interface SmsPayload {
-  to: string;
-  body: string;
-}
-
-interface EmailPayload {
-  to: string | string[];
-  subject: string;
-  text: string;
-}
-
-function getTwilioClient() {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-
-  if (!sid || !token) {
-    return null;
-  }
-
-  return twilio(sid, token);
-}
-
-async function sendSms(payload: SmsPayload) {
-  const from = process.env.TWILIO_FROM_NUMBER;
-  const client = getTwilioClient();
-
-  if (!from || !client) {
-    console.info(`[sms:mock] to=${payload.to} body=${payload.body}`);
-    return;
-  }
-
-  try {
-    await client.messages.create({
-      from,
-      to: payload.to,
-      body: payload.body,
-    });
-  } catch (error) {
-    console.error("Failed to send SMS notification", error);
-  }
-}
-
-async function sendEmail(payload: EmailPayload) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
-  const recipients = Array.isArray(payload.to) ? payload.to : [payload.to];
-  const to = recipients
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-
-  if (to.length === 0) {
-    return;
-  }
-
-  if (!apiKey || !from) {
-    console.info(
-      `[email:mock] to=${to.join(",")} subject=${payload.subject} body=${payload.text}`,
-    );
-    return;
-  }
-
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to,
-        subject: payload.subject,
-        text: payload.text,
-      }),
-    });
-
-    if (!response.ok) {
-      const details = await response.text();
-      console.error("Failed to send email notification", details);
-    }
-  } catch (error) {
-    console.error("Failed to send email notification", error);
-  }
-}
-
-function formatInr(value: number) {
+function formatInr(value: number): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -103,9 +31,13 @@ export async function sendTechnicianAssignmentSms(input: {
   productName: string;
   ticketNumber: string;
 }) {
-  await sendSms({
-    to: input.technicianPhone,
-    body: `New job ${input.ticketNumber}: ${input.issueCategory} at ${input.location}. Product: ${input.productName}.`,
+  await onTicketCreated({
+    technicianPhone: input.technicianPhone,
+    issueCategory: input.issueCategory,
+    location: input.location,
+    productName: input.productName,
+    ticketNumber: input.ticketNumber,
+    technicianName: input.technicianName,
   });
 }
 
@@ -115,10 +47,14 @@ export async function sendCustomerEnRouteNotification(input: {
   technicianName: string;
   technicianPhone: string;
   ticketNumber: string;
+  etaLabel?: string;
 }) {
-  await sendSms({
-    to: input.customerPhone,
-    body: `${input.technicianName} is on the way for ticket ${input.ticketNumber}. Call: ${input.technicianPhone}.`,
+  await onTechnicianEnRoute({
+    customerPhone: input.customerPhone,
+    technicianName: input.technicianName,
+    technicianPhone: input.technicianPhone,
+    ticketNumber: input.ticketNumber,
+    etaLabel: input.etaLabel ?? "45 mins",
   });
 }
 
@@ -126,10 +62,12 @@ export async function sendCustomerWorkStartedNotification(input: {
   customerPhone: string;
   customerName: string;
   ticketNumber: string;
+  productName?: string;
 }) {
-  await sendSms({
-    to: input.customerPhone,
-    body: `Service has started for ticket ${input.ticketNumber}.`,
+  await onWorkStarted({
+    customerPhone: input.customerPhone,
+    ticketNumber: input.ticketNumber,
+    productName: input.productName,
   });
 }
 
@@ -139,9 +77,20 @@ export async function sendCustomerCompletionPrompt(input: {
   ticketNumber: string;
   stickerNumber: number;
 }) {
-  await sendSms({
-    to: input.customerPhone,
-    body: `Service complete for ${input.ticketNumber}. Please scan sticker #${input.stickerNumber} and confirm resolution.`,
+  await onWorkCompleted({
+    customerPhone: input.customerPhone,
+    ticketNumber: input.ticketNumber,
+    stickerNumber: input.stickerNumber,
+  });
+}
+
+export async function sendTechnicianResolutionConfirmedNotification(input: {
+  technicianPhone: string;
+  ticketNumber: string;
+}) {
+  await onCustomerConfirmed({
+    technicianPhone: input.technicianPhone,
+    ticketNumber: input.ticketNumber,
   });
 }
 
@@ -150,10 +99,15 @@ export async function sendWarrantyActivatedNotification(input: {
   productName: string;
   warrantyEndDateLabel: string;
 }) {
-  await sendSms({
-    to: input.customerPhone,
-    body: `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}.`,
-  });
+  await onWarrantyActivated(input);
+}
+
+export async function sendWarrantyExpiryReminderNotification(input: {
+  customerPhone: string;
+  productName: string;
+  warrantyEndDateLabel: string;
+}) {
+  await onWarrantyExpiring30Days(input);
 }
 
 export async function sendCustomerWarrantyActivatedEmail(input: {
@@ -165,7 +119,7 @@ export async function sendCustomerWarrantyActivatedEmail(input: {
   await sendEmail({
     to: input.customerEmail,
     subject: `${input.productName} warranty activated`,
-    text: `Hi ${input.customerName}, your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}.`,
+    body: `Hi ${input.customerName}, your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}.`,
   });
 }
 
@@ -177,10 +131,15 @@ export async function sendServiceCenterTicketAssignedEmail(input: {
   productName: string;
   technicianName: string;
 }) {
-  await sendEmail({
-    to: input.serviceCenterEmail,
-    subject: `New ticket assigned: ${input.ticketNumber}`,
-    text: `Service Center ${input.serviceCenterName}, a new ticket ${input.ticketNumber} has been assigned to ${input.technicianName}. Issue: ${input.issueCategory}. Product: ${input.productName}.`,
+  await onTicketCreated({
+    technicianPhone: "",
+    issueCategory: input.issueCategory,
+    location: "Customer location",
+    productName: input.productName,
+    ticketNumber: input.ticketNumber,
+    serviceCenterEmail: input.serviceCenterEmail,
+    serviceCenterName: input.serviceCenterName,
+    technicianName: input.technicianName,
   });
 }
 
@@ -192,10 +151,12 @@ export async function sendManufacturerClaimSubmittedEmail(input: {
   serviceCenterName: string;
   claimAmount: number;
 }) {
-  await sendEmail({
-    to: input.manufacturerEmail,
-    subject: `New warranty claim submitted: ${input.claimNumber}`,
-    text: `Hello ${input.manufacturerName}, claim ${input.claimNumber} for ticket ${input.ticketNumber} was submitted by ${input.serviceCenterName}. Claimed amount: ${formatInr(input.claimAmount)}.`,
+  await onClaimSubmitted({
+    manufacturerEmail: input.manufacturerEmail,
+    claimNumber: input.claimNumber,
+    ticketNumber: input.ticketNumber,
+    serviceCenterName: input.serviceCenterName,
+    claimAmount: input.claimAmount,
   });
 }
 
@@ -204,11 +165,14 @@ export async function sendServiceCenterClaimApprovedEmail(input: {
   serviceCenterName: string;
   claimNumber: string;
   approvedAmount: number;
+  serviceCenterPhone?: string;
 }) {
-  await sendEmail({
-    to: input.serviceCenterEmail,
-    subject: `Claim approved: ${input.claimNumber}`,
-    text: `Hello ${input.serviceCenterName}, claim ${input.claimNumber} has been approved for ${formatInr(input.approvedAmount)}.`,
+  await onClaimApproved({
+    serviceCenterEmail: input.serviceCenterEmail,
+    serviceCenterName: input.serviceCenterName,
+    claimNumber: input.claimNumber,
+    approvedAmount: input.approvedAmount,
+    serviceCenterPhone: input.serviceCenterPhone,
   });
 }
 
@@ -217,10 +181,29 @@ export async function sendServiceCenterClaimRejectedEmail(input: {
   serviceCenterName: string;
   claimNumber: string;
   reason: string;
+  serviceCenterPhone?: string;
 }) {
-  await sendEmail({
-    to: input.serviceCenterEmail,
-    subject: `Claim rejected: ${input.claimNumber}`,
-    text: `Hello ${input.serviceCenterName}, claim ${input.claimNumber} has been rejected. Reason: ${input.reason}.`,
+  await onClaimRejected({
+    serviceCenterEmail: input.serviceCenterEmail,
+    serviceCenterName: input.serviceCenterName,
+    claimNumber: input.claimNumber,
+    reason: input.reason,
+    serviceCenterPhone: input.serviceCenterPhone,
   });
+}
+
+export async function sendSlaBreachNotification(input: {
+  ticketNumber: string;
+  serviceCenterEmail?: string | null;
+  manufacturerEmail?: string | null;
+}) {
+  await onSlaBreached({
+    ticketNumber: input.ticketNumber,
+    serviceCenterEmail: input.serviceCenterEmail ?? undefined,
+    manufacturerEmail: input.manufacturerEmail ?? undefined,
+  });
+}
+
+export function formatClaimAmountForNotification(amount: number): string {
+  return formatInr(amount);
 }
