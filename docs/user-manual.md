@@ -368,3 +368,32 @@ Fix:
 - Ensure you created the user in the same Clerk application/environment (dev vs prod)
 - Ensure you’re on the correct domain pointing to the intended Clerk keys
 
+---
+
+## Appendix: Screenshot checklist (recommended additions)
+
+If you want a “complete” manual PDF/handbook, capture and add screenshots for these pages:
+
+- Manufacturer Admin
+  - `/dashboard/manufacturer` (overview)
+  - `/dashboard/manufacturer/products` (product models list + add/edit dialog)
+  - `/dashboard/manufacturer/stickers` (allocation wizard + allocation history)
+  - `/dashboard/manufacturer/service-network` (authorized centers + expanded details)
+  - `/dashboard/manufacturer/claims` (claim review drawer)
+  - `/dashboard/manufacturer/analytics`
+- Service Center Admin
+  - `/dashboard/tickets` (service queue)
+  - `/dashboard/technicians` (with “Add Technician” dialog open)
+  - `/dashboard/claims`
+- Technician
+  - `/dashboard/my-jobs` (assigned tab + job detail sheet)
+  - `/dashboard/schedule`
+  - `/dashboard/my-performance`
+  - `/nfc/100` as technician at each stage (assigned / in-progress / pending confirmation)
+- Customer
+  - `/nfc/100` pending activation (activation form)
+  - `/nfc/100` active product view (no open ticket)
+  - `/nfc/100` ticket tracker (open ticket)
+  - `/nfc/100` confirm resolution screen
+
+Tip: keep screenshots to ~1200–1600px width and crop out browser bookmarks for a cleaner manual.
