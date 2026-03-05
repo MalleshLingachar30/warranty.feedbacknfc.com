@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   CheckCircle2,
   CircleAlert,
   Clock3,
+  Copy,
   Loader2,
   PlayCircle,
   Route,
@@ -346,9 +348,48 @@ export function TechnicianCompleteWork({
 
 interface TechnicianTicketViewProps {
   ticket: TicketView;
+  stickerNumber?: number;
 }
 
-export function TechnicianTicketView({ ticket }: TechnicianTicketViewProps) {
+function buildStickerUrl(stickerNumber: number | null) {
+  if (!stickerNumber) {
+    return null;
+  }
+
+  if (typeof window === "undefined") {
+    return `/nfc/${stickerNumber}`;
+  }
+
+  return `${window.location.origin}/nfc/${stickerNumber}`;
+}
+
+export function TechnicianTicketView({
+  ticket,
+  stickerNumber,
+}: TechnicianTicketViewProps) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle",
+  );
+
+  const customerLink = useMemo(() => buildStickerUrl(stickerNumber ?? null), [
+    stickerNumber,
+  ]);
+
+  const handleCopy = async () => {
+    if (!customerLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(customerLink);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 1500);
+    } catch {
+      setCopyState("failed");
+      window.setTimeout(() => setCopyState("idle"), 1500);
+    }
+  };
+
   return (
     <NfcPublicShell
       title="Technician Ticket Summary"
@@ -371,6 +412,47 @@ export function TechnicianTicketView({ ticket }: TechnicianTicketViewProps) {
           </p>
         </CardContent>
       </Card>
+
+      {ticket.status === "pending_confirmation" ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="text-base text-amber-950">
+              Waiting for customer confirmation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-amber-900/90">
+            <p>
+              The customer must scan/tap the sticker and press{" "}
+              <span className="font-semibold">Confirm Resolution</span> to close
+              the ticket.
+            </p>
+            {customerLink ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button variant="outline" className="h-11" asChild>
+                  <Link href={`/nfc/${stickerNumber}`}>Open customer link</Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-11 gap-2"
+                  onClick={() => void handleCopy()}
+                >
+                  <Copy className="h-4 w-4" />
+                  {copyState === "copied"
+                    ? "Copied"
+                    : copyState === "failed"
+                      ? "Copy failed"
+                      : "Copy link"}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-900/80">
+                Tip: Ask the customer to scan the sticker from their own phone
+                (signed out).
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </NfcPublicShell>
   );
 }

@@ -656,7 +656,12 @@ export default async function NfcStickerPage({ params }: NfcStickerPageProps) {
       );
     }
 
-    return <TechnicianTicketView ticket={ticketView} />;
+    return (
+      <TechnicianTicketView
+        ticket={ticketView}
+        stickerNumber={sticker.stickerNumber}
+      />
+    );
   }
 
   if (
