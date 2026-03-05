@@ -93,8 +93,16 @@ export function CustomerProductView({
   openTicket,
   serviceHistory,
 }: CustomerProductViewProps) {
+  const issueCategories = useMemo(() => {
+    if (productModel.commonIssues.length > 0) {
+      return productModel.commonIssues;
+    }
+
+    return ["General issue"];
+  }, [productModel.commonIssues]);
+
   const [showReportForm, setShowReportForm] = useState(false);
-  const [issueCategory, setIssueCategory] = useState(productModel.commonIssues[0] ?? "");
+  const [issueCategory, setIssueCategory] = useState(issueCategories[0] ?? "General issue");
   const [issueDescription, setIssueDescription] = useState("");
   const [severity, setSeverity] = useState<WarrantyTicketSeverity>("medium");
   const [phoneNumber, setPhoneNumber] = useState(product.customerPhone ?? "");
@@ -252,7 +260,7 @@ export function CustomerProductView({
                   className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                   required
                 >
-                  {productModel.commonIssues.map((issue) => (
+                  {issueCategories.map((issue) => (
                     <option key={issue} value={issue}>
                       {issue}
                     </option>

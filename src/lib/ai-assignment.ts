@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { sendEmail } from "@/lib/notifications";
 
 const WEIGHTS = {
   distance: 0.4,
@@ -143,6 +144,51 @@ function hasCategorySupport(
   );
 }
 
+function hasRequiredSkillMatch(
+  technicianSkills: string[],
+  requiredSkills: string[],
+): boolean {
+  if (requiredSkills.length === 0) {
+    return true;
+  }
+
+  return skillMatchScore(technicianSkills, requiredSkills) > 0;
+}
+
+function hasCustomerPincode(
+  customerPincode: string | null | undefined,
+): boolean {
+  return Boolean(normalizePincode(customerPincode));
+}
+
+async function notifyManualAssignmentRequired(input: {
+  ticketNumber: string;
+  productCategory: string;
+  reason: string;
+  serviceCenterContacts: Array<{
+    email: string | null;
+    name: string;
+  }>;
+}) {
+  const recipients = Array.from(
+    new Set(
+      input.serviceCenterContacts
+        .map((center) => center.email?.trim() ?? "")
+        .filter((email) => email.length > 0),
+    ),
+  );
+
+  if (recipients.length === 0) {
+    return;
+  }
+
+  await sendEmail({
+    to: recipients,
+    subject: `Manual assignment required: ${input.ticketNumber}`,
+    body: `Ticket ${input.ticketNumber} requires manual assignment. Product category: ${input.productCategory}. Reason: ${input.reason}.`,
+  });
+}
+
 export async function assignTechnician(
   ticketId: string,
   options?: {
@@ -201,6 +247,7 @@ export async function assignTechnician(
     select: {
       id: true,
       name: true,
+      email: true,
       pincode: true,
       serviceRadiusKm: true,
       supportedCategories: true,
@@ -247,6 +294,13 @@ export async function assignTechnician(
       }),
     ]);
 
+    void notifyManualAssignmentRequired({
+      ticketNumber: ticket.ticketNumber,
+      productCategory,
+      reason: "No authorized nearby service center found.",
+      serviceCenterContacts: categoryCompatibleCenters,
+    });
+
     return {
       status: "escalated",
       ticketId,
@@ -288,11 +342,14 @@ export async function assignTechnician(
         ? tech.maxConcurrentJobs
         : defaultMaxConcurrentJobs;
 
-    return tech.activeJobCount < maxJobs;
+    return (
+      tech.activeJobCount < maxJobs &&
+      hasRequiredSkillMatch(tech.skills, requiredSkills)
+    );
   });
 
   // 4) Score and rank technicians.
-  const rankedCandidates = filteredTechnicians
+  const rawRankedCandidates = filteredTechnicians
     .map<TechnicianRankingItem>((tech) => {
       const estimatedDistanceKm = estimateDistanceKm(
         tech.serviceCenter.pincode,
@@ -326,10 +383,26 @@ export async function assignTechnician(
         breakdown,
       };
     })
-    .sort(
-      (left, right) =>
-        right.breakdown.weightedScore - left.breakdown.weightedScore,
-    );
+    .sort((left, right) => {
+      const weightedDelta =
+        right.breakdown.weightedScore - left.breakdown.weightedScore;
+
+      if (weightedDelta !== 0) {
+        return weightedDelta;
+      }
+
+      return left.breakdown.estimatedDistanceKm - right.breakdown.estimatedDistanceKm;
+    });
+
+  const rankedCandidates = hasCustomerPincode(customerPincode)
+    ? rawRankedCandidates
+    : [...rawRankedCandidates].sort((left, right) => {
+        if (right.breakdown.workload !== left.breakdown.workload) {
+          return right.breakdown.workload - left.breakdown.workload;
+        }
+
+        return right.breakdown.weightedScore - left.breakdown.weightedScore;
+      });
 
   // 5) Assign top-scored technician.
   const bestMatch = rankedCandidates[0];
@@ -361,6 +434,13 @@ export async function assignTechnician(
         },
       }),
     ]);
+
+    void notifyManualAssignmentRequired({
+      ticketNumber: ticket.ticketNumber,
+      productCategory,
+      reason: "No available technician met matching criteria.",
+      serviceCenterContacts: nearbyCenters,
+    });
 
     return {
       status: "escalated",
