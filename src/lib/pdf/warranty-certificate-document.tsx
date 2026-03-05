@@ -1,7 +1,7 @@
 import {
   Document,
   type DocumentProps,
-  Image,
+  Image as PdfImage,
   Page,
   StyleSheet,
   Text,
@@ -140,7 +140,7 @@ export function WarrantyCertificateDocument({
             <Text style={styles.certificateNumber}>{certificateNumber}</Text>
           </View>
           {organizationLogoUrl ? (
-            <Image src={organizationLogoUrl} alt="Organization logo" style={styles.logo} />
+            <PdfImage src={organizationLogoUrl} style={styles.logo} />
           ) : null}
         </View>
 
@@ -183,7 +183,7 @@ export function WarrantyCertificateDocument({
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Scan for Service</Text>
           <View style={styles.qrWrap}>
-            <Image src={qrDataUrl} alt="QR code" style={styles.qrImage} />
+            <PdfImage src={qrDataUrl} style={styles.qrImage} />
             <View style={styles.qrText}>
               <Text>Tap/scan this QR to open the product service page.</Text>
               <Text>{nfcUrl}</Text>

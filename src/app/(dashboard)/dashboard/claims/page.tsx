@@ -1,9 +1,11 @@
 import { CircleCheckBig, CircleDollarSign, CircleOff, ClipboardList } from "lucide-react";
 import { type ClaimStatus } from "@prisma/client";
+import Link from "next/link";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -193,12 +195,13 @@ export default async function ServiceCenterClaimsPage() {
                 <TableHead>Approved</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Submitted</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {claims.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground">
+                  <TableCell colSpan={9} className="text-muted-foreground">
                     No claims have been generated for this service-center
                     organization yet.
                   </TableCell>
@@ -245,6 +248,26 @@ export default async function ServiceCenterClaimsPage() {
                       {(claim.submittedAt ?? claim.createdAt).toLocaleDateString(
                         "en-IN",
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        {claim.status === "auto_generated" ? (
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/dashboard/claims/${claim.id}`}>
+                              Review & Submit
+                            </Link>
+                          </Button>
+                        ) : null}
+                        <Button asChild size="sm" variant="ghost">
+                          <a
+                            href={`/api/claim/${claim.id}/report?download=1`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            PDF
+                          </a>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

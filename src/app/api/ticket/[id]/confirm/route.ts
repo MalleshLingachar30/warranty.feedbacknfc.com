@@ -5,7 +5,6 @@ import { db as prisma } from "@/lib/db";
 import { runSlaSweep } from "@/lib/sla-engine";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
-  sendManufacturerClaimSubmittedEmail,
   sendTechnicianResolutionConfirmedNotification,
 } from "@/lib/warranty-notifications";
 
@@ -574,43 +573,6 @@ export async function POST(request: Request, context: RouteContext) {
           generatedClaim,
         };
       });
-
-      if (result.generatedClaim) {
-        const claimNotification = await prisma.warrantyClaim.findUnique({
-          where: {
-            id: result.generatedClaim.id,
-          },
-          select: {
-            claimNumber: true,
-            totalClaimAmount: true,
-            manufacturerOrg: {
-              select: {
-                name: true,
-                contactEmail: true,
-              },
-            },
-            serviceCenterOrg: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        });
-
-        const manufacturerEmail =
-          claimNotification?.manufacturerOrg.contactEmail ?? "";
-
-        if (claimNotification && manufacturerEmail) {
-          void sendManufacturerClaimSubmittedEmail({
-            manufacturerEmail,
-            manufacturerName: claimNotification.manufacturerOrg.name,
-            claimNumber: claimNotification.claimNumber,
-            ticketNumber: ticket.ticketNumber,
-            serviceCenterName: claimNotification.serviceCenterOrg.name,
-            claimAmount: toNumber(claimNotification.totalClaimAmount),
-          });
-        }
-      }
 
       if (ticket.assignedTechnician?.phone) {
         void sendTechnicianResolutionConfirmedNotification({

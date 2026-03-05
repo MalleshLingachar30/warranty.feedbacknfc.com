@@ -1,7 +1,7 @@
 import {
   Document,
   type DocumentProps,
-  Image,
+  Image as PdfImage,
   Page,
   StyleSheet,
   Text,
@@ -309,10 +309,9 @@ export function ClaimReportDocument({
           {photoUrls.length > 0 ? (
             <View style={styles.photoGrid}>
               {photoUrls.slice(0, 6).map((photoUrl, index) => (
-                <Image
+                <PdfImage
                   key={`${photoUrl}-${index}`}
                   src={photoUrl}
-                  alt="Claim photo"
                   style={styles.photo}
                 />
               ))}

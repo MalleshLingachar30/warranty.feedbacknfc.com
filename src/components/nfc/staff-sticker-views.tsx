@@ -1,16 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  Camera,
   CheckCircle2,
   CircleAlert,
   Clock3,
   Copy,
   Loader2,
+  Plus,
   PlayCircle,
   Route,
   ScanSearch,
+  Trash2,
   Wrench,
 } from "lucide-react";
 
@@ -25,6 +28,65 @@ import { Textarea } from "@/components/ui/textarea";
 
 function statusLabel(status: string) {
   return status.replace(/_/g, " ");
+}
+
+interface UploadPhotoResponse {
+  error?: string;
+  urls?: string[];
+  url?: string | null;
+}
+
+interface PartSelection {
+  id: string;
+  catalogPartId: string;
+  cost: string;
+  quantity: string;
+}
+
+function createPartSelection(part?: {
+  id: string;
+  typicalCost: number;
+}): PartSelection {
+  return {
+    id: crypto.randomUUID(),
+    catalogPartId: part?.id ?? "",
+    cost: String(part?.typicalCost ?? 0),
+    quantity: "1",
+  };
+}
+
+async function uploadPhotos(files: File[]): Promise<string[]> {
+  if (files.length === 0) {
+    return [];
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => formData.append("photos", file));
+
+  const response = await fetch("/api/upload/photo", {
+    method: "POST",
+    body: formData,
+  });
+
+  const payload = (await response.json()) as UploadPhotoResponse;
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to upload photos.");
+  }
+
+  const urls = Array.isArray(payload.urls)
+    ? payload.urls.filter((entry): entry is string => typeof entry === "string")
+    : [];
+
+  if (urls.length > 0) {
+    return urls;
+  }
+
+  if (typeof payload.url === "string" && payload.url.trim().length > 0) {
+    return [payload.url];
+  }
+
+  return [];
 }
 
 interface TechnicianAssetInfoProps {
@@ -216,6 +278,13 @@ export function TechnicianCompleteWork({
 }: TechnicianCompleteWorkProps) {
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [laborHours, setLaborHours] = useState("1");
+  const [beforePhotos, setBeforePhotos] = useState<File[]>([]);
+  const [afterPhotos, setAfterPhotos] = useState<File[]>([]);
+  const [parts, setParts] = useState<PartSelection[]>(
+    ticket.partsCatalog.length > 0
+      ? [createPartSelection(ticket.partsCatalog[0])]
+      : [],
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -224,9 +293,51 @@ export function TechnicianCompleteWork({
     return (
       Boolean(technicianId) &&
       resolutionNotes.trim().length >= 10 &&
-      Number.isFinite(Number.parseFloat(laborHours))
+      Number.isFinite(Number.parseFloat(laborHours)) &&
+      beforePhotos.length + afterPhotos.length <= 10
     );
-  }, [laborHours, resolutionNotes, technicianId]);
+  }, [afterPhotos.length, beforePhotos.length, laborHours, resolutionNotes, technicianId]);
+
+  const updatePhotoFiles = (
+    setState: Dispatch<SetStateAction<File[]>>,
+    files: File[],
+  ) => {
+    if (files.length > 5) {
+      setState(files.slice(0, 5));
+      setError("Upload up to 5 photos per section.");
+      return;
+    }
+
+    setError(null);
+    setState(files);
+  };
+
+  const handlePartChange = (
+    partId: string,
+    updates: Partial<PartSelection>,
+  ) => {
+    setParts((previous) =>
+      previous.map((part) => {
+        if (part.id !== partId) {
+          return part;
+        }
+
+        const merged = { ...part, ...updates };
+
+        if (updates.catalogPartId) {
+          const matched = ticket.partsCatalog.find(
+            (catalogPart) => catalogPart.id === updates.catalogPartId,
+          );
+
+          if (matched) {
+            merged.cost = String(matched.typicalCost);
+          }
+        }
+
+        return merged;
+      }),
+    );
+  };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -241,11 +352,39 @@ export function TechnicianCompleteWork({
       return;
     }
 
+    if (beforePhotos.length + afterPhotos.length > 10) {
+      setError("Upload up to 10 total before/after photos.");
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage(null);
     setError(null);
 
     try {
+      const [beforePhotoUrls, afterPhotoUrls] = await Promise.all([
+        uploadPhotos(beforePhotos),
+        uploadPhotos(afterPhotos),
+      ]);
+
+      const partsUsed = parts
+        .map((entry) => {
+          const catalogPart = ticket.partsCatalog.find(
+            (catalog) => catalog.id === entry.catalogPartId,
+          );
+
+          return {
+            partName: catalogPart?.name ?? "",
+            partNumber: catalogPart?.partNumber ?? "",
+            cost: Number.parseFloat(entry.cost),
+            quantity: Math.max(
+              1,
+              Math.floor(Number.parseFloat(entry.quantity) || 1),
+            ),
+          };
+        })
+        .filter((part) => part.partName && Number.isFinite(part.cost));
+
       const response = await fetch(`/api/ticket/${ticket.id}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,9 +392,9 @@ export function TechnicianCompleteWork({
           technicianId,
           resolutionNotes: resolutionNotes.trim(),
           laborHours: Number.parseFloat(laborHours) || 0,
-          beforePhotos: [],
-          afterPhotos: [],
-          partsUsed: [],
+          beforePhotos: beforePhotoUrls,
+          afterPhotos: afterPhotoUrls,
+          partsUsed,
         }),
       });
 
@@ -319,6 +458,143 @@ export function TechnicianCompleteWork({
             value={laborHours}
             onChange={(event) => setLaborHours(event.target.value)}
           />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-800">
+            Before Photos (up to 5)
+          </label>
+          <Input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={(event) =>
+              updatePhotoFiles(
+                setBeforePhotos,
+                Array.from(event.target.files ?? []),
+              )
+            }
+          />
+          {beforePhotos.length > 0 ? (
+            <div className="space-y-1 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2 text-xs text-slate-600">
+              {beforePhotos.map((file) => (
+                <p key={`before-${file.name}`} className="flex items-center gap-1">
+                  <Camera className="h-3 w-3" />
+                  {file.name}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-800">
+            After Photos (up to 5)
+          </label>
+          <Input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={(event) =>
+              updatePhotoFiles(setAfterPhotos, Array.from(event.target.files ?? []))
+            }
+          />
+          {afterPhotos.length > 0 ? (
+            <div className="space-y-1 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2 text-xs text-slate-600">
+              {afterPhotos.map((file) => (
+                <p key={`after-${file.name}`} className="flex items-center gap-1">
+                  <Camera className="h-3 w-3" />
+                  {file.name}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-800">Parts Used</label>
+            {ticket.partsCatalog.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 gap-1 px-2 text-xs"
+                onClick={() =>
+                  setParts((previous) => [
+                    ...previous,
+                    createPartSelection(ticket.partsCatalog[0]),
+                  ])
+                }
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Part
+              </Button>
+            ) : null}
+          </div>
+
+          {ticket.partsCatalog.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              No part catalog is configured for this product model.
+            </p>
+          ) : parts.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              No parts selected.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {parts.map((part) => (
+                <div key={part.id} className="rounded-md border border-slate-200 p-3">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <select
+                      value={part.catalogPartId}
+                      onChange={(event) =>
+                        handlePartChange(part.id, {
+                          catalogPartId: event.target.value,
+                        })
+                      }
+                      className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                    >
+                      {ticket.partsCatalog.map((catalogPart) => (
+                        <option key={catalogPart.id} value={catalogPart.id}>
+                          {catalogPart.name}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={part.cost}
+                      onChange={(event) =>
+                        handlePartChange(part.id, { cost: event.target.value })
+                      }
+                    />
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={part.quantity}
+                      onChange={(event) =>
+                        handlePartChange(part.id, { quantity: event.target.value })
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="mt-2 h-8 gap-1 px-2 text-xs text-rose-600 hover:text-rose-700"
+                    onClick={() =>
+                      setParts((previous) =>
+                        previous.filter((entry) => entry.id !== part.id),
+                      )
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {message ? (

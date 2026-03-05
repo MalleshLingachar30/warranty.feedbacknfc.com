@@ -246,6 +246,12 @@ function mapTicketToView(
       actorRole: event.actorRole,
       createdAt: event.createdAt.toISOString(),
     })),
+    partsCatalog: productModel.partsCatalog.map((part) => ({
+      id: part.id,
+      name: part.name,
+      partNumber: part.partNumber,
+      typicalCost: part.typicalCost,
+    })),
     productSummary: {
       serialNumber: product.serialNumber,
       modelName: productModel.name,

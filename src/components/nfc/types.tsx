@@ -75,6 +75,12 @@ export interface TicketView {
   assignedTechnicianPhone: string | null;
   etaLabel: string | null;
   timeline: TicketTimelineView[];
+  partsCatalog: Array<{
+    id: string;
+    name: string;
+    partNumber: string;
+    typicalCost: number;
+  }>;
   productSummary?: {
     serialNumber: string | null;
     modelName: string | null;

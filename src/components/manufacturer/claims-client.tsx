@@ -87,7 +87,6 @@ function isClaimVisible(claim: ClaimQueueRow, filter: ClaimFilter) {
 
   if (filter === "pending") {
     return (
-      claim.status === "auto_generated" ||
       claim.status === "submitted" ||
       claim.status === "under_review"
     );

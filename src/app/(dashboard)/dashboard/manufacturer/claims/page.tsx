@@ -243,7 +243,6 @@ export default async function ClaimsPage() {
         manufacturerOrgId: organizationId,
         status: {
           in: [
-            "auto_generated",
             "submitted",
             "under_review",
             "approved",
