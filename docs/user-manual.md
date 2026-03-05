@@ -3,8 +3,14 @@
 **App:** `warranty.feedbacknfc.com`  
 **Last updated:** 2026-03-05  
 **Scope:** Manufacturer Admin, Service Center Admin, Technician, Customer  
+**Current release snapshot:** Batch 1 + Batch 2 + Batch 3 on production
 
 > This is a living document. Some screens/metrics may change as features ship.
+
+Release reference:
+
+- Git commit: `3cb6a78`
+- Production URL: `https://warranty.feedbacknfc.com`
 
 ---
 
@@ -343,6 +349,12 @@ Signed-in customers now have a dedicated dashboard:
 - **Support** quick links
 - **Register Another Product** entry card
 
+Dashboard data binding logic:
+
+- Products are linked by `customerId`, verified phone, or verified email
+- Tickets are linked by `reportedByUserId`, product ownership, and verified contact channels
+- This allows a customer to see historical records even if old tickets were created before full account linking
+
 ### Customer actions by state
 
 1. **Pending activation**
@@ -373,6 +385,12 @@ On customer-facing sticker pages (`/nfc/{id}`):
   - product view
   - ticket tracker
   - resolution confirmation page
+
+Notification language behavior:
+
+- Customer SMS templates use `users.language_preference`
+- Current supported SMS languages: `en` and `hi`
+- Unsupported language values currently fall back to English
 
 ### Warranty certificate PDF
 
@@ -462,6 +480,10 @@ Use this sticker URL as a test card:
    - Switch back to English using header toggle
    - Set customer language preference to Hindi in customer settings
    - Trigger customer SMS events (activation / enroute / started / completed) and verify Hindi template
+11. **Dashboard checks (data matching edge cases)**
+   - Activate product with phone only, then sign in with matching verified phone
+   - Confirm product appears in `/dashboard/customer`
+   - Create ticket anonymously from `/nfc/100` and confirm it appears in customer dashboard after sign-in
 
 If you’re using the E2E seeding script locally, you may see output like:
 
@@ -470,6 +492,10 @@ If you’re using the E2E seeding script locally, you may see output like:
 ---
 
 ## 11) GAP compliance update (Batch 1 + Batch 2 + Batch 3)
+
+Detailed tracker document:
+
+- `docs/warranty-compliance-status.md`
 
 ### Batch 1 (already implemented)
 
@@ -650,6 +676,7 @@ Checks:
 - Confirm production uses correct Clerk instance/keys
 - Confirm Clerk app allows your domain (`warranty.feedbacknfc.com`)
 - Confirm Vercel env vars are set for the production deployment
+- Confirm `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` belong to the same Clerk instance
 
 ### Sign-in title shows something unexpected (e.g., “Gift Admin”)
 
@@ -665,6 +692,14 @@ Fix:
 
 - Ensure you created the user in the same Clerk application/environment (dev vs prod)
 - Ensure you’re on the correct domain pointing to the intended Clerk keys
+
+### Customer dashboard is empty after sign-in
+
+Checks:
+
+- Confirm customer has verified email/phone in Clerk
+- Confirm product/ticket records contain matching phone/email or customerId
+- Open `Dashboard → Settings` and confirm profile data matches expected activation data
 
 ---
 
@@ -690,7 +725,9 @@ If you want a “complete” manual PDF/handbook, capture and add screenshots fo
   - `/dashboard/my-performance`
   - `/nfc/100` as technician at each stage (assigned / in-progress / pending confirmation)
 - Customer
+  - `/dashboard/customer` (overview with My Products/My Tickets/Support)
   - `/nfc/100` pending activation (activation form)
+  - `/nfc/100?lang=hi` (Hindi language toggle state)
   - `/nfc/100` active product view (no open ticket)
   - `/nfc/100` active product view with certificate button
   - `/nfc/100` ticket tracker (open ticket)

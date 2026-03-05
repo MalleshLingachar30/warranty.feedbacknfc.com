@@ -1,4 +1,4 @@
-# Clerk Auth Flow (Local Testing)
+# Clerk Auth Flow (Local + Production Validation)
 
 This project already includes Clerk integration in these paths:
 
@@ -37,6 +37,12 @@ npm run dev
 2. After sign-up, the app redirects to `/dashboard`.
 3. Open `http://localhost:3000/dashboard` while signed out to confirm redirect to sign-in.
 
+Expected redirect behavior after sign-in:
+
+- `manufacturer_admin` → `/dashboard/manufacturer`
+- `customer` → `/dashboard/customer`
+- other roles → `/dashboard` (role-specific navigation cards)
+
 ## 3) Role-based testing (all dashboards/features)
 
 In **development mode**, open `/dashboard` and use the **Development Role Switcher**.
@@ -51,6 +57,16 @@ In **development mode**, open `/dashboard` and use the **Development Role Switch
 
 If role-based nav does not update immediately, sign out and sign in again once.
 
+## 3.1) Create DB rows for Clerk users (role sync)
+
+If a Clerk user exists but role access is broken, run:
+
+```bash
+npm run bootstrap:clerk-users
+```
+
+This syncs missing `users` table rows for existing Clerk users.
+
 ## 4) Manufacturer feature routes to validate
 
 After setting role to `manufacturer_admin`, verify:
@@ -60,6 +76,16 @@ After setting role to `manufacturer_admin`, verify:
 - `/dashboard/manufacturer/stickers`
 - `/dashboard/manufacturer/service-network`
 - `/dashboard/manufacturer/claims`
+
+## 4.1) Customer routes to validate (Batch 3)
+
+After setting role to `customer`, verify:
+
+- `/dashboard/customer`
+- `/dashboard/my-products`
+- `/dashboard/my-tickets`
+- `/dashboard/support`
+- `/nfc/100?lang=en` and `/nfc/100?lang=hi`
 
 ## 5) Notes
 
@@ -72,6 +98,12 @@ NEXT_PUBLIC_DISABLE_ROLE_GUARD=true
 ```
 
 Do not use that bypass in production.
+
+Production sanity checks (for “wrong app name” or “user not found” issues):
+
+- Confirm production domain uses production Clerk keys
+- Confirm created users exist in the same Clerk instance (dev/prod mismatch is the most common root cause)
+- If sign-in title shows another app name, update Clerk app branding for the active instance
 
 ## 6) Vercel environment key split (recommended)
 
