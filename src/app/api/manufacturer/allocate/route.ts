@@ -25,6 +25,12 @@ type AllocatePayload = {
 
 const MAX_ALLOCATION_BATCH = 2000;
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 function buildStickerSerial(stickerNumber: number) {
   return `FNFC-${String(stickerNumber).padStart(6, "0")}`;
 }
@@ -209,6 +215,13 @@ export async function POST(request: Request) {
 
     if (!productModelId) {
       throw new ApiError("Product model is required.", 400);
+    }
+
+    if (!isUuid(productModelId)) {
+      throw new ApiError(
+        "Selected product model is invalid. Refresh the page and choose a real product model.",
+        400,
+      );
     }
 
     if (!serialPrefix) {
@@ -473,6 +486,7 @@ export async function POST(request: Request) {
       inventory,
     });
   } catch (error) {
+    console.error("Manufacturer sticker allocation full error", error);
     console.error("Manufacturer sticker allocation failed", {
       organizationId: organizationId || null,
       productModelId: productModelId || null,
@@ -488,6 +502,10 @@ export async function POST(request: Request) {
         error instanceof Prisma.PrismaClientKnownRequestError
           ? error.code
           : null,
+      prismaMeta:
+        error instanceof Prisma.PrismaClientKnownRequestError
+          ? error.meta ?? null
+          : null,
     });
 
     if (
@@ -500,6 +518,19 @@ export async function POST(request: Request) {
             "Sticker allocation timed out while rebinding existing units. Please retry, or split very large rebinds into smaller ranges.",
         },
         { status: 503 },
+      );
+    }
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2023"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Allocation request contains an invalid identifier. Refresh the page and select a valid product model.",
+        },
+        { status: 400 },
       );
     }
 

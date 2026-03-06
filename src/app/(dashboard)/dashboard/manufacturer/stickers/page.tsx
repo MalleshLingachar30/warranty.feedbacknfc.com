@@ -8,11 +8,6 @@ import {
 } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
-import {
-  allocationHistorySeed,
-  productCatalogSeed,
-  stickerInventorySeed,
-} from "@/lib/mock/manufacturer-dashboard";
 
 import {
   buildAllocationDisplayId,
@@ -29,53 +24,6 @@ const StickerWizardClient = dynamic(
     loading: () => <ClientPageLoading rows={7} />,
   },
 );
-
-function mapSeedModels(): ManufacturerProductModel[] {
-  return productCatalogSeed.map((item) => ({
-    id: item.id,
-    name: item.name,
-    category: item.category,
-    subCategory: item.subCategory,
-    modelNumber: item.modelNumber,
-    description: item.description,
-    imageUrl: item.imageUrl,
-    warrantyDurationMonths: item.warrantyDurationMonths,
-    totalUnits: item.totalUnits,
-    commonIssues: item.commonIssues,
-    requiredSkills: item.requiredSkills,
-  }));
-}
-
-function mapSeedHistory(): AllocationHistoryRow[] {
-  return allocationHistorySeed.map((entry) => {
-    const productModel = productCatalogSeed.find(
-      (model) => model.id === entry.productModelId,
-    );
-
-    return {
-      id: entry.id,
-      allocationId: entry.allocationId,
-      date: entry.date,
-      stickerStart: entry.stickerStart,
-      stickerEnd: entry.stickerEnd,
-      serialPrefix: entry.serialPrefix,
-      serialStart: entry.serialStart,
-      serialEnd: entry.serialEnd,
-      productModelId: entry.productModelId,
-      productModelName: productModel?.name ?? "Unknown Model",
-      count: entry.stickerEnd - entry.stickerStart + 1,
-    };
-  });
-}
-
-function mapSeedInventory(): StickerInventorySummary {
-  return {
-    totalAllocated: stickerInventorySeed.totalAllocated,
-    totalBound: stickerInventorySeed.totalBound,
-    totalActivated: stickerInventorySeed.totalActivated,
-    totalAvailable: stickerInventorySeed.totalAvailable,
-  };
-}
 
 export default async function ManufacturerStickersPage() {
   const { organizationId } = await resolveManufacturerPageContext();
@@ -212,18 +160,6 @@ export default async function ManufacturerStickersPage() {
     stickerConfig = normalizeManufacturerStickerConfig(
       organization?.settings ?? {},
     );
-  }
-
-  if (productModels.length === 0) {
-    productModels = mapSeedModels();
-  }
-
-  if (allocationHistory.length === 0) {
-    allocationHistory = mapSeedHistory();
-  }
-
-  if (inventory.totalAllocated === 0 && inventory.totalBound === 0) {
-    inventory = mapSeedInventory();
   }
 
   return (

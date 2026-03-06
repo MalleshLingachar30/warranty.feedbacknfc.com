@@ -236,6 +236,7 @@ export function StickerWizardClient({
       : effectiveStickerVariant === "premium"
         ? "Premium"
         : "Standard (up to 80°C)";
+  const hasProductModels = initialProductModels.length > 0;
 
   const goToNextStep = () => {
     setWizardError(null);
@@ -245,8 +246,12 @@ export function StickerWizardClient({
       return;
     }
 
-    if (step === 2 && !wizard.productModelId) {
-      setWizardError("Select a product model before continuing.");
+    if (step === 2 && (!wizard.productModelId || !isProbablyUuid(wizard.productModelId))) {
+      setWizardError(
+        hasProductModels
+          ? "Select a valid product model before continuing."
+          : "Create a product model before allocating stickers.",
+      );
       return;
     }
 
@@ -402,6 +407,13 @@ export function StickerWizardClient({
 
           {step === 1 ? (
             <div className="space-y-4">
+              {!hasProductModels ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Create a product model in the Products section before starting a
+                  sticker allocation.
+                </div>
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">
@@ -502,6 +514,7 @@ export function StickerWizardClient({
                   }))
                 }
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={!hasProductModels}
               >
                 {initialProductModels.length === 0 ? (
                   <option value="">No product models found</option>
@@ -512,6 +525,11 @@ export function StickerWizardClient({
                   </option>
                 ))}
               </select>
+              {!hasProductModels ? (
+                <p className="text-sm text-muted-foreground">
+                  No real product models are available for this manufacturer yet.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
