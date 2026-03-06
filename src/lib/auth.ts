@@ -1,12 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
+import { getCachedAuth } from "@/lib/clerk-session";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 const REQUIRED_ROLE = "manufacturer_admin";
 
-export async function ensureManufacturerAdmin() {
-  const authData = await auth();
+export const ensureManufacturerAdmin = cache(async () => {
+  const authData = await getCachedAuth();
 
   if (!authData.userId) {
     authData.redirectToSignIn();
@@ -31,4 +32,4 @@ export async function ensureManufacturerAdmin() {
   }
 
   return authData;
-}
+});

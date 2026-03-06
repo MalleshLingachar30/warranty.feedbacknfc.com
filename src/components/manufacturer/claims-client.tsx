@@ -86,10 +86,7 @@ function isClaimVisible(claim: ClaimQueueRow, filter: ClaimFilter) {
   }
 
   if (filter === "pending") {
-    return (
-      claim.status === "submitted" ||
-      claim.status === "under_review"
-    );
+    return claim.status === "submitted" || claim.status === "under_review";
   }
 
   return claim.status === filter;
@@ -103,8 +100,10 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
   const [approvedAmount, setApprovedAmount] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [claimDetailError, setClaimDetailError] = useState<string | null>(null);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isLoadingClaimDetail, setIsLoadingClaimDetail] = useState(false);
 
   const filteredClaims = useMemo(
     () => claims.filter((claim) => isClaimVisible(claim, filter)),
@@ -113,13 +112,58 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
 
   const selectedClaim =
     claims.find((claim) => claim.id === selectedClaimId) ?? null;
+  const selectedDocumentation = selectedClaim?.documentation ?? null;
+
+  const loadClaimDetail = async (claimId: string) => {
+    setClaimDetailError(null);
+    setIsLoadingClaimDetail(true);
+
+    try {
+      const response = await fetch(`/api/manufacturer/claims/${claimId}`);
+      const json = (await response.json()) as {
+        error?: string;
+        documentation?: ClaimQueueRow["documentation"];
+      };
+
+      if (!response.ok || !json.documentation) {
+        throw new Error(json.error ?? "Unable to load claim details.");
+      }
+
+      const documentation = json.documentation;
+
+      setClaims((current) =>
+        current.map((claim) =>
+          claim.id === claimId
+            ? {
+                ...claim,
+                documentation,
+              }
+            : claim,
+        ),
+      );
+    } catch (error) {
+      setClaimDetailError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load claim details.",
+      );
+    } finally {
+      setIsLoadingClaimDetail(false);
+    }
+  };
 
   const openClaimDetail = (claimId: string) => {
     setSelectedClaimId(claimId);
     setApprovedAmount("");
     setRejectionReason("");
     setActionError(null);
+    setClaimDetailError(null);
     setIsDialogOpen(true);
+
+    const claim = claims.find((entry) => entry.id === claimId);
+    if (claim && !claim.documentation) {
+      void loadClaimDetail(claimId);
+    }
   };
 
   const approveClaim = async () => {
@@ -349,177 +393,221 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4 text-sm">
-                      <div>
-                        <p className="mb-2 text-xs font-medium text-muted-foreground">
-                          Photos
+                      {isLoadingClaimDetail && !selectedDocumentation ? (
+                        <p className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
+                          Loading claim documentation...
                         </p>
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          {selectedClaim.documentation.photos.length > 0 ? (
-                            selectedClaim.documentation.photos.map((photo) => (
-                              <div
-                                key={photo}
-                                className="flex min-h-24 items-center justify-center rounded-md border bg-background px-2 text-center text-xs"
-                              >
-                                {photo}
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              No photos available.
+                      ) : claimDetailError && !selectedDocumentation ? (
+                        <p className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">
+                          {claimDetailError}
+                        </p>
+                      ) : selectedDocumentation ? (
+                        <>
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Photos
                             </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="mb-2 text-xs font-medium text-muted-foreground">
-                          Timestamps
-                        </p>
-                        <ul className="space-y-1">
-                          {selectedClaim.documentation.timeline.length > 0 ? (
-                            selectedClaim.documentation.timeline.map((timeline) => (
-                                <li
-                                  key={`${timeline.label}-${timeline.at}`}
-                                  className="rounded-md border bg-background p-2"
-                                >
-                                  <p className="font-medium">{timeline.label}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(timeline.at).toLocaleString("en-IN")}
-                                  </p>
-                                </li>
-                              ))
-                          ) : selectedClaim.documentation.timestamps.length > 0 ? (
-                            selectedClaim.documentation.timestamps.map((timestamp) => (
-                              <li key={timestamp} className="rounded-md border bg-background p-2">
-                                {new Date(timestamp).toLocaleString("en-IN")}
-                              </li>
-                            ))
-                          ) : (
-                            <li className="rounded-md border bg-background p-2 text-muted-foreground">
-                              No timestamps provided.
-                            </li>
-                          )}
-                        </ul>
-                      </div>
-
-                      <div>
-                        <p className="mb-2 text-xs font-medium text-muted-foreground">
-                          Parts Used
-                        </p>
-                        {selectedClaim.documentation.partsDetailed.length > 0 ? (
-                          <div className="space-y-2">
-                            {selectedClaim.documentation.partsDetailed.map((part) => (
-                              <div
-                                key={`${part.partName}-${part.partNumber}-${part.quantity}`}
-                                className="rounded-md border bg-background p-2 text-xs"
-                              >
-                                <p className="font-medium">{part.partName}</p>
-                                <p className="text-muted-foreground">
-                                  {part.partNumber || "No part number"} • Qty {part.quantity}
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              {selectedDocumentation.photos.length > 0 ? (
+                                selectedDocumentation.photos.map((photo) => (
+                                  <div
+                                    key={photo}
+                                    className="flex min-h-24 items-center justify-center rounded-md border bg-background px-2 text-center text-xs"
+                                  >
+                                    {photo}
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-muted-foreground">
+                                  No photos available.
                                 </p>
-                                <p>{money.format(part.cost)} each</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Timestamps
+                            </p>
+                            <ul className="space-y-1">
+                              {selectedDocumentation.timeline.length > 0 ? (
+                                selectedDocumentation.timeline.map(
+                                  (timeline) => (
+                                    <li
+                                      key={`${timeline.label}-${timeline.at}`}
+                                      className="rounded-md border bg-background p-2"
+                                    >
+                                      <p className="font-medium">
+                                        {timeline.label}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {new Date(timeline.at).toLocaleString(
+                                          "en-IN",
+                                        )}
+                                      </p>
+                                    </li>
+                                  ),
+                                )
+                              ) : selectedDocumentation.timestamps.length >
+                                0 ? (
+                                selectedDocumentation.timestamps.map(
+                                  (timestamp) => (
+                                    <li
+                                      key={timestamp}
+                                      className="rounded-md border bg-background p-2"
+                                    >
+                                      {new Date(timestamp).toLocaleString(
+                                        "en-IN",
+                                      )}
+                                    </li>
+                                  ),
+                                )
+                              ) : (
+                                <li className="rounded-md border bg-background p-2 text-muted-foreground">
+                                  No timestamps provided.
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Parts Used
+                            </p>
+                            {selectedDocumentation.partsDetailed.length > 0 ? (
+                              <div className="space-y-2">
+                                {selectedDocumentation.partsDetailed.map(
+                                  (part) => (
+                                    <div
+                                      key={`${part.partName}-${part.partNumber}-${part.quantity}`}
+                                      className="rounded-md border bg-background p-2 text-xs"
+                                    >
+                                      <p className="font-medium">
+                                        {part.partName}
+                                      </p>
+                                      <p className="text-muted-foreground">
+                                        {part.partNumber || "No part number"} •
+                                        Qty {part.quantity}
+                                      </p>
+                                      <p>{money.format(part.cost)} each</p>
+                                    </div>
+                                  ),
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {selectedClaim.documentation.partsUsed.length > 0 ? (
-                              selectedClaim.documentation.partsUsed.map((part) => (
-                                <span
-                                  key={part}
-                                  className="rounded-full border bg-background px-2 py-1 text-xs"
-                                >
-                                  {part}
-                                </span>
-                              ))
                             ) : (
-                              <span className="text-xs text-muted-foreground">
-                                No parts listed.
-                              </span>
+                              <div className="flex flex-wrap gap-2">
+                                {selectedDocumentation.partsUsed.length > 0 ? (
+                                  selectedDocumentation.partsUsed.map(
+                                    (part) => (
+                                      <span
+                                        key={part}
+                                        className="rounded-full border bg-background px-2 py-1 text-xs"
+                                      >
+                                        {part}
+                                      </span>
+                                    ),
+                                  )
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    No parts listed.
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
-                      </div>
 
-                      <div>
-                        <p className="mb-2 text-xs font-medium text-muted-foreground">
-                          Technician Notes
-                        </p>
-                        <p className="rounded-md border bg-background p-3 leading-relaxed">
-                          {selectedClaim.documentation.technicianNotes}
-                        </p>
-                      </div>
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Technician Notes
+                            </p>
+                            <p className="rounded-md border bg-background p-3 leading-relaxed">
+                              {selectedDocumentation.technicianNotes}
+                            </p>
+                          </div>
 
-                      <div>
-                        <p className="mb-2 text-xs font-medium text-muted-foreground">
-                          Issue Details
-                        </p>
-                        <div className="space-y-1 rounded-md border bg-background p-3 text-xs">
-                          <p>
-                            Category: {selectedClaim.documentation.issueCategory}
-                          </p>
-                          <p>
-                            Severity: {selectedClaim.documentation.issueSeverity}
-                          </p>
-                          <p>{selectedClaim.documentation.issueDescription}</p>
-                        </div>
-                      </div>
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Issue Details
+                            </p>
+                            <div className="space-y-1 rounded-md border bg-background p-3 text-xs">
+                              <p>
+                                Category: {selectedDocumentation.issueCategory}
+                              </p>
+                              <p>
+                                Severity: {selectedDocumentation.issueSeverity}
+                              </p>
+                              <p>{selectedDocumentation.issueDescription}</p>
+                            </div>
+                          </div>
 
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-md border bg-background p-3 text-xs">
-                          <p className="mb-1 font-medium">Customer</p>
-                          <p>{selectedClaim.documentation.customer.name}</p>
-                          <p>{selectedClaim.documentation.customer.phone}</p>
-                          {selectedClaim.documentation.customer.email ? (
-                            <p>{selectedClaim.documentation.customer.email}</p>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-md border bg-background p-3 text-xs">
+                              <p className="mb-1 font-medium">Customer</p>
+                              <p>{selectedDocumentation.customer.name}</p>
+                              <p>{selectedDocumentation.customer.phone}</p>
+                              {selectedDocumentation.customer.email ? (
+                                <p>{selectedDocumentation.customer.email}</p>
+                              ) : null}
+                              {selectedDocumentation.customer.address ? (
+                                <p>{selectedDocumentation.customer.address}</p>
+                              ) : null}
+                            </div>
+                            <div className="rounded-md border bg-background p-3 text-xs">
+                              <p className="mb-1 font-medium">Cost Breakdown</p>
+                              <p>
+                                Parts:{" "}
+                                {money.format(
+                                  selectedDocumentation.costBreakdown.partsCost,
+                                )}
+                              </p>
+                              <p>
+                                Labor:{" "}
+                                {money.format(
+                                  selectedDocumentation.costBreakdown.laborCost,
+                                )}{" "}
+                                (
+                                {selectedDocumentation.costBreakdown.laborHours.toFixed(
+                                  2,
+                                )}
+                                h)
+                              </p>
+                              <p className="font-semibold">
+                                Total:{" "}
+                                {money.format(
+                                  selectedDocumentation.costBreakdown
+                                    .totalClaimAmount,
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          {selectedDocumentation.gpsLocation ? (
+                            <p className="rounded-md border bg-background p-3 text-xs">
+                              Location: {selectedDocumentation.gpsLocation}
+                            </p>
                           ) : null}
-                          {selectedClaim.documentation.customer.address ? (
-                            <p>{selectedClaim.documentation.customer.address}</p>
-                          ) : null}
-                        </div>
-                        <div className="rounded-md border bg-background p-3 text-xs">
-                          <p className="mb-1 font-medium">Cost Breakdown</p>
-                          <p>
-                            Parts:{" "}
-                            {money.format(
-                              selectedClaim.documentation.costBreakdown.partsCost,
-                            )}
-                          </p>
-                          <p>
-                            Labor:{" "}
-                            {money.format(
-                              selectedClaim.documentation.costBreakdown.laborCost,
-                            )}{" "}
-                            ({selectedClaim.documentation.costBreakdown.laborHours.toFixed(2)}h)
-                          </p>
-                          <p className="font-semibold">
-                            Total:{" "}
-                            {money.format(
-                              selectedClaim.documentation.costBreakdown.totalClaimAmount,
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {selectedClaim.documentation.gpsLocation ? (
-                        <p className="rounded-md border bg-background p-3 text-xs">
-                          Location: {selectedClaim.documentation.gpsLocation}
+                        </>
+                      ) : (
+                        <p className="rounded-md border bg-background p-3 text-sm text-muted-foreground">
+                          No documentation is available for this claim yet.
                         </p>
-                      ) : null}
+                      )}
                     </CardContent>
                   </Card>
                 </div>
 
                 <div className="space-y-4">
-                  {selectedClaim.documentation.claimReportUrl ? (
+                  {selectedDocumentation?.claimReportUrl ? (
                     <Card className="bg-muted/20">
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Claim Report</CardTitle>
+                        <CardTitle className="text-base">
+                          Claim Report
+                        </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <Button className="w-full" variant="outline" asChild>
                           <a
-                            href={selectedClaim.documentation.claimReportUrl}
+                            href={selectedDocumentation.claimReportUrl}
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -586,6 +674,12 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
                   </Card>
                 </div>
               </div>
+
+              {claimDetailError && selectedDocumentation ? (
+                <p className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {claimDetailError}
+                </p>
+              ) : null}
 
               {actionError ? (
                 <p className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">

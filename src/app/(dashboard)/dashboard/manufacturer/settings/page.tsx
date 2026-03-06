@@ -40,7 +40,10 @@ function normalizeSeverityHours(value: unknown) {
 
   return {
     low: asNumber(source.low, DEFAULT_SLA_HOURS.responseHoursBySeverity.low),
-    medium: asNumber(source.medium, DEFAULT_SLA_HOURS.responseHoursBySeverity.medium),
+    medium: asNumber(
+      source.medium,
+      DEFAULT_SLA_HOURS.responseHoursBySeverity.medium,
+    ),
     high: asNumber(source.high, DEFAULT_SLA_HOURS.responseHoursBySeverity.high),
     critical: asNumber(
       source.critical,
@@ -58,7 +61,10 @@ function normalizeResolutionSeverityHours(value: unknown) {
       source.medium,
       DEFAULT_SLA_HOURS.resolutionHoursBySeverity.medium,
     ),
-    high: asNumber(source.high, DEFAULT_SLA_HOURS.resolutionHoursBySeverity.high),
+    high: asNumber(
+      source.high,
+      DEFAULT_SLA_HOURS.resolutionHoursBySeverity.high,
+    ),
     critical: asNumber(
       source.critical,
       DEFAULT_SLA_HOURS.resolutionHoursBySeverity.critical,
@@ -83,7 +89,9 @@ function normalizeNotificationEvents(value: unknown) {
 function normalizeSettings(value: unknown) {
   const source = isRecord(value) ? value : {};
   const sla = isRecord(source.sla) ? source.sla : {};
-  const notifications = isRecord(source.notifications) ? source.notifications : {};
+  const notifications = isRecord(source.notifications)
+    ? source.notifications
+    : {};
   const integrations = isRecord(source.integrations) ? source.integrations : {};
 
   return {
@@ -123,41 +131,42 @@ export default async function ManufacturerSettingsPage() {
     );
   }
 
-  const organization = await db.organization.findUnique({
-    where: { id: organizationId },
-    select: {
-      id: true,
-      name: true,
-      contactEmail: true,
-      contactPhone: true,
-      address: true,
-      city: true,
-      state: true,
-      country: true,
-      pincode: true,
-      gstNumber: true,
-      logoUrl: true,
-      settings: true,
-    },
-  });
-
-  const manufacturerAdmins = await db.user.findMany({
-    where: {
-      organizationId,
-      role: "manufacturer_admin",
-    },
-    orderBy: {
-      createdAt: "asc",
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      clerkId: true,
-      isActive: true,
-      createdAt: true,
-    },
-  });
+  const [organization, manufacturerAdmins] = await Promise.all([
+    db.organization.findUnique({
+      where: { id: organizationId },
+      select: {
+        id: true,
+        name: true,
+        contactEmail: true,
+        contactPhone: true,
+        address: true,
+        city: true,
+        state: true,
+        country: true,
+        pincode: true,
+        gstNumber: true,
+        logoUrl: true,
+        settings: true,
+      },
+    }),
+    db.user.findMany({
+      where: {
+        organizationId,
+        role: "manufacturer_admin",
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        clerkId: true,
+        isActive: true,
+        createdAt: true,
+      },
+    }),
+  ]);
 
   if (!organization) {
     return (

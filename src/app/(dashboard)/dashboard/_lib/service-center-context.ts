@@ -1,9 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
-import {
-  resolveOrganizationContext,
-} from "@/lib/org-context";
+import { getCachedAuth } from "@/lib/clerk-session";
+import { resolveOrganizationContext } from "@/lib/org-context";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export type ServiceCenterPageContext = {
@@ -12,46 +11,48 @@ export type ServiceCenterPageContext = {
   dbUserId: string | null;
 };
 
-export async function resolveServiceCenterPageContext(): Promise<ServiceCenterPageContext> {
-  const authData = await auth();
+export const resolveServiceCenterPageContext = cache(
+  async (): Promise<ServiceCenterPageContext> => {
+    const authData = await getCachedAuth();
 
-  if (!authData.userId) {
-    authData.redirectToSignIn();
-  }
-
-  if (process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true") {
-    const hasRequiredRole = authData.userId
-      ? await clerkOrDbHasRole({
-          clerkUserId: authData.userId,
-          orgRole: authData.orgRole,
-          sessionClaims: authData.sessionClaims,
-          requiredRole: "service_center_admin",
-        })
-      : false;
-
-    if (!hasRequiredRole) {
-      redirect("/dashboard?access=denied&required=service_center_admin");
+    if (!authData.userId) {
+      authData.redirectToSignIn();
     }
-  }
 
-  const clerkUserId = authData.userId;
+    if (process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true") {
+      const hasRequiredRole = authData.userId
+        ? await clerkOrDbHasRole({
+            clerkUserId: authData.userId,
+            orgRole: authData.orgRole,
+            sessionClaims: authData.sessionClaims,
+            requiredRole: "service_center_admin",
+          })
+        : false;
 
-  if (!clerkUserId) {
-    throw new Error("Authenticated clerk user id is required.");
-  }
+      if (!hasRequiredRole) {
+        redirect("/dashboard?access=denied&required=service_center_admin");
+      }
+    }
 
-  const { organizationId, dbUserId } = await resolveOrganizationContext({
-    clerkUserId,
-    clerkOrgId: authData.orgId ?? null,
-    requiredOrganizationType: "service_center",
-  });
+    const clerkUserId = authData.userId;
 
-  return {
-    organizationId,
-    clerkUserId,
-    dbUserId,
-  };
-}
+    if (!clerkUserId) {
+      throw new Error("Authenticated clerk user id is required.");
+    }
+
+    const { organizationId, dbUserId } = await resolveOrganizationContext({
+      clerkUserId,
+      clerkOrgId: authData.orgId ?? null,
+      requiredOrganizationType: "service_center",
+    });
+
+    return {
+      organizationId,
+      clerkUserId,
+      dbUserId,
+    };
+  },
+);
 
 export function decimalToNumber(value: unknown) {
   if (typeof value === "number") {

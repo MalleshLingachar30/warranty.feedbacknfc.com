@@ -1,18 +1,15 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 import { ArrowRightIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { getCachedAuth } from "@/lib/clerk-session";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { DevRoleSwitcher } from "@/components/dashboard/dev-role-switcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  NAVIGATION_BY_ROLE,
-  getRoleLabel,
-} from "@/lib/roles";
+import { NAVIGATION_BY_ROLE, getRoleLabel } from "@/lib/roles";
 
 export default async function DashboardPage() {
-  const { userId, sessionClaims } = await auth();
+  const { userId, sessionClaims } = await getCachedAuth();
 
   if (!userId) {
     redirect("/sign-in");

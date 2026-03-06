@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { Gauge, Star, UserCheck, Users } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -30,6 +31,11 @@ function formatHours(value: number) {
   return `${value.toFixed(1)}h`;
 }
 
+type TechnicianResolutionRow = {
+  technicianId: string;
+  avgResolutionHours: number | null;
+};
+
 export default async function ServiceCenterTechniciansPage() {
   const { organizationId } = await resolveServiceCenterPageContext();
 
@@ -41,7 +47,7 @@ export default async function ServiceCenterTechniciansPage() {
     );
   }
 
-  const [technicians, resolvedTickets, serviceCenters] = await Promise.all([
+  const [technicians, resolutionRows, serviceCenters] = await Promise.all([
     db.technician.findMany({
       where: {
         serviceCenter: {
@@ -67,29 +73,22 @@ export default async function ServiceCenterTechniciansPage() {
         },
       },
     }),
-    db.ticket.findMany({
-      where: {
-        assignedTechnician: {
-          serviceCenter: {
-            organizationId,
-          },
-        },
-        status: {
-          in: ["resolved", "closed"],
-        },
-        technicianStartedAt: {
-          not: null,
-        },
-        technicianCompletedAt: {
-          not: null,
-        },
-      },
-      select: {
-        assignedTechnicianId: true,
-        technicianStartedAt: true,
-        technicianCompletedAt: true,
-      },
-    }),
+    db.$queryRaw<TechnicianResolutionRow[]>(Prisma.sql`
+      SELECT
+        t.assigned_technician_id AS "technicianId",
+        AVG(
+          EXTRACT(EPOCH FROM (t.technician_completed_at - t.technician_started_at)) / 3600.0
+        )::double precision AS "avgResolutionHours"
+      FROM tickets t
+      INNER JOIN technicians tech ON tech.id = t.assigned_technician_id
+      INNER JOIN service_centers sc ON sc.id = tech.service_center_id
+      WHERE sc.organization_id = ${organizationId}
+        AND t.status IN ('resolved', 'closed')
+        AND t.technician_started_at IS NOT NULL
+        AND t.technician_completed_at IS NOT NULL
+        AND t.technician_completed_at >= t.technician_started_at
+      GROUP BY t.assigned_technician_id
+    `),
     db.serviceCenter.findMany({
       where: {
         organizationId,
@@ -121,36 +120,12 @@ export default async function ServiceCenterTechniciansPage() {
         ) / totalTechnicians
       : 0;
 
-  const avgHoursByTechnician = new Map<string, number>();
-  const durationsByTechnician = new Map<string, number[]>();
-
-  for (const ticket of resolvedTickets) {
-    const technicianId = ticket.assignedTechnicianId;
-    if (!technicianId) {
-      continue;
-    }
-
-    const startedAt = ticket.technicianStartedAt?.getTime();
-    const completedAt = ticket.technicianCompletedAt?.getTime();
-
-    if (!startedAt || !completedAt || completedAt < startedAt) {
-      continue;
-    }
-
-    const durationHours = (completedAt - startedAt) / (1000 * 60 * 60);
-
-    const current = durationsByTechnician.get(technicianId) ?? [];
-    current.push(durationHours);
-    durationsByTechnician.set(technicianId, current);
-  }
-
-  for (const [technicianId, durations] of durationsByTechnician) {
-    const avg =
-      durations.length > 0
-        ? durations.reduce((sum, value) => sum + value, 0) / durations.length
-        : 0;
-    avgHoursByTechnician.set(technicianId, avg);
-  }
+  const avgHoursByTechnician = new Map(
+    resolutionRows.map((row) => [
+      row.technicianId,
+      decimalToNumber(row.avgResolutionHours),
+    ]),
+  );
 
   return (
     <div>
@@ -275,11 +250,14 @@ export default async function ServiceCenterTechniciansPage() {
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-sm text-muted-foreground">-</span>
+                          <span className="text-sm text-muted-foreground">
+                            -
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {technician.activeJobCount}/{technician.maxConcurrentJobs}
+                        {technician.activeJobCount}/
+                        {technician.maxConcurrentJobs}
                       </TableCell>
                       <TableCell>
                         {technician.totalJobsCompleted.toLocaleString()}

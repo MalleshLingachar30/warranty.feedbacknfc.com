@@ -159,6 +159,6 @@ export type ClaimQueueRow = {
   approvedAmount: number | null;
   status: ClaimStatusType;
   submittedDate: string;
-  documentation: ClaimDocumentationView;
+  documentation: ClaimDocumentationView | null;
   rejectionReason: string | null;
 };

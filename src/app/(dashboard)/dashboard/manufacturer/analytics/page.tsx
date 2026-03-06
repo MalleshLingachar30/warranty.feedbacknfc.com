@@ -1,10 +1,5 @@
-import {
-  BarChart3,
-  MapPinned,
-  ShieldAlert,
-  Wrench,
-} from "lucide-react";
-import { type TicketStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { BarChart3, MapPinned, ShieldAlert, Wrench } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -36,41 +31,51 @@ function formatHours(value: number) {
   return `${value.toFixed(1)}h`;
 }
 
-function computeResolutionHours(
-  startedAt: Date | null,
-  completedAt: Date | null,
-): number | null {
-  if (!startedAt || !completedAt) {
-    return null;
-  }
-
-  const diff = (completedAt.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
-  if (!Number.isFinite(diff) || diff < 0) {
-    return null;
-  }
-
-  return diff;
+function toNumber(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
-type GenericRecord = Record<string, unknown>;
+type AnalyticsSummaryRow = {
+  totalTickets: number;
+  resolvedTickets: number;
+  slaBreachedCount: number;
+  avgResolutionHours: number | null;
+};
 
-function isRecord(value: unknown): value is GenericRecord {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+type ReliabilityRow = {
+  id: string;
+  model: string;
+  modelNumber: string | null;
+  units: number;
+  incidents: number;
+};
 
-function normalizeActivationSource(metadata: unknown) {
-  const source = isRecord(metadata) ? metadata : {};
-  const activationSource =
-    typeof source.activationSource === "string"
-      ? source.activationSource.trim().toLowerCase()
-      : "";
+type CommonIssueRow = {
+  issue: string;
+  count: number;
+};
 
-  if (activationSource === "qr" || activationSource === "nfc") {
-    return activationSource;
-  }
+type RegionalPerformanceRow = {
+  city: string | null;
+  tickets: number;
+  resolved: number;
+  avgResolutionHours: number | null;
+};
 
-  return "unknown";
-}
+type TechnicianPerformanceRow = {
+  id: string;
+  name: string;
+  tickets: number;
+  resolved: number;
+  avgResolutionHours: number | null;
+};
+
+type ActivationCountRow = {
+  qr: number;
+  nfc: number;
+  unknown: number;
+};
 
 export default async function ManufacturerAnalyticsPage() {
   const { organizationId } = await resolveManufacturerPageContext();
@@ -86,69 +91,115 @@ export default async function ManufacturerAnalyticsPage() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [modelRows, ticketRows, activatedProductRows, stickerScanTop] = await Promise.all([
-    db.productModel.findMany({
-      where: {
-        organizationId,
-      },
-      select: {
-        id: true,
-        name: true,
-        modelNumber: true,
-        _count: {
-          select: {
-            products: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    }),
-    db.ticket.findMany({
-      where: {
-        product: {
-          organizationId,
-        },
-      },
-      select: {
-        id: true,
-        status: true,
-        issueCategory: true,
-        slaBreached: true,
-        technicianStartedAt: true,
-        technicianCompletedAt: true,
-        assignedTechnician: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        product: {
-          select: {
-            customerCity: true,
-            productModel: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-      },
-    }),
-    db.product.findMany({
-      where: {
-        organizationId,
-        warrantyStatus: {
-          not: "pending_activation",
-        },
-      },
-      select: {
-        id: true,
-        metadata: true,
-      },
-    }),
+  const [
+    summaryRow,
+    reliabilityRows,
+    commonIssueRows,
+    regionalRows,
+    technicianRows,
+    activationRow,
+    stickerScanTop,
+  ] = await Promise.all([
+    db.$queryRaw<AnalyticsSummaryRow[]>(Prisma.sql`
+      SELECT
+        COUNT(*)::int AS "totalTickets",
+        COUNT(*) FILTER (WHERE t.status IN ('resolved', 'closed'))::int AS "resolvedTickets",
+        COUNT(*) FILTER (WHERE t.sla_breached)::int AS "slaBreachedCount",
+        AVG(
+          CASE
+            WHEN t.technician_started_at IS NOT NULL
+              AND t.technician_completed_at IS NOT NULL
+              AND t.technician_completed_at >= t.technician_started_at
+            THEN EXTRACT(EPOCH FROM (t.technician_completed_at - t.technician_started_at)) / 3600.0
+            ELSE NULL
+          END
+        )::double precision AS "avgResolutionHours"
+      FROM tickets t
+      INNER JOIN products p ON p.id = t.product_id
+      WHERE p.organization_id = ${organizationId}
+    `),
+    db.$queryRaw<ReliabilityRow[]>(Prisma.sql`
+      SELECT
+        pm.id AS id,
+        pm.name AS model,
+        pm.model_number AS "modelNumber",
+        COUNT(DISTINCT p.id)::int AS units,
+        COUNT(t.id)::int AS incidents
+      FROM product_models pm
+      LEFT JOIN products p ON p.product_model_id = pm.id
+      LEFT JOIN tickets t ON t.product_id = p.id
+      WHERE pm.organization_id = ${organizationId}
+      GROUP BY pm.id, pm.name, pm.model_number
+      ORDER BY pm.created_at ASC
+    `),
+    db.$queryRaw<CommonIssueRow[]>(Prisma.sql`
+      SELECT
+        COALESCE(NULLIF(BTRIM(t.issue_category), ''), 'General issue') AS issue,
+        COUNT(*)::int AS count
+      FROM tickets t
+      INNER JOIN products p ON p.id = t.product_id
+      WHERE p.organization_id = ${organizationId}
+      GROUP BY COALESCE(NULLIF(BTRIM(t.issue_category), ''), 'General issue')
+      ORDER BY COUNT(*) DESC, issue ASC
+      LIMIT 10
+    `),
+    db.$queryRaw<RegionalPerformanceRow[]>(Prisma.sql`
+      SELECT
+        COALESCE(p.customer_city, 'Unknown') AS city,
+        COUNT(*)::int AS tickets,
+        COUNT(*) FILTER (WHERE t.status IN ('resolved', 'closed'))::int AS resolved,
+        AVG(
+          CASE
+            WHEN t.technician_started_at IS NOT NULL
+              AND t.technician_completed_at IS NOT NULL
+              AND t.technician_completed_at >= t.technician_started_at
+            THEN EXTRACT(EPOCH FROM (t.technician_completed_at - t.technician_started_at)) / 3600.0
+            ELSE NULL
+          END
+        )::double precision AS "avgResolutionHours"
+      FROM tickets t
+      INNER JOIN products p ON p.id = t.product_id
+      WHERE p.organization_id = ${organizationId}
+      GROUP BY COALESCE(p.customer_city, 'Unknown')
+      ORDER BY COUNT(*) DESC, city ASC
+    `),
+    db.$queryRaw<TechnicianPerformanceRow[]>(Prisma.sql`
+      SELECT
+        tech.id AS id,
+        tech.name AS name,
+        COUNT(*)::int AS tickets,
+        COUNT(*) FILTER (WHERE t.status IN ('resolved', 'closed'))::int AS resolved,
+        AVG(
+          CASE
+            WHEN t.technician_started_at IS NOT NULL
+              AND t.technician_completed_at IS NOT NULL
+              AND t.technician_completed_at >= t.technician_started_at
+            THEN EXTRACT(EPOCH FROM (t.technician_completed_at - t.technician_started_at)) / 3600.0
+            ELSE NULL
+          END
+        )::double precision AS "avgResolutionHours"
+      FROM tickets t
+      INNER JOIN technicians tech ON tech.id = t.assigned_technician_id
+      INNER JOIN products p ON p.id = t.product_id
+      WHERE p.organization_id = ${organizationId}
+      GROUP BY tech.id, tech.name
+      ORDER BY COUNT(*) DESC, tech.name ASC
+    `),
+    db.$queryRaw<ActivationCountRow[]>(Prisma.sql`
+      SELECT
+        COUNT(*) FILTER (
+          WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) = 'qr'
+        )::int AS qr,
+        COUNT(*) FILTER (
+          WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) = 'nfc'
+        )::int AS nfc,
+        COUNT(*) FILTER (
+          WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) NOT IN ('qr', 'nfc')
+        )::int AS unknown
+      FROM products p
+      WHERE p.organization_id = ${organizationId}
+        AND p.warranty_status <> 'pending_activation'
+    `),
     db.stickerScanEvent
       .groupBy({
         by: ["stickerNumber"],
@@ -174,161 +225,67 @@ export default async function ManufacturerAnalyticsPage() {
       }),
   ]);
 
-  const totalTickets = ticketRows.length;
-  const resolvedLikeStatuses: TicketStatus[] = ["resolved", "closed"];
-  const resolvedTickets = ticketRows.filter((ticket) =>
-    resolvedLikeStatuses.includes(ticket.status),
-  ).length;
-  const slaBreachedCount = ticketRows.filter((ticket) => ticket.slaBreached).length;
+  const resolvedTickets = toNumber(summaryRow[0]?.resolvedTickets);
+  const totalTickets = toNumber(summaryRow[0]?.totalTickets);
+  const slaBreachedCount = toNumber(summaryRow[0]?.slaBreachedCount);
   const slaBreachRate =
     totalTickets > 0 ? (slaBreachedCount / totalTickets) * 100 : 0;
 
-  const resolutionHours = ticketRows
-    .map((ticket) =>
-      computeResolutionHours(
-        ticket.technicianStartedAt,
-        ticket.technicianCompletedAt,
-      ),
-    )
-    .filter((value): value is number => typeof value === "number");
+  const avgResolutionHours = toNumber(summaryRow[0]?.avgResolutionHours);
 
-  const avgResolutionHours =
-    resolutionHours.length > 0
-      ? resolutionHours.reduce((sum, value) => sum + value, 0) /
-        resolutionHours.length
-      : 0;
-
-  const reliabilityByModel = modelRows
-    .map((model) => {
-      const ticketsForModel = ticketRows.filter(
-        (ticket) => ticket.product.productModel.id === model.id,
-      ).length;
-      const unitCount = model._count.products;
-      const failureRate = unitCount > 0 ? (ticketsForModel / unitCount) * 100 : 0;
+  const reliabilityByModel = reliabilityRows
+    .map((row) => {
+      const unitCount = toNumber(row.units);
+      const incidents = toNumber(row.incidents);
 
       return {
-        id: model.id,
-        model: model.name,
-        modelNumber: model.modelNumber ?? "-",
+        id: row.id,
+        model: row.model,
+        modelNumber: row.modelNumber ?? "-",
         units: unitCount,
-        incidents: ticketsForModel,
-        failureRate,
+        incidents,
+        failureRate: unitCount > 0 ? (incidents / unitCount) * 100 : 0,
       };
     })
     .sort((left, right) => right.failureRate - left.failureRate);
 
-  const issueMap = new Map<string, number>();
-  for (const ticket of ticketRows) {
-    const issue = (ticket.issueCategory ?? "General issue").trim();
-    issueMap.set(issue, (issueMap.get(issue) ?? 0) + 1);
-  }
+  const commonIssues = commonIssueRows.map((row) => ({
+    issue: row.issue,
+    count: toNumber(row.count),
+  }));
 
-  const commonIssues = [...issueMap.entries()]
-    .map(([issue, count]) => ({ issue, count }))
-    .sort((left, right) => right.count - left.count)
-    .slice(0, 10);
+  const regionalPerformance = regionalRows.map((row) => {
+    const tickets = toNumber(row.tickets);
+    const resolved = toNumber(row.resolved);
 
-  const regionalMap = new Map<
-    string,
-    { tickets: number; resolved: number; hours: number[] }
-  >();
-
-  for (const ticket of ticketRows) {
-    const city = ticket.product.customerCity ?? "Unknown";
-    const current = regionalMap.get(city) ?? {
-      tickets: 0,
-      resolved: 0,
-      hours: [],
+    return {
+      city: row.city ?? "Unknown",
+      tickets,
+      resolved,
+      resolutionRate: tickets > 0 ? (resolved / tickets) * 100 : 0,
+      avgResolutionHours: toNumber(row.avgResolutionHours),
     };
+  });
 
-    current.tickets += 1;
+  const technicianPerformance = technicianRows.map((row) => {
+    const tickets = toNumber(row.tickets);
+    const resolved = toNumber(row.resolved);
 
-    if (resolvedLikeStatuses.includes(ticket.status)) {
-      current.resolved += 1;
-    }
-
-    const hours = computeResolutionHours(
-      ticket.technicianStartedAt,
-      ticket.technicianCompletedAt,
-    );
-    if (typeof hours === "number") {
-      current.hours.push(hours);
-    }
-
-    regionalMap.set(city, current);
-  }
-
-  const regionalPerformance = [...regionalMap.entries()]
-    .map(([city, row]) => ({
-      city,
-      tickets: row.tickets,
-      resolved: row.resolved,
-      resolutionRate: row.tickets > 0 ? (row.resolved / row.tickets) * 100 : 0,
-      avgResolutionHours:
-        row.hours.length > 0
-          ? row.hours.reduce((sum, value) => sum + value, 0) / row.hours.length
-          : 0,
-    }))
-    .sort((left, right) => right.tickets - left.tickets);
-
-  const technicianMap = new Map<
-    string,
-    { name: string; tickets: number; resolved: number; hours: number[] }
-  >();
-
-  for (const ticket of ticketRows) {
-    if (!ticket.assignedTechnician?.id) {
-      continue;
-    }
-
-    const technicianId = ticket.assignedTechnician.id;
-    const current = technicianMap.get(technicianId) ?? {
-      name: ticket.assignedTechnician.name,
-      tickets: 0,
-      resolved: 0,
-      hours: [],
-    };
-
-    current.tickets += 1;
-    if (resolvedLikeStatuses.includes(ticket.status)) {
-      current.resolved += 1;
-    }
-
-    const hours = computeResolutionHours(
-      ticket.technicianStartedAt,
-      ticket.technicianCompletedAt,
-    );
-    if (typeof hours === "number") {
-      current.hours.push(hours);
-    }
-
-    technicianMap.set(technicianId, current);
-  }
-
-  const technicianPerformance = [...technicianMap.entries()]
-    .map(([id, row]) => ({
-      id,
+    return {
+      id: row.id,
       name: row.name,
-      tickets: row.tickets,
-      resolved: row.resolved,
-      resolutionRate: row.tickets > 0 ? (row.resolved / row.tickets) * 100 : 0,
-      avgResolutionHours:
-        row.hours.length > 0
-          ? row.hours.reduce((sum, value) => sum + value, 0) / row.hours.length
-      : 0,
-    }))
-    .sort((left, right) => right.tickets - left.tickets);
+      tickets,
+      resolved,
+      resolutionRate: tickets > 0 ? (resolved / tickets) * 100 : 0,
+      avgResolutionHours: toNumber(row.avgResolutionHours),
+    };
+  });
 
   const activationCounts = {
-    qr: 0,
-    nfc: 0,
-    unknown: 0,
+    qr: toNumber(activationRow[0]?.qr),
+    nfc: toNumber(activationRow[0]?.nfc),
+    unknown: toNumber(activationRow[0]?.unknown),
   };
-
-  for (const product of activatedProductRows) {
-    const source = normalizeActivationSource(product.metadata);
-    activationCounts[source] += 1;
-  }
 
   const totalActivations =
     activationCounts.qr + activationCounts.nfc + activationCounts.unknown;
@@ -394,7 +351,11 @@ export default async function ManufacturerAnalyticsPage() {
                 {activationCounts.qr.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground">
-                {formatPercent(totalActivations > 0 ? (activationCounts.qr / totalActivations) * 100 : 0)}
+                {formatPercent(
+                  totalActivations > 0
+                    ? (activationCounts.qr / totalActivations) * 100
+                    : 0,
+                )}
               </p>
             </div>
             <div className="rounded-md border bg-background p-3">
@@ -403,7 +364,11 @@ export default async function ManufacturerAnalyticsPage() {
                 {activationCounts.nfc.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground">
-                {formatPercent(totalActivations > 0 ? (activationCounts.nfc / totalActivations) * 100 : 0)}
+                {formatPercent(
+                  totalActivations > 0
+                    ? (activationCounts.nfc / totalActivations) * 100
+                    : 0,
+                )}
               </p>
             </div>
             <div className="rounded-md border bg-background p-3">
@@ -412,7 +377,11 @@ export default async function ManufacturerAnalyticsPage() {
                 {activationCounts.unknown.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground">
-                {formatPercent(totalActivations > 0 ? (activationCounts.unknown / totalActivations) * 100 : 0)}
+                {formatPercent(
+                  totalActivations > 0
+                    ? (activationCounts.unknown / totalActivations) * 100
+                    : 0,
+                )}
               </p>
             </div>
           </CardContent>
@@ -536,7 +505,9 @@ export default async function ManufacturerAnalyticsPage() {
                       <TableCell>{row.count.toLocaleString()}</TableCell>
                       <TableCell>
                         {formatPercent(
-                          totalTickets > 0 ? (row.count / totalTickets) * 100 : 0,
+                          totalTickets > 0
+                            ? (row.count / totalTickets) * 100
+                            : 0,
                         )}
                       </TableCell>
                     </TableRow>
@@ -577,7 +548,9 @@ export default async function ManufacturerAnalyticsPage() {
                       <TableCell>{row.city}</TableCell>
                       <TableCell>{row.tickets.toLocaleString()}</TableCell>
                       <TableCell>{formatPercent(row.resolutionRate)}</TableCell>
-                      <TableCell>{formatHours(row.avgResolutionHours)}</TableCell>
+                      <TableCell>
+                        {formatHours(row.avgResolutionHours)}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -616,7 +589,9 @@ export default async function ManufacturerAnalyticsPage() {
                       <TableCell>{row.name}</TableCell>
                       <TableCell>{row.tickets.toLocaleString()}</TableCell>
                       <TableCell>{formatPercent(row.resolutionRate)}</TableCell>
-                      <TableCell>{formatHours(row.avgResolutionHours)}</TableCell>
+                      <TableCell>
+                        {formatHours(row.avgResolutionHours)}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}

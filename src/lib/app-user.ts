@@ -1,10 +1,15 @@
 import "server-only";
 
-import { currentUser } from "@clerk/nextjs/server";
+import { cache } from "react";
 import type { UserRole } from "@prisma/client";
 
+import { getCachedCurrentUser } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
-import { parseAppRole, parseAppRoleFromClaims, type AppRole } from "@/lib/roles";
+import {
+  parseAppRole,
+  parseAppRoleFromClaims,
+  type AppRole,
+} from "@/lib/roles";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -149,72 +154,116 @@ export type DbUserSnapshot = {
   technicianProfileId: string | null;
 };
 
-async function fetchDbUser(clerkUserId: string): Promise<DbUserSnapshot | null> {
-  return db.user.findUnique({
-    where: {
-      clerkId: clerkUserId,
-    },
-    select: {
-      id: true,
-      clerkId: true,
-      role: true,
-      organizationId: true,
-      email: true,
-      phone: true,
-      name: true,
-      technicianProfile: {
+const fetchDbUser = cache(
+  async (clerkUserId: string): Promise<DbUserSnapshot | null> => {
+    return db.user
+      .findUnique({
+        where: {
+          clerkId: clerkUserId,
+        },
         select: {
           id: true,
+          clerkId: true,
+          role: true,
+          organizationId: true,
+          email: true,
+          phone: true,
+          name: true,
+          technicianProfile: {
+            select: {
+              id: true,
+            },
+          },
         },
-      },
-    },
-  }).then((row) => {
-    if (!row) {
-      return null;
+      })
+      .then((row) => {
+        if (!row) {
+          return null;
+        }
+
+        return {
+          id: row.id,
+          clerkId: row.clerkId,
+          role: row.role,
+          organizationId: row.organizationId,
+          email: row.email,
+          phone: row.phone,
+          name: row.name,
+          technicianProfileId: row.technicianProfile?.id ?? null,
+        } satisfies DbUserSnapshot;
+      });
+  },
+);
+
+const ensureDbUserForClerkUserCached = cache(
+  async (
+    clerkUserId: string,
+    defaultRole: UserRole,
+  ): Promise<DbUserSnapshot> => {
+    const existing = await fetchDbUser(clerkUserId);
+    if (existing) {
+      if (existing.name && existing.email && existing.phone) {
+        return existing;
+      }
+
+      const clerk = await getCachedCurrentUser();
+      const name = existing.name ?? extractUserName(clerk);
+      const email = existing.email ?? extractPrimaryEmail(clerk);
+      const phone = existing.phone ?? extractPrimaryPhone(clerk);
+
+      if (
+        name === existing.name &&
+        email === existing.email &&
+        phone === existing.phone
+      ) {
+        return existing;
+      }
+
+      const updated = await db.user.update({
+        where: {
+          id: existing.id,
+        },
+        data: {
+          name,
+          email,
+          phone,
+        },
+        select: {
+          id: true,
+          clerkId: true,
+          role: true,
+          organizationId: true,
+          email: true,
+          phone: true,
+          name: true,
+          technicianProfile: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      return {
+        id: updated.id,
+        clerkId: updated.clerkId,
+        role: updated.role,
+        organizationId: updated.organizationId,
+        email: updated.email,
+        phone: updated.phone,
+        name: updated.name,
+        technicianProfileId: updated.technicianProfile?.id ?? null,
+      };
     }
 
-    return {
-      id: row.id,
-      clerkId: row.clerkId,
-      role: row.role,
-      organizationId: row.organizationId,
-      email: row.email,
-      phone: row.phone,
-      name: row.name,
-      technicianProfileId: row.technicianProfile?.id ?? null,
-    } satisfies DbUserSnapshot;
-  });
-}
-
-export async function ensureDbUserForClerkUser(input: {
-  clerkUserId: string;
-  defaultRole?: UserRole;
-}): Promise<DbUserSnapshot> {
-  const defaultRole: UserRole = input.defaultRole ?? "customer";
-
-  const existing = await fetchDbUser(input.clerkUserId);
-  if (existing) {
-    if (existing.name && existing.email && existing.phone) {
-      return existing;
-    }
-
-    const clerk = await currentUser().catch(() => null);
-    const name = existing.name ?? extractUserName(clerk);
-    const email = existing.email ?? extractPrimaryEmail(clerk);
-    const phone = existing.phone ?? extractPrimaryPhone(clerk);
-
-    if (name === existing.name && email === existing.email && phone === existing.phone) {
-      return existing;
-    }
-
-    const updated = await db.user.update({
-      where: {
-        id: existing.id,
-      },
+    const clerk = await getCachedCurrentUser();
+    const created = await db.user.create({
       data: {
-        name,
-        email,
-        phone,
+        clerkId: clerkUserId,
+        role: defaultRole,
+        name: extractUserName(clerk),
+        email: extractPrimaryEmail(clerk),
+        phone: extractPrimaryPhone(clerk),
       },
       select: {
         id: true,
@@ -233,52 +282,26 @@ export async function ensureDbUserForClerkUser(input: {
     });
 
     return {
-      id: updated.id,
-      clerkId: updated.clerkId,
-      role: updated.role,
-      organizationId: updated.organizationId,
-      email: updated.email,
-      phone: updated.phone,
-      name: updated.name,
-      technicianProfileId: updated.technicianProfile?.id ?? null,
+      id: created.id,
+      clerkId: created.clerkId,
+      role: created.role,
+      organizationId: created.organizationId,
+      email: created.email,
+      phone: created.phone,
+      name: created.name,
+      technicianProfileId: created.technicianProfile?.id ?? null,
     };
-  }
+  },
+);
 
-  const clerk = await currentUser().catch(() => null);
-  const created = await db.user.create({
-    data: {
-      clerkId: input.clerkUserId,
-      role: defaultRole,
-      name: extractUserName(clerk),
-      email: extractPrimaryEmail(clerk),
-      phone: extractPrimaryPhone(clerk),
-    },
-    select: {
-      id: true,
-      clerkId: true,
-      role: true,
-      organizationId: true,
-      email: true,
-      phone: true,
-      name: true,
-      technicianProfile: {
-        select: {
-          id: true,
-        },
-      },
-    },
-  });
-
-  return {
-    id: created.id,
-    clerkId: created.clerkId,
-    role: created.role,
-    organizationId: created.organizationId,
-    email: created.email,
-    phone: created.phone,
-    name: created.name,
-    technicianProfileId: created.technicianProfile?.id ?? null,
-  };
+export async function ensureDbUserForClerkUser(input: {
+  clerkUserId: string;
+  defaultRole?: UserRole;
+}): Promise<DbUserSnapshot> {
+  return ensureDbUserForClerkUserCached(
+    input.clerkUserId,
+    input.defaultRole ?? "customer",
+  );
 }
 
 export async function resolveAppRoleForSession(input: {
@@ -303,4 +326,3 @@ export async function resolveAppRoleForSession(input: {
     dbUser,
   };
 }
-

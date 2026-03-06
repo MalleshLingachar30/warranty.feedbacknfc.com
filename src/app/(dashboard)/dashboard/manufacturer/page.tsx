@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import {
   AlertTriangleIcon,
   BoxesIcon,
@@ -105,6 +106,18 @@ function buildMonthBuckets(months: number) {
   return output;
 }
 
+type ClaimTrendRow = {
+  monthStart: Date;
+  cost: number | null;
+  claims: number;
+};
+
+type TopIssueQueryRow = {
+  model: string;
+  issue: string;
+  incidents: number;
+};
+
 export default async function ManufacturerOverviewPage() {
   const { organizationId } = await resolveManufacturerPageContext();
 
@@ -128,7 +141,7 @@ export default async function ManufacturerOverviewPage() {
       openTicketGroups,
       pendingClaims,
       claimsForTrend,
-      issueTickets,
+      issueRows,
     ] = await Promise.all([
       db.product.count({
         where: {
@@ -164,44 +177,39 @@ export default async function ManufacturerOverviewPage() {
           totalClaimAmount: true,
         },
       }),
-      db.warrantyClaim.findMany({
-        where: {
-          manufacturerOrgId: organizationId,
-          createdAt: {
-            gte: sixMonthsAgo,
-          },
-        },
-        select: {
-          createdAt: true,
-          totalClaimAmount: true,
-        },
-      }),
-      db.ticket.findMany({
-        where: {
-          product: {
-            organizationId,
-          },
-          issueCategory: {
-            not: null,
-          },
-        },
-        select: {
-          issueCategory: true,
-          product: {
-            select: {
-              productModel: {
-                select: {
-                  name: true,
-                },
-              },
-            },
-          },
-        },
-        take: 5000,
-        orderBy: {
-          reportedAt: "desc",
-        },
-      }),
+      db.$queryRaw<ClaimTrendRow[]>(Prisma.sql`
+        SELECT
+          DATE_TRUNC('month', wc.created_at) AS "monthStart",
+          COALESCE(SUM(wc.total_claim_amount), 0)::double precision AS cost,
+          COUNT(*)::int AS claims
+        FROM warranty_claims wc
+        WHERE wc.manufacturer_org_id = ${organizationId}
+          AND wc.created_at >= ${sixMonthsAgo}
+        GROUP BY DATE_TRUNC('month', wc.created_at)
+        ORDER BY DATE_TRUNC('month', wc.created_at) ASC
+      `),
+      db.$queryRaw<TopIssueQueryRow[]>(Prisma.sql`
+        WITH recent_issue_tickets AS (
+          SELECT
+            p.product_model_id AS product_model_id,
+            COALESCE(NULLIF(BTRIM(t.issue_category), ''), 'Unknown issue') AS issue
+          FROM tickets t
+          INNER JOIN products p ON p.id = t.product_id
+          WHERE p.organization_id = ${organizationId}
+            AND t.issue_category IS NOT NULL
+          ORDER BY t.reported_at DESC
+          LIMIT 5000
+        )
+        SELECT
+          pm.name AS model,
+          rit.issue AS issue,
+          COUNT(*)::int AS incidents
+        FROM recent_issue_tickets rit
+        INNER JOIN product_models pm ON pm.id = rit.product_model_id
+        GROUP BY pm.name, rit.issue
+        ORDER BY COUNT(*) DESC, pm.name ASC, rit.issue ASC
+        LIMIT 6
+      `),
     ]);
 
     activeProductsCount = activeProducts;
@@ -241,43 +249,26 @@ export default async function ManufacturerOverviewPage() {
       );
 
       for (const claim of claimsForTrend) {
-        const key = monthKey(claim.createdAt);
+        const key = monthKey(new Date(claim.monthStart));
         const point = points.get(key);
 
         if (!point) {
           continue;
         }
 
-        point.cost += decimalToNumber(claim.totalClaimAmount);
-        point.claims += 1;
+        point.cost += decimalToNumber(claim.cost);
+        point.claims += claim.claims;
       }
 
       monthlyTrend = [...points.values()];
     }
 
-    const issueMap = new Map<string, TopIssueRow>();
-
-    for (const ticket of issueTickets) {
-      const issue = (ticket.issueCategory ?? "Unknown issue").trim();
-      const model = ticket.product.productModel.name;
-      const key = `${model}::${issue}`;
-
-      const existing = issueMap.get(key);
-      if (existing) {
-        existing.incidents += 1;
-      } else {
-        issueMap.set(key, {
-          model,
-          issue,
-          incidents: 1,
-        });
-      }
-    }
-
-    if (issueMap.size > 0) {
-      topIssues = [...issueMap.values()]
-        .sort((a, b) => b.incidents - a.incidents)
-        .slice(0, 6);
+    if (issueRows.length > 0) {
+      topIssues = issueRows.map((row) => ({
+        model: row.model,
+        issue: row.issue,
+        incidents: row.incidents,
+      }));
     }
   }
 

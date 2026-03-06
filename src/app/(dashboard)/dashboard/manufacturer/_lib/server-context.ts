@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { ensureManufacturerAdmin } from "@/lib/auth";
 import { resolveOrganizationContext } from "@/lib/org-context";
 
@@ -7,26 +9,28 @@ export type ManufacturerPageContext = {
   dbUserId: string | null;
 };
 
-export async function resolveManufacturerPageContext(): Promise<ManufacturerPageContext> {
-  const authData = await ensureManufacturerAdmin();
-  const clerkUserId = authData.userId;
+export const resolveManufacturerPageContext = cache(
+  async (): Promise<ManufacturerPageContext> => {
+    const authData = await ensureManufacturerAdmin();
+    const clerkUserId = authData.userId;
 
-  if (!clerkUserId) {
-    throw new Error("Authenticated clerk user id is required.");
-  }
+    if (!clerkUserId) {
+      throw new Error("Authenticated clerk user id is required.");
+    }
 
-  const { organizationId, dbUserId } = await resolveOrganizationContext({
-    clerkUserId,
-    clerkOrgId: authData.orgId ?? null,
-    requiredOrganizationType: "manufacturer",
-  });
+    const { organizationId, dbUserId } = await resolveOrganizationContext({
+      clerkUserId,
+      clerkOrgId: authData.orgId ?? null,
+      requiredOrganizationType: "manufacturer",
+    });
 
-  return {
-    organizationId,
-    clerkUserId,
-    dbUserId,
-  };
-}
+    return {
+      organizationId,
+      clerkUserId,
+      dbUserId,
+    };
+  },
+);
 
 export function jsonStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {

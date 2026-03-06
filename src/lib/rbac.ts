@@ -1,7 +1,20 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { db } from "@/lib/db";
 import { sessionHasRole } from "@/lib/org-context";
+
+const fetchDbUserRole = cache(async (clerkUserId: string) => {
+  return db.user.findUnique({
+    where: {
+      clerkId: clerkUserId,
+    },
+    select: {
+      role: true,
+    },
+  });
+});
 
 export async function clerkOrDbHasRole(input: {
   clerkUserId: string;
@@ -22,14 +35,7 @@ export async function clerkOrDbHasRole(input: {
     return true;
   }
 
-  const dbUser = await db.user.findUnique({
-    where: {
-      clerkId: input.clerkUserId,
-    },
-    select: {
-      role: true,
-    },
-  });
+  const dbUser = await fetchDbUserRole(input.clerkUserId);
 
   if (!dbUser) {
     return false;
@@ -41,4 +47,3 @@ export async function clerkOrDbHasRole(input: {
 
   return dbUser.role === input.requiredRole;
 }
-

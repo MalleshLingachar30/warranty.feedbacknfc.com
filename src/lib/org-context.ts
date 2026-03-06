@@ -1,4 +1,5 @@
 import { type OrganizationType } from "@prisma/client";
+import { cache } from "react";
 
 import { db } from "@/lib/db";
 
@@ -79,92 +80,106 @@ export async function resolveOrganizationContext(input: {
   clerkOrgId: string | null;
   requiredOrganizationType: OrganizationType;
 }): Promise<OrganizationContext> {
-  const userRecord = await db.user.findUnique({
-    where: {
-      clerkId: input.clerkUserId,
-    },
-    select: {
-      id: true,
-      organizationId: true,
-      organization: {
+  return resolveOrganizationContextCached(
+    input.clerkUserId,
+    input.clerkOrgId,
+    input.requiredOrganizationType,
+  );
+}
+
+const resolveOrganizationContextCached = cache(
+  async (
+    clerkUserId: string,
+    clerkOrgId: string | null,
+    requiredOrganizationType: OrganizationType,
+  ): Promise<OrganizationContext> => {
+    const userRecord = await db.user.findUnique({
+      where: {
+        clerkId: clerkUserId,
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        organization: {
+          select: {
+            id: true,
+            type: true,
+          },
+        },
+      },
+    });
+
+    const candidateOrgIds = [
+      clerkOrgId,
+      userRecord?.organizationId ?? null,
+    ].filter((value): value is string => Boolean(value));
+
+    const uniqueCandidateOrgIds = Array.from(new Set(candidateOrgIds));
+
+    if (
+      userRecord?.organization &&
+      userRecord.organization.type === requiredOrganizationType
+    ) {
+      return {
+        organizationId: userRecord.organization.id,
+        dbUserId: userRecord.id,
+      };
+    }
+
+    if (uniqueCandidateOrgIds.length > 0) {
+      const organizations = await db.organization.findMany({
+        where: {
+          id: {
+            in: uniqueCandidateOrgIds,
+          },
+        },
         select: {
           id: true,
           type: true,
         },
-      },
-    },
-  });
+      });
 
-  const candidateOrgIds = [
-    input.clerkOrgId,
-    userRecord?.organizationId ?? null,
-  ].filter((value): value is string => Boolean(value));
+      const byId = new Map(organizations.map((org) => [org.id, org]));
 
-  const uniqueCandidateOrgIds = Array.from(new Set(candidateOrgIds));
+      for (const candidateOrgId of uniqueCandidateOrgIds) {
+        const organization = byId.get(candidateOrgId);
+        if (!organization) {
+          continue;
+        }
 
-  if (
-    userRecord?.organization &&
-    userRecord.organization.type === input.requiredOrganizationType
-  ) {
-    return {
-      organizationId: userRecord.organization.id,
-      dbUserId: userRecord.id,
-    };
-  }
-
-  if (uniqueCandidateOrgIds.length > 0) {
-    const organizations = await db.organization.findMany({
-      where: {
-        id: {
-          in: uniqueCandidateOrgIds,
-        },
-      },
-      select: {
-        id: true,
-        type: true,
-      },
-    });
-
-    const byId = new Map(organizations.map((org) => [org.id, org]));
-
-    for (const candidateOrgId of uniqueCandidateOrgIds) {
-      const organization = byId.get(candidateOrgId);
-      if (!organization) {
-        continue;
+        if (organization.type === requiredOrganizationType) {
+          return {
+            organizationId: organization.id,
+            dbUserId: userRecord?.id ?? null,
+          };
+        }
       }
+    }
 
-      if (organization.type === input.requiredOrganizationType) {
+    if (process.env.NODE_ENV !== "production") {
+      const fallbackOrg = await db.organization.findFirst({
+        where: {
+          type: requiredOrganizationType,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (fallbackOrg) {
         return {
-          organizationId: organization.id,
+          organizationId: fallbackOrg.id,
           dbUserId: userRecord?.id ?? null,
         };
       }
     }
-  }
 
-  if (process.env.NODE_ENV !== "production") {
-    const fallbackOrg = await db.organization.findFirst({
-      where: {
-        type: input.requiredOrganizationType,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    if (fallbackOrg) {
-      return {
-        organizationId: fallbackOrg.id,
-        dbUserId: userRecord?.id ?? null,
-      };
-    }
-  }
-
-  return {
-    organizationId: null,
-    dbUserId: userRecord?.id ?? null,
-  };
-}
+    return {
+      organizationId: null,
+      dbUserId: userRecord?.id ?? null,
+    };
+  },
+);

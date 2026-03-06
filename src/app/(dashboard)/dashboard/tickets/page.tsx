@@ -1,5 +1,5 @@
+import { Prisma, type TicketStatus } from "@prisma/client";
 import { AlertTriangle, Clock3, TicketCheck, TimerReset } from "lucide-react";
-import { type TicketStatus } from "@prisma/client";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -100,6 +100,15 @@ function slaIndicatorLabel(state: SlaIndicatorState) {
   }
 }
 
+type TicketMetricRow = {
+  avgAssignmentLatencyHours: number | null;
+  avgResolutionHours: number | null;
+};
+
+function metricValue(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 export default async function ServiceCenterTicketsPage() {
   const { organizationId } = await resolveServiceCenterPageContext();
 
@@ -111,7 +120,7 @@ export default async function ServiceCenterTicketsPage() {
     );
   }
 
-  const [tickets, aggregate] = await Promise.all([
+  const [tickets, aggregate, metricRows] = await Promise.all([
     db.ticket.findMany({
       where: {
         OR: [
@@ -141,8 +150,6 @@ export default async function ServiceCenterTicketsPage() {
         issueSeverity: true,
         reportedAt: true,
         assignedAt: true,
-        technicianStartedAt: true,
-        technicianCompletedAt: true,
         slaBreached: true,
         slaResponseDeadline: true,
         slaResolutionDeadline: true,
@@ -188,52 +195,62 @@ export default async function ServiceCenterTicketsPage() {
         _all: true,
       },
     }),
+    db.$queryRaw<TicketMetricRow[]>(Prisma.sql`
+      WITH latest_tickets AS (
+        SELECT
+          t.reported_at,
+          t.assigned_at,
+          t.technician_started_at,
+          t.technician_completed_at
+        FROM tickets t
+        LEFT JOIN service_centers asc_sc
+          ON asc_sc.id = t.assigned_service_center_id
+        LEFT JOIN technicians tech
+          ON tech.id = t.assigned_technician_id
+        LEFT JOIN service_centers tech_sc
+          ON tech_sc.id = tech.service_center_id
+        WHERE asc_sc.organization_id = ${organizationId}
+          OR tech_sc.organization_id = ${organizationId}
+        ORDER BY t.reported_at DESC
+        LIMIT 150
+      )
+      SELECT
+        AVG(
+          CASE
+            WHEN assigned_at IS NOT NULL AND assigned_at >= reported_at
+            THEN EXTRACT(EPOCH FROM (assigned_at - reported_at)) / 3600.0
+            ELSE NULL
+          END
+        )::double precision AS "avgAssignmentLatencyHours",
+        AVG(
+          CASE
+            WHEN technician_started_at IS NOT NULL
+              AND technician_completed_at IS NOT NULL
+              AND technician_completed_at >= technician_started_at
+            THEN EXTRACT(EPOCH FROM (technician_completed_at - technician_started_at)) / 3600.0
+            ELSE NULL
+          END
+        )::double precision AS "avgResolutionHours"
+      FROM latest_tickets
+    `),
   ]);
 
   const openCount = aggregate
     .filter((entry) => OPEN_STATUSES.includes(entry.status))
     .reduce((sum, entry) => sum + entry._count._all, 0);
   const escalatedCount = aggregate
-    .filter((entry) => entry.status === "escalated" || entry.status === "reopened")
+    .filter(
+      (entry) => entry.status === "escalated" || entry.status === "reopened",
+    )
     .reduce((sum, entry) => sum + entry._count._all, 0);
   const pendingConfirmationCount = aggregate
     .filter((entry) => entry.status === "pending_confirmation")
     .reduce((sum, entry) => sum + entry._count._all, 0);
 
-  const assignmentLatencies = tickets
-    .filter((ticket) => ticket.assignedAt instanceof Date)
-    .map((ticket) => {
-      const reportedMs = ticket.reportedAt.getTime();
-      const assignedMs = ticket.assignedAt!.getTime();
-      return (assignedMs - reportedMs) / (1000 * 60 * 60);
-    })
-    .filter((hours) => Number.isFinite(hours) && hours >= 0);
-
-  const avgAssignmentLatencyHours =
-    assignmentLatencies.length > 0
-      ? assignmentLatencies.reduce((sum, hours) => sum + hours, 0) /
-        assignmentLatencies.length
-      : 0;
-
-  const completionDurations = tickets
-    .filter(
-      (ticket) =>
-        ticket.technicianStartedAt instanceof Date &&
-        ticket.technicianCompletedAt instanceof Date,
-    )
-    .map((ticket) => {
-      const started = ticket.technicianStartedAt!.getTime();
-      const completed = ticket.technicianCompletedAt!.getTime();
-      return (completed - started) / (1000 * 60 * 60);
-    })
-    .filter((hours) => Number.isFinite(hours) && hours >= 0);
-
-  const avgResolutionHours =
-    completionDurations.length > 0
-      ? completionDurations.reduce((sum, hours) => sum + hours, 0) /
-        completionDurations.length
-      : 0;
-
+  const avgAssignmentLatencyHours = metricValue(
+    metricRows[0]?.avgAssignmentLatencyHours,
+  );
+  const avgResolutionHours = metricValue(metricRows[0]?.avgResolutionHours);
   const breachedCount = tickets.filter((ticket) => ticket.slaBreached).length;
 
   return (
@@ -340,7 +357,9 @@ export default async function ServiceCenterTicketsPage() {
                         {statusLabel(ticket.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{ticket.assignedTechnician?.name ?? "-"}</TableCell>
+                    <TableCell>
+                      {ticket.assignedTechnician?.name ?? "-"}
+                    </TableCell>
                     <TableCell>{formatDateTime(ticket.reportedAt)}</TableCell>
                     <TableCell>
                       {(() => {

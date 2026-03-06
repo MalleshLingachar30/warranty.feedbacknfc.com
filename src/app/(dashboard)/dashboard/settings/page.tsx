@@ -1,5 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
-
 import { ComingSoonCard } from "@/components/dashboard/coming-soon-card";
 import { CustomerSettingsClient } from "@/components/customer/customer-settings-client";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -21,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { resolveAppRoleForSession } from "@/lib/app-user";
+import { getCachedAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { requireCustomerContext } from "@/lib/customer-context";
 
@@ -42,7 +41,9 @@ function asBoolean(value: unknown, fallback = false) {
 
 function normalizeSettings(value: unknown) {
   const source = isRecord(value) ? value : {};
-  const notifications = isRecord(source.notifications) ? source.notifications : {};
+  const notifications = isRecord(source.notifications)
+    ? source.notifications
+    : {};
 
   return {
     notifications: {
@@ -56,7 +57,7 @@ function normalizeSettings(value: unknown) {
 }
 
 export default async function SettingsPage() {
-  const { userId, sessionClaims } = await auth();
+  const { userId, sessionClaims } = await getCachedAuth();
 
   if (!userId) {
     return (
@@ -94,7 +95,9 @@ export default async function SettingsPage() {
           description="Manage profile and notification preferences."
         />
         <CustomerSettingsClient
-          initialLanguage={user?.languagePreference ?? context.languagePreference}
+          initialLanguage={
+            user?.languagePreference ?? context.languagePreference
+          }
           profile={{
             name: user?.name ?? context.displayName,
             email: user?.email ?? context.verifiedEmails[0] ?? "",
@@ -106,40 +109,32 @@ export default async function SettingsPage() {
   }
 
   if (role === "technician") {
-    const authData = await auth();
-
-    if (!authData.userId) {
-      authData.redirectToSignIn();
-    }
-
-    const technicianUser = authData.userId
-      ? await db.user.findUnique({
-          where: {
-            clerkId: authData.userId,
-          },
+    const technicianUser = await db.user.findUnique({
+      where: {
+        clerkId: userId,
+      },
+      select: {
+        name: true,
+        phone: true,
+        email: true,
+        technicianProfile: {
           select: {
-            name: true,
-            phone: true,
-            email: true,
-            technicianProfile: {
+            id: true,
+            skills: true,
+            isAvailable: true,
+            activeJobCount: true,
+            maxConcurrentJobs: true,
+            serviceCenter: {
               select: {
-                id: true,
-                skills: true,
-                isAvailable: true,
-                activeJobCount: true,
-                maxConcurrentJobs: true,
-                serviceCenter: {
-                  select: {
-                    name: true,
-                    city: true,
-                    state: true,
-                  },
-                },
+                name: true,
+                city: true,
+                state: true,
               },
             },
           },
-        })
-      : null;
+        },
+      },
+    });
 
     return (
       <div className="space-y-6">
@@ -186,7 +181,9 @@ export default async function SettingsPage() {
                 {technicianUser.email ?? "—"}
               </p>
               <p>
-                <span className="font-medium text-slate-900">Availability:</span>{" "}
+                <span className="font-medium text-slate-900">
+                  Availability:
+                </span>{" "}
                 {technicianUser.technicianProfile.isAvailable ? (
                   <Badge className="ml-2 bg-emerald-600 text-white">
                     Available
@@ -247,7 +244,9 @@ export default async function SettingsPage() {
         <Card className="border-slate-200">
           <CardHeader>
             <CardTitle className="text-base">Organizations</CardTitle>
-            <CardDescription>Showing the most recent 100 records.</CardDescription>
+            <CardDescription>
+              Showing the most recent 100 records.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {organizations.length === 0 ? (
@@ -268,14 +267,19 @@ export default async function SettingsPage() {
                     {organizations.map((org) => (
                       <TableRow key={org.id}>
                         <TableCell className="min-w-[220px]">
-                          <p className="font-medium text-slate-900">{org.name}</p>
+                          <p className="font-medium text-slate-900">
+                            {org.name}
+                          </p>
                           <p className="text-xs text-slate-500">
                             {org.slug ? org.slug : org.id.slice(0, 8)}
                             {org.city ? ` • ${org.city}` : ""}
                           </p>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <Badge variant="outline" className="border-slate-200 bg-slate-50">
+                          <Badge
+                            variant="outline"
+                            className="border-slate-200 bg-slate-50"
+                          >
                             {org.type}
                           </Badge>
                         </TableCell>
@@ -283,7 +287,10 @@ export default async function SettingsPage() {
                           {org.subscriptionTier}
                           {org.subscriptionExpiresAt ? (
                             <p className="text-xs text-slate-500">
-                              Expires {org.subscriptionExpiresAt.toLocaleDateString("en-IN")}
+                              Expires{" "}
+                              {org.subscriptionExpiresAt.toLocaleDateString(
+                                "en-IN",
+                              )}
                             </p>
                           ) : null}
                         </TableCell>

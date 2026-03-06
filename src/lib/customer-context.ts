@@ -1,8 +1,9 @@
 import "server-only";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
+import { getCachedAuth, getCachedCurrentUser } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { parseAppRoleFromClaims } from "@/lib/roles";
 
@@ -264,47 +265,48 @@ export type CustomerContext = {
   languagePreference: string;
 };
 
-export async function requireCustomerContext(): Promise<CustomerContext> {
-  const authData = await auth();
+export const requireCustomerContext = cache(
+  async (): Promise<CustomerContext> => {
+    const authData = await getCachedAuth();
 
-  if (!authData.userId) {
-    authData.redirectToSignIn();
-  }
+    if (!authData.userId) {
+      authData.redirectToSignIn();
+    }
 
-  const role = parseAppRoleFromClaims(authData.sessionClaims);
+    const role = parseAppRoleFromClaims(authData.sessionClaims);
 
-  if (
-    process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true" &&
-    role !== "customer"
-  ) {
-    redirect("/dashboard?access=denied&required=customer");
-  }
+    if (
+      process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true" &&
+      role !== "customer"
+    ) {
+      redirect("/dashboard?access=denied&required=customer");
+    }
 
-  const clerkUserId = authData.userId;
+    const clerkUserId = authData.userId;
 
-  if (!clerkUserId) {
-    throw new Error("Authenticated clerk user id is required.");
-  }
+    if (!clerkUserId) {
+      throw new Error("Authenticated clerk user id is required.");
+    }
 
-  const clerkUser = await currentUser();
-  const verifiedEmails = clerkUser ? extractVerifiedEmails(clerkUser) : [];
-  const verifiedPhones = clerkUser ? extractVerifiedPhones(clerkUser) : [];
-  const displayName = clerkUser ? buildDisplayName(clerkUser) : "Customer";
+    const clerkUser = await getCachedCurrentUser();
+    const verifiedEmails = clerkUser ? extractVerifiedEmails(clerkUser) : [];
+    const verifiedPhones = clerkUser ? extractVerifiedPhones(clerkUser) : [];
+    const displayName = clerkUser ? buildDisplayName(clerkUser) : "Customer";
 
-  const dbUser = await ensureCustomerUserRecord({
-    clerkUserId,
-    verifiedEmails,
-    verifiedPhones,
-    displayName,
-  });
+    const dbUser = await ensureCustomerUserRecord({
+      clerkUserId,
+      verifiedEmails,
+      verifiedPhones,
+      displayName,
+    });
 
-  return {
-    clerkUserId,
-    dbUserId: dbUser.id,
-    displayName: dbUser.name ?? displayName,
-    verifiedEmails,
-    verifiedPhones,
-    languagePreference: dbUser.languagePreference ?? "en",
-  };
-}
-
+    return {
+      clerkUserId,
+      dbUserId: dbUser.id,
+      displayName: dbUser.name ?? displayName,
+      verifiedEmails,
+      verifiedPhones,
+      languagePreference: dbUser.languagePreference ?? "en",
+    };
+  },
+);
