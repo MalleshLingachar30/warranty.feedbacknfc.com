@@ -7,20 +7,7 @@ import { ArrowRight, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-
-function parseStickerNumber(value: string): number | null {
-  const normalized = value.trim();
-  if (!normalized) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(normalized, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
-}
+import { parseStickerNumber } from "@/lib/sticker-number";
 
 export function RegisterProductCard() {
   const router = useRouter();
@@ -34,7 +21,9 @@ export function RegisterProductCard() {
 
     const stickerNumber = parseStickerNumber(value);
     if (!stickerNumber) {
-      setError("Enter a valid sticker number (e.g. 12345).");
+      setError(
+        "Enter a valid sticker number or sticker URL (e.g. 12345 or feedbacknfc.com/nfc/12345).",
+      );
       return;
     }
 
@@ -51,15 +40,15 @@ export function RegisterProductCard() {
           Register another product
         </CardTitle>
         <p className="text-sm text-slate-600">
-          Enter a sticker number to open the activation / service page.
+          Enter a sticker number or paste an NFC/QR URL to open the activation
+          or service page.
         </p>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="flex flex-col gap-2 sm:flex-row">
           <Input
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Sticker number"
+            inputMode="text"
+            placeholder="Sticker number or URL"
             value={value}
             onChange={(event) => setValue(event.target.value)}
             className="h-11"
@@ -80,4 +69,3 @@ export function RegisterProductCard() {
     </Card>
   );
 }
-

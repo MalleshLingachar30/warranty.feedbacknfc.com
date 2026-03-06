@@ -476,8 +476,13 @@ export function StickerWizardClient({
 
               {stickerConfig.mode === "nfc_qr" || stickerConfig.mode === "nfc_only" ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  ⚠ NFC stickers require encoding. Download the NFC encoding file
-                  after allocation to program NFC chips with matching URLs.
+                  ⚠ NFC encoding is only required for blank chips or when you are
+                  changing the programmed URL. If you are reusing existing{" "}
+                  <code className="mx-1 rounded bg-amber-100 px-1 py-0.5">
+                    feedbacknfc.com/nfc/12345
+                  </code>{" "}
+                  cards, allocate the matching sticker range and keep the
+                  existing encoding.
                 </div>
               ) : null}
             </div>
@@ -883,7 +888,12 @@ export function StickerWizardClient({
                       Generate NFC Encoding File
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Available for NFC + QR and NFC Only sticker modes.
+                      Available for NFC + QR and NFC Only sticker modes. Skip
+                      this when reusing already-programmed{" "}
+                      <code className="mx-1 rounded bg-muted px-1 py-0.5">
+                        feedbacknfc.com/nfc/12345
+                      </code>{" "}
+                      cards.
                     </p>
                   </div>
 

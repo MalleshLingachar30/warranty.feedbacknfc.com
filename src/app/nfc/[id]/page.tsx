@@ -17,11 +17,17 @@ import { WarrantyActivation } from "@/components/nfc/warranty-activation";
 import { auth } from "@clerk/nextjs/server";
 import type { TicketStatus } from "@prisma/client";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { db } from "@/lib/db";
 import { detectNfcLanguage } from "@/lib/nfc-i18n";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
+import { parseStickerNumber } from "@/lib/sticker-number";
+import {
+  buildAbsoluteAssetUrl,
+  buildAbsoluteWarrantyUrl,
+} from "@/lib/warranty-app-url";
 import {
   parseAppRole,
   parseAppRoleFromClaims,
@@ -52,6 +58,8 @@ const OPEN_TICKET_STATUSES: TicketStatus[] = [
   "reopened",
   "escalated",
 ];
+
+const ROOT_STICKER_HOSTS = new Set(["feedbacknfc.com", "www.feedbacknfc.com"]);
 
 function normalizeTicketStatus(status: TicketStatus): string {
   if (status === "resolved" || status === "closed") {
@@ -91,6 +99,41 @@ function firstQueryValue(
   }
 
   return null;
+}
+
+function readRequestHost(requestHeaders: Headers): string | null {
+  const rawHost =
+    requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  if (!rawHost) {
+    return null;
+  }
+
+  const host = rawHost.split(",")[0]?.trim().split(":")[0]?.toLowerCase();
+  return host && host.length > 0 ? host : null;
+}
+
+function toSearchParamString(
+  searchParams: Awaited<NfcStickerPageProps["searchParams"]>,
+): string {
+  const nextSearchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (typeof value === "string") {
+      nextSearchParams.append(key, value);
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (typeof entry === "string") {
+          nextSearchParams.append(key, entry);
+        }
+      }
+    }
+  }
+
+  const serialized = nextSearchParams.toString();
+  return serialized ? `?${serialized}` : "";
 }
 
 function readCertificateUrl(metadata: unknown): string | null {
@@ -489,15 +532,25 @@ export default async function NfcStickerPage({
 }: NfcStickerPageProps) {
   const { id } = await params;
   const resolvedSearchParams = await searchParams;
-  const stickerNumber = Number.parseInt(id, 10);
+  const requestHeaders = await headers();
+  const requestHost = readRequestHost(requestHeaders);
+  const isRootStickerHost = requestHost
+    ? ROOT_STICKER_HOSTS.has(requestHost)
+    : false;
+  const queryString = toSearchParamString(resolvedSearchParams);
+  const stickerNumber = parseStickerNumber(id);
   const srcParam = firstQueryValue(resolvedSearchParams.src);
   const scanSource = srcParam === "qr" ? "qr" : srcParam === "nfc" ? "nfc" : "unknown";
 
-  if (!Number.isFinite(stickerNumber)) {
+  if (stickerNumber === null) {
+    if (isRootStickerHost) {
+      redirect(
+        buildAbsoluteAssetUrl(`/nfc/${encodeURIComponent(id)}${queryString}`),
+      );
+    }
+
     return <StickerNotFound />;
   }
-
-  const requestHeaders = await headers();
 
   const sticker = await db.sticker.findUnique({
     where: { stickerNumber },
@@ -513,7 +566,19 @@ export default async function NfcStickerPage({
   });
 
   if (!sticker) {
+    if (isRootStickerHost) {
+      redirect(
+        buildAbsoluteAssetUrl(`/nfc/${encodeURIComponent(id)}${queryString}`),
+      );
+    }
+
     return <StickerNotFound />;
+  }
+
+  if (isRootStickerHost) {
+    redirect(
+      buildAbsoluteWarrantyUrl(`/nfc/${sticker.stickerNumber}${queryString}`),
+    );
   }
 
   after(async () => {

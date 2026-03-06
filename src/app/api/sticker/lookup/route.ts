@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { db as prisma } from "@/lib/db";
+import { parseStickerNumber } from "@/lib/sticker-number";
 
 interface StickerLookupBody {
   number?: unknown;
@@ -8,23 +9,14 @@ interface StickerLookupBody {
   stickerNumber?: unknown;
 }
 
-function readStickerNumber(value: string | null): number | null {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isNaN(parsed) ? null : parsed;
-}
-
-function toBodyNumberValue(value: unknown): string | null {
+function toIdentifierValue(value: unknown): string | number | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }
 
   if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
+    return value;
   }
 
   return null;
@@ -96,11 +88,14 @@ export async function GET(request: NextRequest) {
       request.nextUrl.searchParams.get("number") ??
       request.nextUrl.searchParams.get("id");
 
-    const stickerNumber = readStickerNumber(queryValue);
+    const stickerNumber = parseStickerNumber(queryValue);
 
     if (stickerNumber === null) {
       return NextResponse.json(
-        { error: "Provide a valid `number` query parameter." },
+        {
+          error:
+            "Provide a valid sticker number or `/nfc/{number}` URL in the `number` query parameter.",
+        },
         { status: 400 },
       );
     }
@@ -120,11 +115,11 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as StickerLookupBody;
 
     const numberParam =
-      toBodyNumberValue(body.number) ??
-      toBodyNumberValue(body.id) ??
-      toBodyNumberValue(body.stickerNumber);
+      toIdentifierValue(body.number) ??
+      toIdentifierValue(body.id) ??
+      toIdentifierValue(body.stickerNumber);
 
-    const stickerNumber = readStickerNumber(numberParam);
+    const stickerNumber = parseStickerNumber(numberParam);
 
     if (stickerNumber === null) {
       return NextResponse.json(

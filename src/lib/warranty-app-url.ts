@@ -7,7 +7,20 @@ export function getWarrantyAppBaseUrl(): string {
   return explicit.replace(/\/+$/, "");
 }
 
+export function getAssetAppBaseUrl(): string {
+  const explicit =
+    process.env.NEXT_PUBLIC_ASSET_APP_URL ??
+    "https://asset.feedbacknfc.com";
+
+  return explicit.replace(/\/+$/, "");
+}
+
 export function buildAbsoluteWarrantyUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${getWarrantyAppBaseUrl()}${normalizedPath}`;
+}
+
+export function buildAbsoluteAssetUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${getAssetAppBaseUrl()}${normalizedPath}`;
 }
