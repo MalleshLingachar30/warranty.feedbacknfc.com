@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import {
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
+  UploadIcon,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { TagInput } from "@/components/dashboard/tag-input";
@@ -93,6 +99,7 @@ export function ProductModelsClient({
   const [formValues, setFormValues] =
     useState<ProductFormValues>(toFormValues());
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -117,6 +124,41 @@ export function ProductModelsClient({
     setFormValues(toFormValues(model));
     setFormError(null);
     setDialogOpen(true);
+  };
+
+  const uploadModelImage = async (file: File) => {
+    setFormError(null);
+    setIsUploadingImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/upload/photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = (await response.json()) as {
+        error?: string;
+        url?: string | null;
+      };
+
+      if (!response.ok || !json.url) {
+        throw new Error(json.error ?? "Unable to upload image.");
+      }
+
+      setFormValues((current) => ({
+        ...current,
+        imageUrl: json.url ?? "",
+      }));
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : "Unable to upload image.",
+      );
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const saveModel = async () => {
@@ -352,6 +394,61 @@ export function ProductModelsClient({
                     }
                     placeholder="https://..."
                   />
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+
+                          if (!file) {
+                            return;
+                          }
+
+                          void uploadModelImage(file);
+                        }}
+                      />
+                      <span className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2">
+                        {isUploadingImage ? (
+                          <Loader2Icon className="size-4 animate-spin" />
+                        ) : (
+                          <UploadIcon className="size-4" />
+                        )}
+                        {isUploadingImage ? "Uploading..." : "Upload Image"}
+                      </span>
+                    </label>
+                    {formValues.imageUrl ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setFormValues((current) => ({
+                            ...current,
+                            imageUrl: "",
+                          }))
+                        }
+                      >
+                        Clear
+                      </Button>
+                    ) : null}
+                  </div>
+                  {formValues.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={formValues.imageUrl}
+                      alt="Product model preview"
+                      className="h-28 w-full rounded-md border object-cover"
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Upload an image or paste an image URL. This image appears
+                      on the customer warranty activation screen.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -410,12 +507,17 @@ export function ProductModelsClient({
                 >
                   Cancel
                 </Button>
-                <Button onClick={saveModel} disabled={isSaving}>
+                <Button
+                  onClick={saveModel}
+                  disabled={isSaving || isUploadingImage}
+                >
                   {isSaving
                     ? "Saving..."
-                    : editingModel
-                      ? "Save Changes"
-                      : "Create Product Model"}
+                    : isUploadingImage
+                      ? "Uploading Image..."
+                      : editingModel
+                        ? "Save Changes"
+                        : "Create Product Model"}
                 </Button>
               </DialogFooter>
             </DialogContent>
