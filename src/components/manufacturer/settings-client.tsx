@@ -86,6 +86,15 @@ function sanitizeHours(value: string): number {
   return parsed;
 }
 
+function sanitizePercent(value: string, fallback: number): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(30, Math.max(10, parsed));
+}
+
 function SeverityHoursEditor({
   title,
   value,
@@ -303,19 +312,25 @@ export function ManufacturerSettingsClient({
     }
   };
 
-  const toggleTeamMemberStatus = async (memberId: string, isActive: boolean) => {
+  const toggleTeamMemberStatus = async (
+    memberId: string,
+    isActive: boolean,
+  ) => {
     setTogglingMemberId(memberId);
     setSaveError(null);
     setSaveMessage(null);
 
     try {
-      const response = await fetch(`/api/manufacturer/team-members/${memberId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `/api/manufacturer/team-members/${memberId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ isActive }),
         },
-        body: JSON.stringify({ isActive }),
-      });
+      );
 
       const payload = (await response.json()) as {
         error?: string;
@@ -334,7 +349,9 @@ export function ManufacturerSettingsClient({
       setSaveMessage("Team member status updated.");
     } catch (error) {
       setSaveError(
-        error instanceof Error ? error.message : "Unable to update team member.",
+        error instanceof Error
+          ? error.message
+          : "Unable to update team member.",
       );
     } finally {
       setTogglingMemberId(null);
@@ -634,6 +651,60 @@ export function ManufacturerSettingsClient({
                   />
                 </label>
 
+                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
+                  <div className="space-y-1">
+                    <span className="block">Place Logo in Center of QR</span>
+                    <p className="text-xs text-muted-foreground">
+                      Applies to print-ready QR sheet exports. Best with a
+                      simple square logo and strong QR error correction.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.stickers.branding.showLogoInQrCenter}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            showLogoInQrCenter: event.target.checked,
+                          },
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-input"
+                  />
+                </label>
+
+                <label className="space-y-1 text-sm sm:col-span-2">
+                  <span>QR Center Logo Size (%)</span>
+                  <Input
+                    type="number"
+                    min={10}
+                    max={30}
+                    step={1}
+                    value={settings.stickers.branding.qrLogoScalePercent}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        stickers: {
+                          ...current.stickers,
+                          branding: {
+                            ...current.stickers.branding,
+                            qrLogoScalePercent: sanitizePercent(
+                              event.target.value,
+                              current.stickers.branding.qrLogoScalePercent,
+                            ),
+                          },
+                        },
+                      }))
+                    }
+                    disabled={!settings.stickers.branding.showLogoInQrCenter}
+                  />
+                </label>
+
                 <label className="space-y-1 text-sm sm:col-span-2">
                   <span>Instruction Text (English)</span>
                   <Input
@@ -664,8 +735,8 @@ export function ManufacturerSettingsClient({
                           ...current.stickers,
                           branding: {
                             ...current.stickers.branding,
-                            regionalLanguage:
-                              event.target.value as ManufacturerStickerConfig["branding"]["regionalLanguage"],
+                            regionalLanguage: event.target
+                              .value as ManufacturerStickerConfig["branding"]["regionalLanguage"],
                           },
                         },
                       }))
@@ -1053,8 +1124,8 @@ export function ManufacturerSettingsClient({
               />
             </label>
             <p className="text-xs text-muted-foreground">
-              Key vault integration is a placeholder for MVP. Use this section to
-              track active key labels and rotation metadata.
+              Key vault integration is a placeholder for MVP. Use this section
+              to track active key labels and rotation metadata.
             </p>
           </CardContent>
         </Card>
@@ -1066,8 +1137,8 @@ export function ManufacturerSettingsClient({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Create the user in Clerk first, then link them here as a manufacturer
-            admin.
+            Create the user in Clerk first, then link them here as a
+            manufacturer admin.
           </p>
 
           <div className="grid gap-3 md:grid-cols-4">
@@ -1131,10 +1202,7 @@ export function ManufacturerSettingsClient({
               <tbody>
                 {teamMembers.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-2 py-4 text-muted-foreground"
-                    >
+                    <td colSpan={6} className="px-2 py-4 text-muted-foreground">
                       No manufacturer admin members linked yet.
                     </td>
                   </tr>

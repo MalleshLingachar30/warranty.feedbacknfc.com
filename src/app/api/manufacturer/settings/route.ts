@@ -75,11 +75,15 @@ function normalizeSeverityHours(value: unknown) {
   const source = isRecord(value) ? value : {};
 
   return {
-    low: asPositiveInteger(source.low) ?? DEFAULT_SLA_HOURS.responseHoursBySeverity.low,
+    low:
+      asPositiveInteger(source.low) ??
+      DEFAULT_SLA_HOURS.responseHoursBySeverity.low,
     medium:
       asPositiveInteger(source.medium) ??
       DEFAULT_SLA_HOURS.responseHoursBySeverity.medium,
-    high: asPositiveInteger(source.high) ?? DEFAULT_SLA_HOURS.responseHoursBySeverity.high,
+    high:
+      asPositiveInteger(source.high) ??
+      DEFAULT_SLA_HOURS.responseHoursBySeverity.high,
     critical:
       asPositiveInteger(source.critical) ??
       DEFAULT_SLA_HOURS.responseHoursBySeverity.critical,
@@ -109,15 +113,12 @@ function normalizeNotificationEvents(value: unknown) {
   const source = isRecord(value) ? value : {};
 
   return {
-    warrantyActivated:
-      asOptionalBoolean(source.warrantyActivated) ?? true,
+    warrantyActivated: asOptionalBoolean(source.warrantyActivated) ?? true,
     ticketCreated: asOptionalBoolean(source.ticketCreated) ?? true,
-    technicianUpdates:
-      asOptionalBoolean(source.technicianUpdates) ?? true,
+    technicianUpdates: asOptionalBoolean(source.technicianUpdates) ?? true,
     claimSubmitted: asOptionalBoolean(source.claimSubmitted) ?? true,
     claimDecision: asOptionalBoolean(source.claimDecision) ?? true,
-    warrantyExpiring:
-      asOptionalBoolean(source.warrantyExpiring) ?? true,
+    warrantyExpiring: asOptionalBoolean(source.warrantyExpiring) ?? true,
     slaBreached: asOptionalBoolean(source.slaBreached) ?? true,
   };
 }
@@ -248,7 +249,8 @@ export async function PUT(request: Request) {
     const patchedModeRaw =
       typeof stickersPatch.mode === "string" ? stickersPatch.mode.trim() : null;
     const patchedMode: StickerMode | null =
-      patchedModeRaw && (STICKER_MODES as readonly string[]).includes(patchedModeRaw)
+      patchedModeRaw &&
+      (STICKER_MODES as readonly string[]).includes(patchedModeRaw)
         ? (patchedModeRaw as StickerMode)
         : null;
 
@@ -285,20 +287,39 @@ export async function PUT(request: Request) {
         logoUrl:
           asString(brandingPatch.logoUrl ?? brandingPatch.logo_url) ??
           existingStickerConfig.branding.logoUrl,
+        showLogoInQrCenter:
+          asOptionalBoolean(
+            brandingPatch.showLogoInQrCenter ??
+              brandingPatch.show_logo_in_qr_center,
+          ) ?? existingStickerConfig.branding.showLogoInQrCenter,
+        qrLogoScalePercent: Math.min(
+          30,
+          Math.max(
+            10,
+            asPositiveInteger(
+              brandingPatch.qrLogoScalePercent ??
+                brandingPatch.qr_logo_scale_percent,
+            ) ?? existingStickerConfig.branding.qrLogoScalePercent,
+          ),
+        ),
         instructionTextEn:
           asString(
-            brandingPatch.instructionTextEn ?? brandingPatch.instruction_text_en,
+            brandingPatch.instructionTextEn ??
+              brandingPatch.instruction_text_en,
           ) ?? existingStickerConfig.branding.instructionTextEn,
         instructionTextHi:
           asString(
-            brandingPatch.instructionTextHi ?? brandingPatch.instruction_text_hi,
+            brandingPatch.instructionTextHi ??
+              brandingPatch.instruction_text_hi,
           ) ?? existingStickerConfig.branding.instructionTextHi,
         instructionTextAr:
           asString(
-            brandingPatch.instructionTextAr ?? brandingPatch.instruction_text_ar,
+            brandingPatch.instructionTextAr ??
+              brandingPatch.instruction_text_ar,
           ) ?? existingStickerConfig.branding.instructionTextAr,
         regionalLanguage:
-          patchedRegionalLanguage ?? existingStickerConfig.branding.regionalLanguage,
+          patchedRegionalLanguage ??
+          existingStickerConfig.branding.regionalLanguage,
         showSupportPhone:
           asOptionalBoolean(
             brandingPatch.showSupportPhone ?? brandingPatch.show_support_phone,

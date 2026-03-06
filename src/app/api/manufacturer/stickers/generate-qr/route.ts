@@ -22,6 +22,19 @@ type OutputFormat = "pdf_sheet" | "png_zip" | "csv";
 type ErrorCorrection = "L" | "M" | "Q" | "H";
 type QrSizeMm = 25 | 30 | 35;
 
+function normalizeQrDarkColor(value: string | null | undefined) {
+  const candidate = value?.trim();
+  if (!candidate) {
+    return "#000000";
+  }
+
+  if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(candidate)) {
+    return candidate;
+  }
+
+  return "#000000";
+}
+
 function parseOutputFormat(value: string | null): OutputFormat {
   if (value === "pdf_sheet" || value === "png_zip" || value === "csv") {
     return value;
@@ -58,7 +71,10 @@ function buildStickerSerial(stickerNumber: number) {
   return `FNFC-${String(stickerNumber).padStart(6, "0")}`;
 }
 
-async function runWithConcurrency(tasks: Array<() => Promise<void>>, limit: number) {
+async function runWithConcurrency(
+  tasks: Array<() => Promise<void>>,
+  limit: number,
+) {
   const queue = [...tasks];
   const runners = Array.from({ length: Math.max(1, limit) }, async () => {
     while (queue.length > 0) {
@@ -102,13 +118,18 @@ export async function GET(request: Request) {
       throw new ApiError("Manufacturer organization not found.", 404);
     }
 
-    const stickerConfig = normalizeManufacturerStickerConfig(organization.settings);
+    const stickerConfig = normalizeManufacturerStickerConfig(
+      organization.settings,
+    );
     if (stickerConfig.mode === "nfc_only") {
       throw new ApiError(
         "QR generation is disabled while Sticker Technology Mode is set to NFC Only.",
         400,
       );
     }
+    const qrDarkColor = normalizeQrDarkColor(
+      stickerConfig.branding.primaryColor,
+    );
 
     const allocation = await db.stickerAllocation.findFirst({
       where: {
@@ -154,7 +175,8 @@ export async function GET(request: Request) {
 
     const stickerItems = Array.from({ length: end - start + 1 }, (_, index) => {
       const stickerNumber = start + index;
-      const serial = serialByNumber.get(stickerNumber) ?? buildStickerSerial(stickerNumber);
+      const serial =
+        serialByNumber.get(stickerNumber) ?? buildStickerSerial(stickerNumber);
       return {
         stickerNumber,
         serial,
@@ -166,7 +188,10 @@ export async function GET(request: Request) {
       };
     });
 
-    const allocationLabel = formatAllocationId(allocation.id, allocation.allocatedAt);
+    const allocationLabel = formatAllocationId(
+      allocation.id,
+      allocation.allocatedAt,
+    );
 
     if (format === "csv") {
       const lines = ["sticker_number,serial,url"];
@@ -196,6 +221,10 @@ export async function GET(request: Request) {
           width: qrPixels,
           margin: 1,
           errorCorrectionLevel: errorCorrection,
+          color: {
+            dark: qrDarkColor,
+            light: "#FFFFFF",
+          },
         });
         zip.file(`${item.serial}.png`, pngBuffer);
       });
@@ -221,7 +250,8 @@ export async function GET(request: Request) {
     }
 
     const qrPixels = toQrPixels(qrSizeMm);
-    const logoUrl = stickerConfig.branding.logoUrl || organization.logoUrl || "";
+    const logoUrl =
+      stickerConfig.branding.logoUrl || organization.logoUrl || "";
 
     const qrTasks: Array<() => Promise<void>> = [];
     const sheetItems: Array<{
@@ -241,6 +271,10 @@ export async function GET(request: Request) {
           margin: 1,
           width: qrPixels,
           errorCorrectionLevel: errorCorrection,
+          color: {
+            dark: qrDarkColor,
+            light: "#FFFFFF",
+          },
         });
         sheetItems[index].qrDataUrl = dataUrl;
       });

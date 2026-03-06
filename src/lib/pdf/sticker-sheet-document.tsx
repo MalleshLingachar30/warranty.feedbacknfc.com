@@ -82,6 +82,16 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     borderRadius: 3,
   },
+  qrWrapper: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qrCenterLogo: {
+    position: "absolute",
+    objectFit: "contain",
+  },
   serial: {
     fontSize: 7,
     fontWeight: 700,
@@ -107,6 +117,7 @@ export function StickerSheetDocument({
       : branding.instructionTextHi;
 
   const qrSizePt = mmToPt(qrSizeMm);
+  const qrCenterLogoSizePt = (qrSizePt * branding.qrLogoScalePercent) / 100;
   const pageWidth = 595.28;
   const pageHeight = 841.89;
   const padding = 18;
@@ -154,14 +165,35 @@ export function StickerSheetDocument({
                   {branding.logoUrl ? (
                     <PdfImage src={branding.logoUrl} style={styles.logo} />
                   ) : null}
-                  <Text style={styles.instruction}>{branding.instructionTextEn}</Text>
+                  <Text style={styles.instruction}>
+                    {branding.instructionTextEn}
+                  </Text>
                   <Text style={styles.instruction}>{secondaryInstruction}</Text>
                 </View>
 
-                <PdfImage
-                  src={item.qrDataUrl}
-                  style={[styles.qr, { width: qrSizePt, height: qrSizePt }]}
-                />
+                <View
+                  style={[
+                    styles.qrWrapper,
+                    { width: qrSizePt, height: qrSizePt },
+                  ]}
+                >
+                  <PdfImage
+                    src={item.qrDataUrl}
+                    style={[styles.qr, { width: qrSizePt, height: qrSizePt }]}
+                  />
+                  {branding.logoUrl && branding.showLogoInQrCenter ? (
+                    <PdfImage
+                      src={branding.logoUrl}
+                      style={[
+                        styles.qrCenterLogo,
+                        {
+                          width: qrCenterLogoSizePt,
+                          height: qrCenterLogoSizePt,
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </View>
 
                 <View>
                   <Text style={styles.serial}>{item.stickerSerial}</Text>
@@ -181,4 +213,3 @@ export function createStickerSheetPdfDocument(
 ): ReactElement<DocumentProps> {
   return <StickerSheetDocument {...props} />;
 }
-
