@@ -257,7 +257,7 @@ export default async function ManufacturerOverviewPage() {
         }
 
         point.cost += decimalToNumber(claim.cost);
-        point.claims += claim.claims;
+        point.claims += decimalToNumber(claim.claims);
       }
 
       monthlyTrend = [...points.values()];
@@ -267,7 +267,7 @@ export default async function ManufacturerOverviewPage() {
       topIssues = issueRows.map((row) => ({
         model: row.model,
         issue: row.issue,
-        incidents: row.incidents,
+        incidents: decimalToNumber(row.incidents),
       }));
     }
   }
