@@ -13,6 +13,29 @@ function isRecord(value: unknown): value is GenericRecord {
   return Boolean(value) && typeof value === "object";
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (isRecord(error) && typeof error.message === "string") {
+    return error.message;
+  }
+
+  return null;
+}
+
+function isMissingNfcOnlyStickerTypeMigration(error: unknown) {
+  const message = getErrorMessage(error)?.toLowerCase();
+
+  return Boolean(
+    message &&
+      message.includes("invalid input value for enum") &&
+      message.includes("stickertype") &&
+      message.includes("nfc_only"),
+  );
+}
+
 export class ApiError extends Error {
   status: number;
 
@@ -27,6 +50,17 @@ export function jsonError(error: unknown) {
     return NextResponse.json(
       { error: error.message },
       { status: error.status },
+    );
+  }
+
+  if (isMissingNfcOnlyStickerTypeMigration(error)) {
+    console.error(error);
+    return NextResponse.json(
+      {
+        error:
+          "NFC-only sticker mode needs the latest database migration. Run `prisma migrate deploy` and try again.",
+      },
+      { status: 503 },
     );
   }
 
