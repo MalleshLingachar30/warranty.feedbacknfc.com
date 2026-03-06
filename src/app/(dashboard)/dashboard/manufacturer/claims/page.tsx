@@ -1,4 +1,6 @@
-import { ClaimsClient } from "@/components/manufacturer/claims-client";
+import dynamic from "next/dynamic";
+
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { type ClaimQueueRow } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
 import {
@@ -8,6 +10,16 @@ import {
 import { claimsSeed } from "@/lib/mock/manufacturer-dashboard";
 
 import { resolveManufacturerPageContext } from "../_lib/server-context";
+
+const ClaimsClient = dynamic(
+  () =>
+    import("@/components/manufacturer/claims-client").then(
+      (mod) => mod.ClaimsClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={6} />,
+  },
+);
 
 function mapSeedClaims(): ClaimQueueRow[] {
   return claimsSeed.map((claim) => ({

@@ -1,9 +1,21 @@
+import dynamic from "next/dynamic";
+
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { db } from "@/lib/db";
-import { ManufacturerSettingsClient } from "@/components/manufacturer/settings-client";
 import { DEFAULT_SLA_HOURS } from "@/lib/sla-config";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 
 import { resolveManufacturerPageContext } from "../_lib/server-context";
+
+const ManufacturerSettingsClient = dynamic(
+  () =>
+    import("@/components/manufacturer/settings-client").then(
+      (mod) => mod.ManufacturerSettingsClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={8} />,
+  },
+);
 
 type GenericRecord = Record<string, unknown>;
 

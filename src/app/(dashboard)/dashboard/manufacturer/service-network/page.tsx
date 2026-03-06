@@ -1,6 +1,7 @@
+import dynamic from "next/dynamic";
 import { ClaimStatus } from "@prisma/client";
 
-import { ServiceNetworkClient } from "@/components/manufacturer/service-network-client";
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { type ServiceCenterRow } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
 import { serviceCentersSeed } from "@/lib/mock/manufacturer-dashboard";
@@ -9,6 +10,16 @@ import {
   decimalToNumber,
   resolveManufacturerPageContext,
 } from "../_lib/server-context";
+
+const ServiceNetworkClient = dynamic(
+  () =>
+    import("@/components/manufacturer/service-network-client").then(
+      (mod) => mod.ServiceNetworkClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={6} />,
+  },
+);
 
 function mapSeedCenters(): ServiceCenterRow[] {
   return serviceCentersSeed.map((center) => ({

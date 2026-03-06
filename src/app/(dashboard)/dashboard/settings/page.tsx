@@ -1,8 +1,9 @@
+import dynamic from "next/dynamic";
+
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { ComingSoonCard } from "@/components/dashboard/coming-soon-card";
-import { CustomerSettingsClient } from "@/components/customer/customer-settings-client";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
-import { ServiceCenterSettingsClient } from "@/components/service-center/settings-client";
 import {
   Card,
   CardContent,
@@ -24,6 +25,26 @@ import { db } from "@/lib/db";
 import { requireCustomerContext } from "@/lib/customer-context";
 
 import { resolveServiceCenterPageContext } from "../_lib/service-center-context";
+
+const CustomerSettingsClient = dynamic(
+  () =>
+    import("@/components/customer/customer-settings-client").then(
+      (mod) => mod.CustomerSettingsClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={4} />,
+  },
+);
+
+const ServiceCenterSettingsClient = dynamic(
+  () =>
+    import("@/components/service-center/settings-client").then(
+      (mod) => mod.ServiceCenterSettingsClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={7} />,
+  },
+);
 
 type GenericRecord = Record<string, unknown>;
 

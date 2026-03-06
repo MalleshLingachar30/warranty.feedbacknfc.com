@@ -1,4 +1,6 @@
-import { StickerWizardClient } from "@/components/manufacturer/sticker-wizard-client";
+import dynamic from "next/dynamic";
+
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import {
   type AllocationHistoryRow,
   type ManufacturerProductModel,
@@ -17,6 +19,16 @@ import {
   jsonStringArray,
   resolveManufacturerPageContext,
 } from "../_lib/server-context";
+
+const StickerWizardClient = dynamic(
+  () =>
+    import("@/components/manufacturer/sticker-wizard-client").then(
+      (mod) => mod.StickerWizardClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={7} />,
+  },
+);
 
 function mapSeedModels(): ManufacturerProductModel[] {
   return productCatalogSeed.map((item) => ({
@@ -88,69 +100,69 @@ export default async function ManufacturerStickersPage() {
       totalActivated,
       organization,
     ] = await Promise.all([
-        db.productModel.findMany({
-          where: {
-            organizationId,
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-          select: {
-            id: true,
-            name: true,
-            category: true,
-            subCategory: true,
-            modelNumber: true,
-            description: true,
-            imageUrl: true,
-            warrantyDurationMonths: true,
-            requiredSkills: true,
-            commonIssues: true,
-            _count: {
-              select: {
-                products: true,
-              },
+      db.productModel.findMany({
+        where: {
+          organizationId,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          subCategory: true,
+          modelNumber: true,
+          description: true,
+          imageUrl: true,
+          warrantyDurationMonths: true,
+          requiredSkills: true,
+          commonIssues: true,
+          _count: {
+            select: {
+              products: true,
             },
           },
-        }),
-        db.stickerAllocation.findMany({
-          where: {
-            organizationId,
-          },
-          orderBy: {
-            allocatedAt: "desc",
-          },
-          include: {
-            productModel: {
-              select: {
-                name: true,
-              },
+        },
+      }),
+      db.stickerAllocation.findMany({
+        where: {
+          organizationId,
+        },
+        orderBy: {
+          allocatedAt: "desc",
+        },
+        include: {
+          productModel: {
+            select: {
+              name: true,
             },
           },
-          take: 30,
-        }),
-        db.sticker.count({
-          where: {
-            allocatedToOrgId: organizationId,
-          },
-        }),
-        db.sticker.count({
-          where: {
-            allocatedToOrgId: organizationId,
-            status: "bound",
-          },
-        }),
-        db.sticker.count({
-          where: {
-            allocatedToOrgId: organizationId,
-            status: "activated",
-          },
-        }),
-        db.organization.findUnique({
-          where: { id: organizationId },
-          select: { settings: true },
-        }),
-      ]);
+        },
+        take: 30,
+      }),
+      db.sticker.count({
+        where: {
+          allocatedToOrgId: organizationId,
+        },
+      }),
+      db.sticker.count({
+        where: {
+          allocatedToOrgId: organizationId,
+          status: "bound",
+        },
+      }),
+      db.sticker.count({
+        where: {
+          allocatedToOrgId: organizationId,
+          status: "activated",
+        },
+      }),
+      db.organization.findUnique({
+        where: { id: organizationId },
+        select: { settings: true },
+      }),
+    ]);
 
     productModels = models.map((model) => ({
       id: model.id,
@@ -197,7 +209,9 @@ export default async function ManufacturerStickersPage() {
       totalAvailable: Math.max(totalAllocated - totalBound - totalActivated, 0),
     };
 
-    stickerConfig = normalizeManufacturerStickerConfig(organization?.settings ?? {});
+    stickerConfig = normalizeManufacturerStickerConfig(
+      organization?.settings ?? {},
+    );
   }
 
   if (productModels.length === 0) {

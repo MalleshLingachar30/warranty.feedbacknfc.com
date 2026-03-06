@@ -1,4 +1,6 @@
-import { ProductModelsClient } from "@/components/manufacturer/product-models-client";
+import dynamic from "next/dynamic";
+
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { type ManufacturerProductModel } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
 import { productCatalogSeed } from "@/lib/mock/manufacturer-dashboard";
@@ -7,6 +9,16 @@ import {
   jsonStringArray,
   resolveManufacturerPageContext,
 } from "../_lib/server-context";
+
+const ProductModelsClient = dynamic(
+  () =>
+    import("@/components/manufacturer/product-models-client").then(
+      (mod) => mod.ProductModelsClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={6} />,
+  },
+);
 
 function seedToProductModel(): ManufacturerProductModel[] {
   return productCatalogSeed.map((item) => ({
