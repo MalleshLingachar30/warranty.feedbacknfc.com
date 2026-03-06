@@ -116,7 +116,7 @@ export default async function ManufacturerAnalyticsPage() {
         )::double precision AS "avgResolutionHours"
       FROM tickets t
       INNER JOIN products p ON p.id = t.product_id
-      WHERE p.organization_id = ${organizationId}
+      WHERE p.organization_id = ${organizationId}::uuid
     `),
     db.$queryRaw<ReliabilityRow[]>(Prisma.sql`
       SELECT
@@ -128,7 +128,7 @@ export default async function ManufacturerAnalyticsPage() {
       FROM product_models pm
       LEFT JOIN products p ON p.product_model_id = pm.id
       LEFT JOIN tickets t ON t.product_id = p.id
-      WHERE pm.organization_id = ${organizationId}
+      WHERE pm.organization_id = ${organizationId}::uuid
       GROUP BY pm.id, pm.name, pm.model_number
       ORDER BY pm.created_at ASC
     `),
@@ -138,7 +138,7 @@ export default async function ManufacturerAnalyticsPage() {
         COUNT(*)::int AS count
       FROM tickets t
       INNER JOIN products p ON p.id = t.product_id
-      WHERE p.organization_id = ${organizationId}
+      WHERE p.organization_id = ${organizationId}::uuid
       GROUP BY COALESCE(NULLIF(BTRIM(t.issue_category), ''), 'General issue')
       ORDER BY COUNT(*) DESC, issue ASC
       LIMIT 10
@@ -159,7 +159,7 @@ export default async function ManufacturerAnalyticsPage() {
         )::double precision AS "avgResolutionHours"
       FROM tickets t
       INNER JOIN products p ON p.id = t.product_id
-      WHERE p.organization_id = ${organizationId}
+      WHERE p.organization_id = ${organizationId}::uuid
       GROUP BY COALESCE(p.customer_city, 'Unknown')
       ORDER BY COUNT(*) DESC, city ASC
     `),
@@ -181,7 +181,7 @@ export default async function ManufacturerAnalyticsPage() {
       FROM tickets t
       INNER JOIN technicians tech ON tech.id = t.assigned_technician_id
       INNER JOIN products p ON p.id = t.product_id
-      WHERE p.organization_id = ${organizationId}
+      WHERE p.organization_id = ${organizationId}::uuid
       GROUP BY tech.id, tech.name
       ORDER BY COUNT(*) DESC, tech.name ASC
     `),
@@ -197,7 +197,7 @@ export default async function ManufacturerAnalyticsPage() {
           WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) NOT IN ('qr', 'nfc')
         )::int AS unknown
       FROM products p
-      WHERE p.organization_id = ${organizationId}
+      WHERE p.organization_id = ${organizationId}::uuid
         AND p.warranty_status <> 'pending_activation'
     `),
     db.stickerScanEvent

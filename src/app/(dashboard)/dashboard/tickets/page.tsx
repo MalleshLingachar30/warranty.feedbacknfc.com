@@ -209,8 +209,8 @@ export default async function ServiceCenterTicketsPage() {
           ON tech.id = t.assigned_technician_id
         LEFT JOIN service_centers tech_sc
           ON tech_sc.id = tech.service_center_id
-        WHERE asc_sc.organization_id = ${organizationId}
-          OR tech_sc.organization_id = ${organizationId}
+        WHERE asc_sc.organization_id = ${organizationId}::uuid
+          OR tech_sc.organization_id = ${organizationId}::uuid
         ORDER BY t.reported_at DESC
         LIMIT 150
       )

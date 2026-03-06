@@ -82,7 +82,7 @@ export default async function ServiceCenterTechniciansPage() {
       FROM tickets t
       INNER JOIN technicians tech ON tech.id = t.assigned_technician_id
       INNER JOIN service_centers sc ON sc.id = tech.service_center_id
-      WHERE sc.organization_id = ${organizationId}
+      WHERE sc.organization_id = ${organizationId}::uuid
         AND t.status IN ('resolved', 'closed')
         AND t.technician_started_at IS NOT NULL
         AND t.technician_completed_at IS NOT NULL

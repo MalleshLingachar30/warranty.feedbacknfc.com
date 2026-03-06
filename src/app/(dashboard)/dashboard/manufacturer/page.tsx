@@ -183,7 +183,7 @@ export default async function ManufacturerOverviewPage() {
           COALESCE(SUM(wc.total_claim_amount), 0)::double precision AS cost,
           COUNT(*)::int AS claims
         FROM warranty_claims wc
-        WHERE wc.manufacturer_org_id = ${organizationId}
+        WHERE wc.manufacturer_org_id = ${organizationId}::uuid
           AND wc.created_at >= ${sixMonthsAgo}
         GROUP BY DATE_TRUNC('month', wc.created_at)
         ORDER BY DATE_TRUNC('month', wc.created_at) ASC
@@ -195,7 +195,7 @@ export default async function ManufacturerOverviewPage() {
             COALESCE(NULLIF(BTRIM(t.issue_category), ''), 'Unknown issue') AS issue
           FROM tickets t
           INNER JOIN products p ON p.id = t.product_id
-          WHERE p.organization_id = ${organizationId}
+          WHERE p.organization_id = ${organizationId}::uuid
             AND t.issue_category IS NOT NULL
           ORDER BY t.reported_at DESC
           LIMIT 5000

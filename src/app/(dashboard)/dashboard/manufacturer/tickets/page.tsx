@@ -186,7 +186,7 @@ export default async function ManufacturerTicketsPage() {
           t.technician_completed_at
         FROM tickets t
         INNER JOIN products p ON p.id = t.product_id
-        WHERE p.organization_id = ${organizationId}
+        WHERE p.organization_id = ${organizationId}::uuid
         ORDER BY t.reported_at DESC
         LIMIT 120
       )
