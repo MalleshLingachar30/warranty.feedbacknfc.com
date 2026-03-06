@@ -8,7 +8,7 @@
     "dev": "next dev",
     "dev:vercel": "ulimit -n 1048575; WATCHPACK_POLLING=true CHOKIDAR_USEPOLLING=true next dev --webpack",
     "prebuild": "npm run generate:landing-content",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint .",
