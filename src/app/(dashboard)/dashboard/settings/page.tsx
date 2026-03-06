@@ -46,6 +46,16 @@ const ServiceCenterSettingsClient = dynamic(
   },
 );
 
+const SuperAdminOrganizationsClient = dynamic(
+  () =>
+    import("@/components/dashboard/super-admin-organizations-client").then(
+      (mod) => mod.SuperAdminOrganizationsClient,
+    ),
+  {
+    loading: () => <ClientPageLoading rows={7} />,
+  },
+);
+
 type GenericRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is GenericRecord {
@@ -234,105 +244,117 @@ export default async function SettingsPage() {
   }
 
   if (role === "super_admin") {
-    const organizations = await db.organization.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 100,
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        slug: true,
-        country: true,
-        city: true,
-        state: true,
-        subscriptionTier: true,
-        subscriptionExpiresAt: true,
-        contactEmail: true,
-        contactPhone: true,
-        createdAt: true,
-      },
-    });
+    const [organizations, adminUsers, centers] = await Promise.all([
+      db.organization.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 200,
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          slug: true,
+          country: true,
+          city: true,
+          state: true,
+          subscriptionTier: true,
+          subscriptionExpiresAt: true,
+          contactEmail: true,
+          contactPhone: true,
+          createdAt: true,
+        },
+      }),
+      db.user.findMany({
+        where: {
+          organizationId: {
+            not: null,
+          },
+          role: {
+            in: ["manufacturer_admin", "service_center_admin"],
+          },
+        },
+        select: {
+          id: true,
+          organizationId: true,
+          name: true,
+          email: true,
+          clerkId: true,
+          role: true,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
+      db.serviceCenter.findMany({
+        select: {
+          organizationId: true,
+          manufacturerAuthorizations: true,
+        },
+      }),
+    ]);
+
+    const organizationsById = new Map(
+      organizations.map((org) => [org.id, org]),
+    );
+    const adminMap = new Map<string, typeof adminUsers>();
+
+    for (const admin of adminUsers) {
+      const orgId = admin.organizationId;
+      if (!orgId) {
+        continue;
+      }
+
+      const current = adminMap.get(orgId) ?? [];
+      current.push(admin);
+      adminMap.set(orgId, current);
+    }
+
+    const manufacturerLinksByOrg = new Map<string, string[]>();
+    for (const center of centers) {
+      const current = manufacturerLinksByOrg.get(center.organizationId) ?? [];
+      current.push(...center.manufacturerAuthorizations);
+      manufacturerLinksByOrg.set(
+        center.organizationId,
+        Array.from(new Set(current)),
+      );
+    }
 
     return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Organizations"
-          description="Platform organizations linked to the warranty system."
-        />
+      <SuperAdminOrganizationsClient
+        initialOrganizations={organizations.map((org) => {
+          const linkedManufacturerIds =
+            manufacturerLinksByOrg.get(org.id) ?? [];
 
-        <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle className="text-base">Organizations</CardTitle>
-            <CardDescription>
-              Showing the most recent 100 records.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {organizations.length === 0 ? (
-              <p className="text-sm text-slate-600">No organizations found.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Subscription</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {organizations.map((org) => (
-                      <TableRow key={org.id}>
-                        <TableCell className="min-w-[220px]">
-                          <p className="font-medium text-slate-900">
-                            {org.name}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {org.slug ? org.slug : org.id.slice(0, 8)}
-                            {org.city ? ` • ${org.city}` : ""}
-                          </p>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Badge
-                            variant="outline"
-                            className="border-slate-200 bg-slate-50"
-                          >
-                            {org.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm text-slate-600">
-                          {org.subscriptionTier}
-                          {org.subscriptionExpiresAt ? (
-                            <p className="text-xs text-slate-500">
-                              Expires{" "}
-                              {org.subscriptionExpiresAt.toLocaleDateString(
-                                "en-IN",
-                              )}
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="min-w-[200px] text-sm text-slate-600">
-                          <p>{org.contactPhone ?? "—"}</p>
-                          <p className="text-xs text-slate-500">
-                            {org.contactEmail ?? "—"}
-                          </p>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm text-slate-600">
-                          {org.createdAt.toLocaleDateString("en-IN")}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          return {
+            id: org.id,
+            name: org.name,
+            type: org.type,
+            slug: org.slug,
+            city: org.city,
+            state: org.state,
+            country: org.country,
+            subscriptionTier: org.subscriptionTier,
+            subscriptionExpiresAt: org.subscriptionExpiresAt
+              ? org.subscriptionExpiresAt.toISOString()
+              : null,
+            contactEmail: org.contactEmail,
+            contactPhone: org.contactPhone,
+            createdAt: org.createdAt.toISOString(),
+            adminMembers: (adminMap.get(org.id) ?? []).map((admin) => ({
+              id: admin.id,
+              name: admin.name ?? "",
+              email: admin.email ?? "",
+              clerkId: admin.clerkId,
+              role: admin.role,
+            })),
+            linkedManufacturerIds,
+            linkedManufacturerNames: linkedManufacturerIds
+              .map((id) => organizationsById.get(id)?.name ?? "")
+              .filter((name) => name.length > 0),
+          };
+        })}
+      />
     );
   }
 
