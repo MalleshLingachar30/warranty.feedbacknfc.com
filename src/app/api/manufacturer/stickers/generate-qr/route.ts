@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import JSZip from "jszip";
 import QRCode from "qrcode";
+import sharp from "sharp";
 
 import { db } from "@/lib/db";
 import {
@@ -71,6 +72,92 @@ function buildStickerSerial(stickerNumber: number) {
   return `FNFC-${String(stickerNumber).padStart(6, "0")}`;
 }
 
+function decodeDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:.*?;base64,(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return Buffer.from(match[1], "base64");
+  } catch {
+    return null;
+  }
+}
+
+async function loadLogoBuffer(logoUrl: string): Promise<Buffer | null> {
+  if (!logoUrl) {
+    return null;
+  }
+
+  const inlineBuffer = decodeDataUrl(logoUrl);
+  if (inlineBuffer) {
+    return inlineBuffer;
+  }
+
+  try {
+    const response = await fetch(logoUrl);
+    if (!response.ok) {
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch {
+    return null;
+  }
+}
+
+function buildCenterPatchSvg(size: number) {
+  const radius = Math.max(6, Math.round(size * 0.16));
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect x="0" y="0" width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="white"/></svg>`,
+  );
+}
+
+async function composeQrLogoOverlay(input: {
+  qrBuffer: Buffer;
+  logoBuffer: Buffer;
+  qrPixels: number;
+  qrLogoScalePercent: number;
+}) {
+  const logoSize = Math.max(
+    24,
+    Math.round((input.qrPixels * input.qrLogoScalePercent) / 100),
+  );
+  const patchSize = Math.min(input.qrPixels - 8, Math.round(logoSize * 1.35));
+  const leftPatch = Math.floor((input.qrPixels - patchSize) / 2);
+  const topPatch = Math.floor((input.qrPixels - patchSize) / 2);
+  const leftLogo = Math.floor((input.qrPixels - logoSize) / 2);
+  const topLogo = Math.floor((input.qrPixels - logoSize) / 2);
+
+  const resizedLogo = await sharp(input.logoBuffer)
+    .resize({
+      width: logoSize,
+      height: logoSize,
+      fit: "contain",
+      withoutEnlargement: false,
+    })
+    .png()
+    .toBuffer();
+
+  return sharp(input.qrBuffer)
+    .composite([
+      {
+        input: buildCenterPatchSvg(patchSize),
+        left: leftPatch,
+        top: topPatch,
+      },
+      {
+        input: resizedLogo,
+        left: leftLogo,
+        top: topLogo,
+      },
+    ])
+    .png()
+    .toBuffer();
+}
+
 async function runWithConcurrency(
   tasks: Array<() => Promise<void>>,
   limit: number,
@@ -130,6 +217,8 @@ export async function GET(request: Request) {
     const qrDarkColor = normalizeQrDarkColor(
       stickerConfig.branding.primaryColor,
     );
+    const logoUrl =
+      stickerConfig.branding.logoUrl || organization.logoUrl || "";
 
     const allocation = await db.stickerAllocation.findFirst({
       where: {
@@ -214,9 +303,13 @@ export async function GET(request: Request) {
     if (format === "png_zip") {
       const zip = new JSZip();
       const qrPixels = toQrPixels(qrSizeMm);
+      const logoBuffer =
+        stickerConfig.branding.showLogoInQrCenter && logoUrl
+          ? await loadLogoBuffer(logoUrl)
+          : null;
 
       const tasks = stickerItems.map((item) => async () => {
-        const pngBuffer = await QRCode.toBuffer(item.url, {
+        const baseQrBuffer = await QRCode.toBuffer(item.url, {
           type: "png",
           width: qrPixels,
           margin: 1,
@@ -226,6 +319,14 @@ export async function GET(request: Request) {
             light: "#FFFFFF",
           },
         });
+        const pngBuffer = logoBuffer
+          ? await composeQrLogoOverlay({
+              qrBuffer: baseQrBuffer,
+              logoBuffer,
+              qrPixels,
+              qrLogoScalePercent: stickerConfig.branding.qrLogoScalePercent,
+            })
+          : baseQrBuffer;
         zip.file(`${item.serial}.png`, pngBuffer);
       });
 
@@ -250,8 +351,6 @@ export async function GET(request: Request) {
     }
 
     const qrPixels = toQrPixels(qrSizeMm);
-    const logoUrl =
-      stickerConfig.branding.logoUrl || organization.logoUrl || "";
 
     const qrTasks: Array<() => Promise<void>> = [];
     const sheetItems: Array<{
