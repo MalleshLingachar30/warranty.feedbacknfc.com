@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
@@ -36,6 +37,49 @@ function buildApplianceSerial(
   return `${prefix}${String(serialNumber).padStart(padLength, "0")}`;
 }
 
+async function resetPendingProductsForStickerRange(input: {
+  tx: Prisma.TransactionClient;
+  organizationId: string;
+  productModelId: string;
+  stickerStartNumber: number;
+  stickerEndNumber: number;
+  serialPrefix: string;
+  serialStartNumber: number;
+  serialPadLength: number;
+}) {
+  const updatedRows = await input.tx.$executeRaw(
+    Prisma.sql`
+      UPDATE "products" AS p
+      SET
+        "organization_id" = ${input.organizationId}::uuid,
+        "product_model_id" = ${input.productModelId}::uuid,
+        "serial_number" = ${input.serialPrefix}
+          || LPAD(
+            (${input.serialStartNumber} + (s."sticker_number" - ${input.stickerStartNumber}))::text,
+            CAST(${input.serialPadLength} AS integer),
+            '0'
+          ),
+        "warranty_status" = CAST('pending_activation' AS "WarrantyStatus"),
+        "warranty_start_date" = NULL,
+        "warranty_end_date" = NULL,
+        "customer_id" = NULL,
+        "customer_name" = NULL,
+        "customer_phone" = NULL,
+        "customer_email" = NULL,
+        "customer_address" = NULL,
+        "customer_city" = NULL,
+        "customer_state" = NULL,
+        "customer_pincode" = NULL
+      FROM "stickers" AS s
+      WHERE p."sticker_id" = s."id"
+        AND s."sticker_number" >= ${input.stickerStartNumber}
+        AND s."sticker_number" <= ${input.stickerEndNumber}
+    `,
+  );
+
+  return Number(updatedRows);
+}
+
 async function getInventorySummary(organizationId: string) {
   const [totalAllocated, totalBound, totalActivated] = await Promise.all([
     db.sticker.count({
@@ -66,14 +110,26 @@ async function getInventorySummary(organizationId: string) {
 }
 
 export async function POST(request: Request) {
+  let organizationId = "";
+  let productModelId = "";
+  let stickerStartNumber: number | null = null;
+  let stickerEndNumber: number | null = null;
+  let serialStartNumber: number | null = null;
+  let serialEndNumber: number | null = null;
+  let stickerType: ReturnType<typeof normalizeManufacturerStickerConfig>["mode"] =
+    "qr_only";
+  let stickerVariant: "standard" | "high_temp" | "premium" = "standard";
+
   try {
-    const { organizationId, dbUserId } = await requireManufacturerContext();
+    const manufacturerContext = await requireManufacturerContext();
+    organizationId = manufacturerContext.organizationId;
+    const { dbUserId } = manufacturerContext;
     const body = parseJsonBody<AllocatePayload>(await request.json());
 
-    const stickerStartNumber = toNumber(body.stickerStartNumber);
-    const stickerEndNumber = toNumber(body.stickerEndNumber);
-    const serialStartNumber = toNumber(body.serialStartNumber);
-    const serialEndNumber = toNumber(body.serialEndNumber);
+    stickerStartNumber = toNumber(body.stickerStartNumber);
+    stickerEndNumber = toNumber(body.stickerEndNumber);
+    serialStartNumber = toNumber(body.serialStartNumber);
+    serialEndNumber = toNumber(body.serialEndNumber);
 
     const organization = await db.organization.findUnique({
       where: { id: organizationId },
@@ -86,7 +142,7 @@ export async function POST(request: Request) {
       organization?.settings ?? {},
     );
 
-    const stickerType = stickerConfig.mode;
+    stickerType = stickerConfig.mode;
     const defaultVariant =
       stickerType === "nfc_qr" ? "premium" : "standard";
 
@@ -97,7 +153,7 @@ export async function POST(request: Request) {
         ? rawVariant
         : "";
 
-    let stickerVariant: "standard" | "high_temp" | "premium" = defaultVariant;
+    stickerVariant = defaultVariant;
 
     if (stickerType === "qr_only") {
       stickerVariant = requestedVariant === "high_temp" ? "high_temp" : "standard";
@@ -107,7 +163,7 @@ export async function POST(request: Request) {
       stickerVariant = "standard";
     }
 
-    const productModelId =
+    productModelId =
       typeof body.productModelId === "string" ? body.productModelId.trim() : "";
     const serialPrefix =
       typeof body.serialPrefix === "string" ? body.serialPrefix.trim() : "";
@@ -159,8 +215,13 @@ export async function POST(request: Request) {
       throw new ApiError("Serial prefix is required.", 400);
     }
 
-    const stickerCount = stickerEndNumber - stickerStartNumber + 1;
-    const serialCount = serialEndNumber - serialStartNumber + 1;
+    const resolvedStickerStartNumber = stickerStartNumber;
+    const resolvedStickerEndNumber = stickerEndNumber;
+    const resolvedSerialStartNumber = serialStartNumber;
+    const resolvedSerialEndNumber = serialEndNumber;
+
+    const stickerCount = resolvedStickerEndNumber - resolvedStickerStartNumber + 1;
+    const serialCount = resolvedSerialEndNumber - resolvedSerialStartNumber + 1;
 
     if (stickerCount !== serialCount) {
       throw new ApiError(
@@ -193,11 +254,11 @@ export async function POST(request: Request) {
 
     const stickerNumbers = Array.from(
       { length: stickerCount },
-      (_, index) => stickerStartNumber + index,
+      (_, index) => resolvedStickerStartNumber + index,
     );
     const serialPadLength = Math.max(
-      String(serialStartNumber).length,
-      String(serialEndNumber).length,
+      String(resolvedSerialStartNumber).length,
+      String(resolvedSerialEndNumber).length,
       5,
     );
 
@@ -323,8 +384,6 @@ export async function POST(request: Request) {
         warrantyStatus: "pending_activation";
       }> = [];
 
-      const updatePromises: Array<Promise<unknown>> = [];
-
       for (let index = 0; index < stickerNumbers.length; index += 1) {
         const stickerNumber = stickerNumbers[index];
         const sticker = stickerByNumber.get(stickerNumber);
@@ -338,35 +397,11 @@ export async function POST(request: Request) {
 
         const serialNumber = buildApplianceSerial(
           serialPrefix,
-          serialStartNumber + index,
+          resolvedSerialStartNumber + index,
           serialPadLength,
         );
 
-        if (existingProductMap.has(sticker.id)) {
-          updatePromises.push(
-            tx.product.update({
-              where: {
-                stickerId: sticker.id,
-              },
-              data: {
-                organizationId,
-                productModelId,
-                serialNumber,
-                warrantyStatus: "pending_activation",
-                warrantyStartDate: null,
-                warrantyEndDate: null,
-                customerId: null,
-                customerName: null,
-                customerPhone: null,
-                customerEmail: null,
-                customerAddress: null,
-                customerCity: null,
-                customerState: null,
-                customerPincode: null,
-              },
-            }),
-          );
-        } else {
+        if (!existingProductMap.has(sticker.id)) {
           createProducts.push({
             id: crypto.randomUUID(),
             stickerId: sticker.id,
@@ -378,27 +413,43 @@ export async function POST(request: Request) {
         }
       }
 
+      if (existingProducts.length > 0) {
+        const updatedProducts = await resetPendingProductsForStickerRange({
+          tx,
+          organizationId,
+          productModelId,
+          stickerStartNumber: resolvedStickerStartNumber,
+          stickerEndNumber: resolvedStickerEndNumber,
+          serialPrefix,
+          serialStartNumber: resolvedSerialStartNumber,
+          serialPadLength,
+        });
+
+        if (updatedProducts < existingProducts.length) {
+          throw new ApiError(
+            "Unable to update one or more existing sticker bindings.",
+            500,
+          );
+        }
+      }
+
       if (createProducts.length > 0) {
         await tx.product.createMany({
           data: createProducts,
         });
       }
 
-      if (updatePromises.length > 0) {
-        await Promise.all(updatePromises);
-      }
-
       return tx.stickerAllocation.create({
         data: {
           organizationId,
-          stickerStartNumber,
-          stickerEndNumber,
+          stickerStartNumber: resolvedStickerStartNumber,
+          stickerEndNumber: resolvedStickerEndNumber,
           totalCount: stickerCount,
           productModelId,
           allocationType: "bulk_bind",
           applianceSerialPrefix: serialPrefix,
-          applianceSerialStart: String(serialStartNumber),
-          applianceSerialEnd: String(serialEndNumber),
+          applianceSerialStart: String(resolvedSerialStartNumber),
+          applianceSerialEnd: String(resolvedSerialEndNumber),
           allocatedById: dbUserId,
           notes: `Bulk allocation for ${productModel.name}`,
         },
@@ -422,6 +473,36 @@ export async function POST(request: Request) {
       inventory,
     });
   } catch (error) {
+    console.error("Manufacturer sticker allocation failed", {
+      organizationId: organizationId || null,
+      productModelId: productModelId || null,
+      stickerStartNumber,
+      stickerEndNumber,
+      serialStartNumber,
+      serialEndNumber,
+      stickerType,
+      stickerVariant,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      prismaCode:
+        error instanceof Prisma.PrismaClientKnownRequestError
+          ? error.code
+          : null,
+    });
+
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2028"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Sticker allocation timed out while rebinding existing units. Please retry, or split very large rebinds into smaller ranges.",
+        },
+        { status: 503 },
+      );
+    }
+
     return jsonError(error);
   }
 }
