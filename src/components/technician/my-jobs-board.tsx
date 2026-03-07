@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Briefcase, Clock3, MapPin, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 import { JobDetail } from "@/components/technician/job-detail";
 import type {
@@ -31,6 +32,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 interface MyJobsBoardProps {
   title?: string;
@@ -48,9 +50,15 @@ export function MyJobsBoard({
 
   const [activeTab, setActiveTab] = useState<JobTabValue>("assigned");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [pullDistance, setPullDistance] = useState(0);
+  const pullStartYRef = useRef<number | null>(null);
+  const knownOpenJobIdsRef = useRef<Set<string> | null>(null);
 
-  const fetchJobs = useCallback(async () => {
-    setIsRefreshing(true);
+  const fetchJobs = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsRefreshing(true);
+    }
+
     setError(null);
 
     try {
@@ -71,6 +79,34 @@ export function MyJobsBoard({
       }
 
       setPayload(body);
+
+      const currentOpenJobIds = new Set(
+        body.jobs
+          .filter((job) =>
+            [
+              "assigned",
+              "technician_enroute",
+              "work_in_progress",
+              "reopened",
+              "escalated",
+            ].includes(job.status),
+          )
+          .map((job) => job.id),
+      );
+
+      const previousOpenJobIds = knownOpenJobIdsRef.current;
+      if (
+        previousOpenJobIds &&
+        [...currentOpenJobIds].some((jobId) => !previousOpenJobIds.has(jobId))
+      ) {
+        if ("vibrate" in navigator) {
+          navigator.vibrate(200);
+        }
+
+        toast.info("A new technician job is available.");
+      }
+
+      knownOpenJobIdsRef.current = currentOpenJobIds;
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -79,12 +115,26 @@ export function MyJobsBoard({
       );
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
+      if (!options?.silent) {
+        setIsRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void fetchJobs();
+  }, [fetchJobs]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchJobs({ silent: true });
+      }
+    }, 60000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
   }, [fetchJobs]);
 
   const selectedJob = useMemo(() => {
@@ -128,6 +178,42 @@ export function MyJobsBoard({
     setSelectedJobId(ticketId);
   };
 
+  const handleTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    if (selectedJobId || window.scrollY > 0) {
+      pullStartYRef.current = null;
+      return;
+    }
+
+    pullStartYRef.current = event.touches[0]?.clientY ?? null;
+  };
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLElement>) => {
+    if (pullStartYRef.current === null || selectedJobId || window.scrollY > 0) {
+      return;
+    }
+
+    const currentY = event.touches[0]?.clientY ?? pullStartYRef.current;
+    const delta = Math.max(0, currentY - pullStartYRef.current);
+
+    if (delta === 0) {
+      setPullDistance(0);
+      return;
+    }
+
+    setPullDistance(Math.min(88, delta * 0.45));
+  };
+
+  const handleTouchEnd = () => {
+    const shouldRefresh = pullDistance >= 56 && !isRefreshing;
+
+    pullStartYRef.current = null;
+    setPullDistance(0);
+
+    if (shouldRefresh) {
+      void handleRefresh();
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -157,7 +243,29 @@ export function MyJobsBoard({
   }
 
   return (
-    <section className="space-y-3">
+    <section
+      className="space-y-3"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div
+        className={cn(
+          "overflow-hidden transition-all duration-200",
+          pullDistance > 0 ? "h-12" : "h-0",
+        )}
+        style={{
+          opacity: Math.min(1, pullDistance / 56),
+        }}
+      >
+        <div className="flex h-12 items-center justify-center gap-2 text-sm font-medium text-slate-500">
+          <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+          <span>
+            {pullDistance >= 56 ? "Release to refresh" : "Pull to refresh"}
+          </span>
+        </div>
+      </div>
+
       <Card className="border-slate-200">
         <CardHeader className="space-y-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

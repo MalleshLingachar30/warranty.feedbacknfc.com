@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ShieldCheck } from "lucide-react";
 
+import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface NfcPublicShellProps {
@@ -22,6 +23,7 @@ export function NfcPublicShell({
 }: NfcPublicShellProps) {
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-blue-50 px-4 py-6 sm:px-6">
+      <OfflineBanner />
       <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
         <header className="rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-4 shadow-sm backdrop-blur">
           <div className="flex items-start justify-between gap-3">

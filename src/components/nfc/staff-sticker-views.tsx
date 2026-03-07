@@ -1,6 +1,10 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Link from "next/link";
 import {
   Camera,
@@ -25,16 +29,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  deletePhotosForOwner,
+  listPhotosForOwner,
+  prepareQueuedPhotosForSubmission,
+  queueFilesForOwner,
+  type QueuedPhotoRecord,
+} from "@/lib/photo-queue";
+import { uploadPhotoFiles } from "@/lib/photo-upload";
 import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 
 function statusLabel(status: string) {
   return status.replace(/_/g, " ");
-}
-
-interface UploadPhotoResponse {
-  error?: string;
-  urls?: string[];
-  url?: string | null;
 }
 
 interface PartSelection {
@@ -54,40 +60,6 @@ function createPartSelection(part?: {
     cost: String(part?.typicalCost ?? 0),
     quantity: "1",
   };
-}
-
-async function uploadPhotos(files: File[]): Promise<string[]> {
-  if (files.length === 0) {
-    return [];
-  }
-
-  const formData = new FormData();
-  files.forEach((file) => formData.append("photos", file));
-
-  const response = await fetch("/api/upload/photo", {
-    method: "POST",
-    body: formData,
-  });
-
-  const payload = (await response.json()) as UploadPhotoResponse;
-
-  if (!response.ok) {
-    throw new Error(payload.error ?? "Failed to upload photos.");
-  }
-
-  const urls = Array.isArray(payload.urls)
-    ? payload.urls.filter((entry): entry is string => typeof entry === "string")
-    : [];
-
-  if (urls.length > 0) {
-    return urls;
-  }
-
-  if (typeof payload.url === "string" && payload.url.trim().length > 0) {
-    return [payload.url];
-  }
-
-  return [];
 }
 
 interface TechnicianAssetInfoProps {
@@ -281,6 +253,12 @@ export function TechnicianCompleteWork({
   const [laborHours, setLaborHours] = useState("1");
   const [beforePhotos, setBeforePhotos] = useState<File[]>([]);
   const [afterPhotos, setAfterPhotos] = useState<File[]>([]);
+  const [queuedBeforePhotos, setQueuedBeforePhotos] = useState<
+    QueuedPhotoRecord[]
+  >([]);
+  const [queuedAfterPhotos, setQueuedAfterPhotos] = useState<
+    QueuedPhotoRecord[]
+  >([]);
   const [parts, setParts] = useState<PartSelection[]>(
     ticket.partsCatalog.length > 0
       ? [createPartSelection(ticket.partsCatalog[0])]
@@ -290,27 +268,110 @@ export function TechnicianCompleteWork({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let active = true;
+
+    setResolutionNotes("");
+    setLaborHours("1");
+    setBeforePhotos([]);
+    setAfterPhotos([]);
+    setQueuedBeforePhotos([]);
+    setQueuedAfterPhotos([]);
+    setParts(
+      ticket.partsCatalog.length > 0
+        ? [createPartSelection(ticket.partsCatalog[0])]
+        : [],
+    );
+    setMessage(null);
+    setError(null);
+
+    void Promise.all([
+      listPhotosForOwner(ticket.id, "before"),
+      listPhotosForOwner(ticket.id, "after"),
+    ]).then(([beforeQueued, afterQueued]) => {
+      if (!active) {
+        return;
+      }
+
+      setQueuedBeforePhotos(beforeQueued);
+      setQueuedAfterPhotos(afterQueued);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [ticket]);
+
   const canSubmit = useMemo(() => {
     return (
       Boolean(technicianId) &&
       resolutionNotes.trim().length >= 10 &&
       Number.isFinite(Number.parseFloat(laborHours)) &&
-      beforePhotos.length + afterPhotos.length <= 10
+      beforePhotos.length +
+        afterPhotos.length +
+        queuedBeforePhotos.length +
+        queuedAfterPhotos.length <=
+        10
     );
-  }, [afterPhotos.length, beforePhotos.length, laborHours, resolutionNotes, technicianId]);
+  }, [
+    afterPhotos.length,
+    beforePhotos.length,
+    laborHours,
+    queuedAfterPhotos.length,
+    queuedBeforePhotos.length,
+    resolutionNotes,
+    technicianId,
+  ]);
 
-  const updatePhotoFiles = (
-    setState: Dispatch<SetStateAction<File[]>>,
+  const updatePhotoSelection = async (
+    slot: "before" | "after",
     files: File[],
   ) => {
+    const limitedFiles = files.slice(0, 5);
+    const setState = slot === "before" ? setBeforePhotos : setAfterPhotos;
+    const setQueued =
+      slot === "before" ? setQueuedBeforePhotos : setQueuedAfterPhotos;
+    const photoLabel = slot === "before" ? "Before" : "After";
+
     if (files.length > 5) {
-      setState(files.slice(0, 5));
+      setState(limitedFiles);
       setError("Upload up to 5 photos per section.");
       return;
     }
 
-    setError(null);
-    setState(files);
+    try {
+      setError(null);
+      await deletePhotosForOwner(ticket.id, slot);
+      setQueued([]);
+
+      if (limitedFiles.length === 0) {
+        setState([]);
+        return;
+      }
+
+      if (navigator.onLine) {
+        setState(limitedFiles);
+        return;
+      }
+
+      const queued = await queueFilesForOwner({
+        ownerId: ticket.id,
+        slot,
+        files: limitedFiles,
+      });
+
+      setState([]);
+      setQueued(queued);
+      setMessage(
+        `${photoLabel} photos saved offline. Reconnect before marking work complete.`,
+      );
+    } catch (queueError) {
+      setError(
+        queueError instanceof Error
+          ? queueError.message
+          : `Unable to queue ${photoLabel.toLowerCase()} photos.`,
+      );
+    }
   };
 
   const handlePartChange = (
@@ -358,14 +419,54 @@ export function TechnicianCompleteWork({
       return;
     }
 
+    if (!navigator.onLine) {
+      setError(
+        "Reconnect to submit this completion. Queued photos will upload automatically once you are back online.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage(null);
     setError(null);
 
     try {
+      const [queuedBeforeResult, queuedAfterResult] = await Promise.all([
+        prepareQueuedPhotosForSubmission(ticket.id, "before"),
+        prepareQueuedPhotosForSubmission(ticket.id, "after"),
+      ]);
+
+      if (
+        queuedBeforeResult.status === "offline" ||
+        queuedAfterResult.status === "offline"
+      ) {
+        setError("Reconnect to upload queued photos before submitting.");
+        return;
+      }
+
+      if (
+        queuedBeforeResult.status === "pending" ||
+        queuedAfterResult.status === "pending"
+      ) {
+        setError(
+          "Queued photos are still uploading. Please wait a moment and try again.",
+        );
+        return;
+      }
+
+      if (
+        queuedBeforeResult.status === "failed" ||
+        queuedAfterResult.status === "failed"
+      ) {
+        setError(
+          "Some queued photos failed to upload. Re-select them while online and try again.",
+        );
+        return;
+      }
+
       const [beforePhotoUrls, afterPhotoUrls] = await Promise.all([
-        uploadPhotos(beforePhotos),
-        uploadPhotos(afterPhotos),
+        uploadPhotoFiles(beforePhotos),
+        uploadPhotoFiles(afterPhotos),
       ]);
 
       const partsUsed = parts
@@ -393,8 +494,8 @@ export function TechnicianCompleteWork({
           technicianId,
           resolutionNotes: resolutionNotes.trim(),
           laborHours: Number.parseFloat(laborHours) || 0,
-          beforePhotos: beforePhotoUrls,
-          afterPhotos: afterPhotoUrls,
+          beforePhotos: [...queuedBeforeResult.urls, ...beforePhotoUrls],
+          afterPhotos: [...queuedAfterResult.urls, ...afterPhotoUrls],
           partsUsed,
         }),
       });
@@ -409,6 +510,12 @@ export function TechnicianCompleteWork({
         return;
       }
 
+      await Promise.all([
+        deletePhotosForOwner(ticket.id, "before"),
+        deletePhotosForOwner(ticket.id, "after"),
+      ]);
+      setQueuedBeforePhotos([]);
+      setQueuedAfterPhotos([]);
       setMessage(
         `Work marked complete. Claim value estimate: INR ${payload.claimValue ?? 0}.`,
       );
@@ -417,6 +524,37 @@ export function TechnicianCompleteWork({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const renderPhotoSelection = (
+    files: File[],
+    queuedPhotos: QueuedPhotoRecord[],
+  ) => {
+    if (files.length === 0 && queuedPhotos.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="space-y-1 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2 text-xs text-slate-600">
+        {files.map((file) => (
+          <p key={`${file.name}-${file.lastModified}`} className="flex items-center gap-1">
+            <Camera className="h-3 w-3" />
+            {file.name}
+          </p>
+        ))}
+        {queuedPhotos.map((photo) => (
+          <div
+            key={photo.id}
+            className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-1"
+          >
+            <span className="truncate">{photo.fileName}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium capitalize text-slate-600">
+              {photo.uploadStatus}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -470,22 +608,13 @@ export function TechnicianCompleteWork({
             capture="environment"
             multiple
             onChange={(event) =>
-              updatePhotoFiles(
-                setBeforePhotos,
+              void updatePhotoSelection(
+                "before",
                 Array.from(event.target.files ?? []),
               )
             }
           />
-          {beforePhotos.length > 0 ? (
-            <div className="space-y-1 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2 text-xs text-slate-600">
-              {beforePhotos.map((file) => (
-                <p key={`before-${file.name}`} className="flex items-center gap-1">
-                  <Camera className="h-3 w-3" />
-                  {file.name}
-                </p>
-              ))}
-            </div>
-          ) : null}
+          {renderPhotoSelection(beforePhotos, queuedBeforePhotos)}
         </div>
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-800">
@@ -497,19 +626,13 @@ export function TechnicianCompleteWork({
             capture="environment"
             multiple
             onChange={(event) =>
-              updatePhotoFiles(setAfterPhotos, Array.from(event.target.files ?? []))
+              void updatePhotoSelection(
+                "after",
+                Array.from(event.target.files ?? []),
+              )
             }
           />
-          {afterPhotos.length > 0 ? (
-            <div className="space-y-1 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2 text-xs text-slate-600">
-              {afterPhotos.map((file) => (
-                <p key={`after-${file.name}`} className="flex items-center gap-1">
-                  <Camera className="h-3 w-3" />
-                  {file.name}
-                </p>
-              ))}
-            </div>
-          ) : null}
+          {renderPhotoSelection(afterPhotos, queuedAfterPhotos)}
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">

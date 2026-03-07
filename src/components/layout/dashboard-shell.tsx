@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { SignOutButton, UserButton } from "@clerk/nextjs";
 
+import { OfflineBanner } from "@/components/pwa/offline-banner";
+import { PwaInstallPrompt } from "@/components/pwa/pwa-install-prompt";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -70,6 +72,7 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen bg-slate-100">
+      <PwaInstallPrompt role={role} />
       <div className="flex min-h-screen">
         <aside className="hidden w-64 border-r border-slate-200 bg-white px-4 py-6 md:block">
           <div className="mb-6 px-2">
@@ -88,6 +91,7 @@ export function DashboardShell({
         </aside>
 
         <div className="flex flex-1 flex-col">
+          <OfflineBanner />
           <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">

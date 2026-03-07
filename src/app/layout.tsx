@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 
+import { PwaRuntime } from "@/components/pwa/pwa-runtime";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -18,12 +19,33 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  applicationName: "FeedbackNFC Warranty",
   title: {
     default: "FeedbackNFC | Warranty",
     template: "%s | FeedbackNFC | Warranty",
   },
   description:
     "Warranty lifecycle management for manufacturers and service networks",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "FeedbackNFC Warranty",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/icon-192x192.png", sizes: "192x192" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0066CC",
 };
 
 export default function RootLayout({
@@ -43,6 +65,7 @@ export default function RootLayout({
           signUpFallbackRedirectUrl="/dashboard"
         >
           <TooltipProvider>
+            <PwaRuntime />
             {children}
             <Toaster />
           </TooltipProvider>

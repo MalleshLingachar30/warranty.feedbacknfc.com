@@ -38,12 +38,14 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
-interface UploadPhotoResponse {
-  error?: string;
-  urls?: string[];
-  url?: string | null;
-}
+import {
+  deletePhotosForOwner,
+  listPhotosForOwner,
+  prepareQueuedPhotosForSubmission,
+  queueFilesForOwner,
+  type QueuedPhotoRecord,
+} from "@/lib/photo-queue";
+import { uploadPhotoFiles } from "@/lib/photo-upload";
 
 interface PartSelection {
   id: string;
@@ -70,40 +72,6 @@ function createSelectionFromCatalog(
   };
 }
 
-async function uploadPhotos(files: File[]): Promise<string[]> {
-  if (files.length === 0) {
-    return [];
-  }
-
-  const formData = new FormData();
-  files.forEach((file) => formData.append("photos", file));
-
-  const response = await fetch("/api/upload/photo", {
-    method: "POST",
-    body: formData,
-  });
-
-  const payload = (await response.json()) as UploadPhotoResponse;
-
-  if (!response.ok) {
-    throw new Error(payload.error ?? "Failed to upload photos.");
-  }
-
-  const urls = Array.isArray(payload.urls)
-    ? payload.urls.filter((entry): entry is string => typeof entry === "string")
-    : [];
-
-  if (urls.length > 0) {
-    return urls;
-  }
-
-  if (typeof payload.url === "string" && payload.url.trim().length > 0) {
-    return [payload.url];
-  }
-
-  return [];
-}
-
 export function JobDetail({
   job,
   technicianId,
@@ -118,22 +86,47 @@ export function JobDetail({
   const [laborHours, setLaborHours] = useState("1");
   const [beforePhotos, setBeforePhotos] = useState<File[]>([]);
   const [afterPhotos, setAfterPhotos] = useState<File[]>([]);
+  const [queuedBeforePhotos, setQueuedBeforePhotos] = useState<
+    QueuedPhotoRecord[]
+  >([]);
+  const [queuedAfterPhotos, setQueuedAfterPhotos] = useState<
+    QueuedPhotoRecord[]
+  >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
 
   useEffect(() => {
+    let active = true;
+
     setResolutionNotes(job.resolutionNotes ?? "");
     setLaborHours(job.laborHours ? String(job.laborHours) : "1");
     setBeforePhotos([]);
     setAfterPhotos([]);
+    setQueuedBeforePhotos([]);
+    setQueuedAfterPhotos([]);
     setActionError(null);
     setActionSuccess(null);
 
+    void Promise.all([
+      listPhotosForOwner(job.id, "before"),
+      listPhotosForOwner(job.id, "after"),
+    ]).then(([beforeQueued, afterQueued]) => {
+      if (!active) {
+        return;
+      }
+
+      setQueuedBeforePhotos(beforeQueued);
+      setQueuedAfterPhotos(afterQueued);
+    });
+
     if (job.partsCatalog.length > 0) {
       setParts([createSelectionFromCatalog(job.partsCatalog[0])]);
-      return;
+    } else {
+      setParts([]);
     }
 
-    setParts([]);
+    return () => {
+      active = false;
+    };
   }, [job]);
 
   const mapLink = useMemo(
@@ -219,6 +212,80 @@ export function JobDetail({
     );
   };
 
+  const updatePhotoSelection = async (
+    slot: "before" | "after",
+    files: File[],
+  ) => {
+    const limitedFiles = files.slice(0, 10);
+    const setFiles = slot === "before" ? setBeforePhotos : setAfterPhotos;
+    const setQueued =
+      slot === "before" ? setQueuedBeforePhotos : setQueuedAfterPhotos;
+    const photoLabel = slot === "before" ? "Before" : "After";
+
+    setActionError(null);
+
+    try {
+      await deletePhotosForOwner(job.id, slot);
+      setQueued([]);
+
+      if (limitedFiles.length === 0) {
+        setFiles([]);
+        return;
+      }
+
+      if (navigator.onLine) {
+        setFiles(limitedFiles);
+        return;
+      }
+
+      const queued = await queueFilesForOwner({
+        ownerId: job.id,
+        slot,
+        files: limitedFiles,
+      });
+
+      setFiles([]);
+      setQueued(queued);
+      setActionSuccess(
+        `${photoLabel} photos saved offline. Reconnect before submitting this job.`,
+      );
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : `Unable to queue ${photoLabel.toLowerCase()} photos.`,
+      );
+    }
+  };
+
+  const renderPhotoSelection = (
+    files: File[],
+    queuedPhotos: QueuedPhotoRecord[],
+  ) => {
+    if (files.length === 0 && queuedPhotos.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="space-y-1 rounded-md border border-dashed border-slate-300 bg-slate-50 p-2 text-xs text-slate-600">
+        {files.map((file) => (
+          <p key={`${file.name}-${file.lastModified}`}>{file.name}</p>
+        ))}
+        {queuedPhotos.map((photo) => (
+          <div
+            key={photo.id}
+            className="flex items-center justify-between gap-3 rounded-md bg-white px-2 py-1"
+          >
+            <span className="truncate">{photo.fileName}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium capitalize text-slate-600">
+              {photo.uploadStatus}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const handleCompleteWork = async () => {
     setActionError(null);
     setActionSuccess(null);
@@ -228,17 +295,62 @@ export function JobDetail({
       return;
     }
 
-    if (beforePhotos.length + afterPhotos.length > 10) {
+    if (
+      beforePhotos.length +
+        afterPhotos.length +
+        queuedBeforePhotos.length +
+        queuedAfterPhotos.length >
+      10
+    ) {
       setActionError("Upload up to 10 total before/after photos.");
+      return;
+    }
+
+    if (!navigator.onLine) {
+      setActionError(
+        "Reconnect to submit this job. Queued photos will upload automatically once you are back online.",
+      );
       return;
     }
 
     setActionLoading(true);
 
     try {
+      const [queuedBeforeResult, queuedAfterResult] = await Promise.all([
+        prepareQueuedPhotosForSubmission(job.id, "before"),
+        prepareQueuedPhotosForSubmission(job.id, "after"),
+      ]);
+
+      if (
+        queuedBeforeResult.status === "offline" ||
+        queuedAfterResult.status === "offline"
+      ) {
+        throw new Error(
+          "Reconnect to upload queued photos before submitting this job.",
+        );
+      }
+
+      if (
+        queuedBeforeResult.status === "pending" ||
+        queuedAfterResult.status === "pending"
+      ) {
+        throw new Error(
+          "Queued photos are still uploading. Please wait a moment and try again.",
+        );
+      }
+
+      if (
+        queuedBeforeResult.status === "failed" ||
+        queuedAfterResult.status === "failed"
+      ) {
+        throw new Error(
+          "Some queued photos failed to upload. Re-select them while online and try again.",
+        );
+      }
+
       const [beforePhotoUrls, afterPhotoUrls] = await Promise.all([
-        uploadPhotos(beforePhotos),
-        uploadPhotos(afterPhotos),
+        uploadPhotoFiles(beforePhotos),
+        uploadPhotoFiles(afterPhotos),
       ]);
 
       const partsUsed = parts
@@ -268,8 +380,8 @@ export function JobDetail({
           technicianId: technicianId ?? undefined,
           resolutionNotes: resolutionNotes.trim(),
           laborHours: Number.parseFloat(laborHours) || 0,
-          beforePhotos: beforePhotoUrls,
-          afterPhotos: afterPhotoUrls,
+          beforePhotos: [...queuedBeforeResult.urls, ...beforePhotoUrls],
+          afterPhotos: [...queuedAfterResult.urls, ...afterPhotoUrls],
           partsUsed,
         }),
       });
@@ -280,6 +392,12 @@ export function JobDetail({
       }
 
       setActionSuccess("Work completed. Waiting for customer confirmation.");
+      await Promise.all([
+        deletePhotosForOwner(job.id, "before"),
+        deletePhotosForOwner(job.id, "after"),
+      ]);
+      setQueuedBeforePhotos([]);
+      setQueuedAfterPhotos([]);
       await onUpdated(job.id);
       onClose();
     } catch (error) {
@@ -487,11 +605,13 @@ export function JobDetail({
                   capture="environment"
                   multiple
                   onChange={(event) =>
-                    setBeforePhotos(
-                      Array.from(event.target.files ?? []).slice(0, 10),
+                    void updatePhotoSelection(
+                      "before",
+                      Array.from(event.target.files ?? []),
                     )
                   }
                 />
+                {renderPhotoSelection(beforePhotos, queuedBeforePhotos)}
               </div>
 
               <div className="space-y-2">
@@ -508,11 +628,13 @@ export function JobDetail({
                   capture="environment"
                   multiple
                   onChange={(event) =>
-                    setAfterPhotos(
-                      Array.from(event.target.files ?? []).slice(0, 10),
+                    void updatePhotoSelection(
+                      "after",
+                      Array.from(event.target.files ?? []),
                     )
                   }
                 />
+                {renderPhotoSelection(afterPhotos, queuedAfterPhotos)}
               </div>
 
               <div className="space-y-2">
