@@ -461,6 +461,7 @@ export function translateTicketStatus(status: string, lang: NfcLanguage): string
     work_in_progress: "काम जारी है",
     pending_confirmation: "पुष्टि लंबित",
     resolved: "समाधान हो गया",
+    completed: "पूर्ण हो गया",
     reopened: "फिर से खोला गया",
     escalated: "एस्केलेट किया गया",
     closed: "बंद",
