@@ -47,7 +47,6 @@ export async function onWarrantyActivated(input: {
 }): Promise<void> {
   const language = normalizeNotificationLanguage(input.languagePreference);
   const stickerType = normalizeStickerTechnologyMode(input.stickerType);
-  const link = `${getWarrantyAppBaseUrl()}/nfc/${input.stickerNumber}`;
   const certificateSuffix =
     input.certificateUrl && input.certificateUrl.trim().length > 0
       ? language === "hi"
@@ -55,23 +54,19 @@ export async function onWarrantyActivated(input: {
         : ` Certificate: ${input.certificateUrl}.`
       : "";
 
-  const accessLine =
+  const stickerReminder =
     language === "hi"
-      ? stickerType === "qr_only"
-        ? `सेवा के लिए अपने ${input.productName} पर QR स्टिकर स्कैन करें: ${link}.`
-        : stickerType === "nfc_only"
-          ? `सेवा के लिए अपने ${input.productName} पर NFC स्टिकर टैप करें: ${link}.`
-          : `सेवा के लिए अपने ${input.productName} पर स्टिकर टैप या QR स्कैन करें: ${link}.`
-      : stickerType === "qr_only"
-        ? `Scan the QR sticker on your ${input.productName} anytime for service: ${link}.`
-        : stickerType === "nfc_only"
-          ? `Tap the NFC sticker on your ${input.productName} anytime for service: ${link}.`
-          : `Tap or scan the sticker on your ${input.productName} anytime for service: ${link}.`;
+      ? stickerType === "nfc_only"
+        ? "आपके उत्पाद पर वारंटी स्टिकर लगा है। सेवा के लिए इसे कभी भी टैप करें।"
+        : "आपके उत्पाद पर वारंटी स्टिकर लगा है। सेवा के लिए इसे कभी भी स्कैन करें।"
+      : stickerType === "nfc_only"
+        ? "A warranty sticker is on your product. Tap it anytime for service."
+        : "A warranty sticker is on your product. Scan it anytime for service.";
 
   const message =
     language === "hi"
-      ? `आपके ${input.productName} की वारंटी ${input.warrantyEndDateLabel} तक सक्रिय है। ${accessLine}${certificateSuffix}`
-      : `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. ${accessLine}${certificateSuffix}`;
+      ? `आपके ${input.productName} की वारंटी ${input.warrantyEndDateLabel} तक सक्रिय है। ${stickerReminder}${certificateSuffix}`
+      : `Your ${input.productName} warranty is active until ${input.warrantyEndDateLabel}. ${stickerReminder}${certificateSuffix}`;
 
   await sendSMS({
     to: input.customerPhone,

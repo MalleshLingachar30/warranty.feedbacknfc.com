@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { assignTechnician } from "@/lib/ai-assignment";
 import { db as prisma } from "@/lib/db";
 import { authorizeOwnerAccess } from "@/lib/otp-session";
+import { writeScanLog } from "@/lib/scan-log";
 import { computeSlaDeadlines, runSlaSweep } from "@/lib/sla-engine";
 import {
   sendServiceCenterTicketAssignedEmail,
@@ -13,6 +14,7 @@ import {
 
 interface CreateTicketRequest {
   productId?: string;
+  stickerNumber?: number;
   issueCategory?: string | null;
   issueDescription?: string;
   issuePhotos?: string[];
@@ -107,6 +109,11 @@ export async function POST(request: Request) {
         customerId: true,
         customerPhone: true,
         customerCity: true,
+        sticker: {
+          select: {
+            stickerNumber: true,
+          },
+        },
         organization: {
           select: {
             settings: true,
@@ -328,6 +335,19 @@ export async function POST(request: Request) {
     }
 
     await runSlaSweep({ ticketId: ticket.id });
+
+    void writeScanLog({
+      stickerNumber: product.sticker.stickerNumber,
+      productId: product.id,
+      viewerType:
+        ownerAccess.via === "clerk" ? "owner_verified" : "owner_session",
+      userId: ownerAccess.userId ?? customerUser.id,
+      actionTaken: "reported_issue",
+      userAgent: request.headers.get("user-agent"),
+      ipAddress:
+        request.headers.get("x-forwarded-for") ??
+        request.headers.get("x-real-ip"),
+    });
 
     const latestTicket = await prisma.ticket.findUnique({
       where: { id: ticket.id },

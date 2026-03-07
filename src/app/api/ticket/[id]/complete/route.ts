@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/db";
 import { clerkOrDbHasRole } from "@/lib/rbac";
+import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
 import { sendCustomerCompletionPrompt } from "@/lib/warranty-notifications";
 
@@ -167,6 +168,7 @@ export async function POST(
         assignedTechnicianId: true,
         assignedServiceCenterId: true,
         metadata: true,
+        productId: true,
         product: {
           select: {
             customerPhone: true,
@@ -317,6 +319,17 @@ export async function POST(
         languagePreference: ticket.product.customer?.languagePreference,
       });
     }
+
+    void writeScanLog({
+      stickerNumber: ticket.product.sticker.stickerNumber,
+      productId: ticket.productId,
+      viewerType: "technician",
+      actionTaken: "completed_work",
+      userAgent: request.headers.get("user-agent"),
+      ipAddress:
+        request.headers.get("x-forwarded-for") ??
+        request.headers.get("x-real-ip"),
+    });
 
     return NextResponse.json({
       success: true,

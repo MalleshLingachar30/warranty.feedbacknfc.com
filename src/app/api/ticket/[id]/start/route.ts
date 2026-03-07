@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/db";
 import { clerkOrDbHasRole } from "@/lib/rbac";
+import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
 import { sendCustomerWorkStartedNotification } from "@/lib/warranty-notifications";
 
@@ -53,10 +54,16 @@ export async function POST(
         assignedTechnicianId: true,
         assignedServiceCenterId: true,
         technicianStartedAt: true,
+        productId: true,
         product: {
           select: {
             customerPhone: true,
             customerName: true,
+            sticker: {
+              select: {
+                stickerNumber: true,
+              },
+            },
             customer: {
               select: {
                 languagePreference: true,
@@ -157,6 +164,17 @@ export async function POST(
         languagePreference: ticket.product.customer?.languagePreference,
       });
     }
+
+    void writeScanLog({
+      stickerNumber: ticket.product.sticker.stickerNumber,
+      productId: ticket.productId,
+      viewerType: "technician",
+      actionTaken: "started_work",
+      userAgent: _request.headers.get("user-agent"),
+      ipAddress:
+        _request.headers.get("x-forwarded-for") ??
+        _request.headers.get("x-real-ip"),
+    });
 
     return NextResponse.json({
       success: true,

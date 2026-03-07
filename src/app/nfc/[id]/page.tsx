@@ -24,6 +24,7 @@ import { after } from "next/server";
 import { db } from "@/lib/db";
 import { detectNfcLanguage } from "@/lib/nfc-i18n";
 import { normalizePhone, validateOwnerSession } from "@/lib/otp-session";
+import { writeScanLog } from "@/lib/scan-log";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 import { parseStickerNumber } from "@/lib/sticker-number";
 import {
@@ -543,6 +544,11 @@ export default async function NfcStickerPage({
   const isRootStickerHost = requestHost
     ? ROOT_STICKER_HOSTS.has(requestHost)
     : false;
+  const requestIp =
+    requestHeaders.get("x-forwarded-for") ??
+    requestHeaders.get("x-real-ip") ??
+    null;
+  const requestUserAgent = requestHeaders.get("user-agent");
   const queryString = toSearchParamString(resolvedSearchParams);
   const stickerNumber = parseStickerNumber(id);
   const srcParam = firstQueryValue(resolvedSearchParams.src);
@@ -598,7 +604,7 @@ export default async function NfcStickerPage({
           stickerNumber: sticker.stickerNumber,
           organizationId: sticker.allocatedToOrgId,
           source: scanSource,
-          userAgent: requestHeaders.get("user-agent") ?? null,
+          userAgent: requestUserAgent ?? null,
         },
       });
     } catch (error) {
@@ -786,6 +792,19 @@ export default async function NfcStickerPage({
   );
 
   if (mappedProduct.warrantyStatus === "pending_activation") {
+    after(async () => {
+      await writeScanLog({
+        stickerNumber: sticker.stickerNumber,
+        productId: product.id,
+        scanSource,
+        scanContext,
+        viewerType: "public",
+        actionTaken: "view_activation",
+        userAgent: requestUserAgent,
+        ipAddress: requestIp,
+      });
+    });
+
     return (
       <WarrantyActivation
         product={mapActivationProduct(mappedProduct, productModel)}
@@ -803,6 +822,19 @@ export default async function NfcStickerPage({
       openTicket?.assignedTechnicianId === technicianProfileId;
 
     if (!openTicket || !ticketView) {
+      after(async () => {
+        await writeScanLog({
+          stickerNumber: sticker.stickerNumber,
+          productId: product.id,
+          scanSource,
+          scanContext,
+          viewerType: "technician",
+          actionTaken: "view_only",
+          userAgent: requestUserAgent,
+          ipAddress: requestIp,
+        });
+      });
+
       return (
         <TechnicianAssetInfo
           product={mapActivationProduct(mappedProduct, productModel)}
@@ -813,6 +845,19 @@ export default async function NfcStickerPage({
     }
 
     if (!assignedToCurrentTechnician) {
+      after(async () => {
+        await writeScanLog({
+          stickerNumber: sticker.stickerNumber,
+          productId: product.id,
+          scanSource,
+          scanContext,
+          viewerType: "technician",
+          actionTaken: "view_only",
+          userAgent: requestUserAgent,
+          ipAddress: requestIp,
+        });
+      });
+
       return (
         <TechnicianAssetInfo
           product={mapActivationProduct(mappedProduct, productModel)}
@@ -826,16 +871,55 @@ export default async function NfcStickerPage({
       openTicket.status === "assigned" ||
       openTicket.status === "technician_enroute"
     ) {
+      after(async () => {
+        await writeScanLog({
+          stickerNumber: sticker.stickerNumber,
+          productId: product.id,
+          scanSource,
+          scanContext,
+          viewerType: "technician",
+          actionTaken: "view_work_order",
+          userAgent: requestUserAgent,
+          ipAddress: requestIp,
+        });
+      });
+
       return (
         <TechnicianStartWork ticket={ticketView} technicianId={technicianProfileId} />
       );
     }
 
     if (openTicket.status === "work_in_progress") {
+      after(async () => {
+        await writeScanLog({
+          stickerNumber: sticker.stickerNumber,
+          productId: product.id,
+          scanSource,
+          scanContext,
+          viewerType: "technician",
+          actionTaken: "view_work_order",
+          userAgent: requestUserAgent,
+          ipAddress: requestIp,
+        });
+      });
+
       return (
         <TechnicianCompleteWork ticket={ticketView} technicianId={technicianProfileId} />
       );
     }
+
+    after(async () => {
+      await writeScanLog({
+        stickerNumber: sticker.stickerNumber,
+        productId: product.id,
+        scanSource,
+        scanContext,
+        viewerType: "technician",
+        actionTaken: "view_work_order",
+        userAgent: requestUserAgent,
+        ipAddress: requestIp,
+      });
+    });
 
     return (
       <TechnicianTicketView
@@ -850,6 +934,19 @@ export default async function NfcStickerPage({
     role === "manufacturer_admin" ||
     role === "super_admin"
   ) {
+    after(async () => {
+      await writeScanLog({
+        stickerNumber: sticker.stickerNumber,
+        productId: product.id,
+        scanSource,
+        scanContext,
+        viewerType: "admin",
+        actionTaken: "view_only",
+        userAgent: requestUserAgent,
+        ipAddress: requestIp,
+      });
+    });
+
     return (
       <ManagerAssetView
         product={mapActivationProduct(mappedProduct, productModel)}
@@ -859,7 +956,22 @@ export default async function NfcStickerPage({
   }
 
   if (clerkOwnerVerified || otpOwnerVerified) {
+    const viewerType = clerkOwnerVerified ? "owner_verified" : "owner_session";
+
     if (ticketView?.status === "pending_confirmation") {
+      after(async () => {
+        await writeScanLog({
+          stickerNumber: sticker.stickerNumber,
+          productId: product.id,
+          scanSource,
+          scanContext,
+          viewerType,
+          actionTaken: "view_full",
+          userAgent: requestUserAgent,
+          ipAddress: requestIp,
+        });
+      });
+
       return (
         <CustomerConfirmResolution
           ticket={ticketView}
@@ -870,6 +982,19 @@ export default async function NfcStickerPage({
     }
 
     if (ticketView) {
+      after(async () => {
+        await writeScanLog({
+          stickerNumber: sticker.stickerNumber,
+          productId: product.id,
+          scanSource,
+          scanContext,
+          viewerType,
+          actionTaken: "view_full",
+          userAgent: requestUserAgent,
+          ipAddress: requestIp,
+        });
+      });
+
       return (
         <CustomerTicketTracker
           ticket={ticketView}
@@ -878,6 +1003,19 @@ export default async function NfcStickerPage({
         />
       );
     }
+
+    after(async () => {
+      await writeScanLog({
+        stickerNumber: sticker.stickerNumber,
+        productId: product.id,
+        scanSource,
+        scanContext,
+        viewerType,
+        actionTaken: "view_full",
+        userAgent: requestUserAgent,
+        ipAddress: requestIp,
+      });
+    });
 
     return (
       <CustomerProductView
@@ -895,6 +1033,19 @@ export default async function NfcStickerPage({
       />
     );
   }
+
+  after(async () => {
+    await writeScanLog({
+      stickerNumber: sticker.stickerNumber,
+      productId: product.id,
+      scanSource,
+      scanContext,
+      viewerType: "public",
+      actionTaken: "view_only",
+      userAgent: requestUserAgent,
+      ipAddress: requestIp,
+    });
+  });
 
   return (
     <PublicProductView

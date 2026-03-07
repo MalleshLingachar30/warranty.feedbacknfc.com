@@ -5,6 +5,7 @@ import { type Prisma } from "@prisma/client";
 
 import { db as prisma } from "@/lib/db";
 import { authorizeOwnerAccess } from "@/lib/otp-session";
+import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
@@ -601,6 +602,19 @@ export async function POST(request: Request, context: RouteContext) {
           ticketNumber: ticket.ticketNumber,
         });
       }
+
+      void writeScanLog({
+        stickerNumber: ticket.product.sticker.stickerNumber,
+        productId: ticket.productId,
+        viewerType:
+          ownerAccess.via === "clerk" ? "owner_verified" : "owner_session",
+        userId: ownerAccess.userId,
+        actionTaken: "confirmed_resolution",
+        userAgent: request.headers.get("user-agent"),
+        ipAddress:
+          request.headers.get("x-forwarded-for") ??
+          request.headers.get("x-real-ip"),
+      });
 
       return NextResponse.json({
         success: true,

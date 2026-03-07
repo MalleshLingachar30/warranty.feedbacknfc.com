@@ -11,6 +11,7 @@ import {
   sendCustomerWarrantyActivatedEmail,
   sendWarrantyActivatedNotification,
 } from "@/lib/warranty-notifications";
+import { writeScanLog } from "@/lib/scan-log";
 
 interface ActivateWarrantyRequest {
   productId?: string;
@@ -254,6 +255,20 @@ export async function POST(request: Request) {
         certificateUrl,
       });
     }
+
+    void writeScanLog({
+      stickerNumber: product.sticker.stickerNumber,
+      productId: product.id,
+      scanSource: activationSource === "unknown" ? null : activationSource,
+      scanContext: activationContext,
+      viewerType: "owner_verified",
+      userId: customerUser.id,
+      actionTaken: "activated",
+      userAgent: request.headers.get("user-agent"),
+      ipAddress:
+        request.headers.get("x-forwarded-for") ??
+        request.headers.get("x-real-ip"),
+    });
 
     return NextResponse.json({
       success: true,
