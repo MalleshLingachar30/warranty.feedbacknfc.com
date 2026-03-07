@@ -255,9 +255,11 @@ export default async function SettingsPage() {
           name: true,
           type: true,
           slug: true,
+          address: true,
           country: true,
           city: true,
           state: true,
+          pincode: true,
           subscriptionTier: true,
           subscriptionExpiresAt: true,
           contactEmail: true,
@@ -288,7 +290,16 @@ export default async function SettingsPage() {
       }),
       db.serviceCenter.findMany({
         select: {
+          id: true,
           organizationId: true,
+          name: true,
+          city: true,
+          state: true,
+          address: true,
+          pincode: true,
+          phone: true,
+          email: true,
+          supportedCategories: true,
           manufacturerAuthorizations: true,
         },
       }),
@@ -331,9 +342,11 @@ export default async function SettingsPage() {
             name: org.name,
             type: org.type,
             slug: org.slug,
+            address: org.address ?? null,
             city: org.city,
             state: org.state,
             country: org.country,
+            pincode: org.pincode ?? null,
             subscriptionTier: org.subscriptionTier,
             subscriptionExpiresAt: org.subscriptionExpiresAt
               ? org.subscriptionExpiresAt.toISOString()
@@ -352,6 +365,19 @@ export default async function SettingsPage() {
             linkedManufacturerNames: linkedManufacturerIds
               .map((id) => organizationsById.get(id)?.name ?? "")
               .filter((name) => name.length > 0),
+            serviceCenterBranches: centers
+              .filter((center) => center.organizationId === org.id)
+              .map((center) => ({
+                id: center.id,
+                name: center.name,
+                city: center.city ?? null,
+                state: center.state ?? null,
+                address: center.address ?? null,
+                pincode: center.pincode ?? null,
+                phone: center.phone ?? null,
+                email: center.email ?? null,
+                supportedCategories: center.supportedCategories,
+              })),
           };
         })}
       />

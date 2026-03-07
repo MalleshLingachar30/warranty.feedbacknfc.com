@@ -48,9 +48,11 @@ type OrganizationListRow = {
   name: string;
   type: OrganizationType;
   slug: string | null;
+  address: string | null;
   city: string | null;
   state: string | null;
   country: string;
+  pincode: string | null;
   subscriptionTier: string;
   subscriptionExpiresAt: string | null;
   contactEmail: string | null;
@@ -65,6 +67,17 @@ type OrganizationListRow = {
   }>;
   linkedManufacturerIds: string[];
   linkedManufacturerNames: string[];
+  serviceCenterBranches: Array<{
+    id: string;
+    name: string;
+    city: string | null;
+    state: string | null;
+    address: string | null;
+    pincode: string | null;
+    phone: string | null;
+    email: string | null;
+    supportedCategories: string[];
+  }>;
 };
 
 function asString(value: unknown): string | null {
@@ -246,9 +259,11 @@ async function buildOrganizationRows(): Promise<OrganizationListRow[]> {
         name: true,
         type: true,
         slug: true,
+        address: true,
         city: true,
         state: true,
         country: true,
+        pincode: true,
         subscriptionTier: true,
         subscriptionExpiresAt: true,
         contactEmail: true,
@@ -279,7 +294,16 @@ async function buildOrganizationRows(): Promise<OrganizationListRow[]> {
     }),
     db.serviceCenter.findMany({
       select: {
+        id: true,
         organizationId: true,
+        name: true,
+        city: true,
+        state: true,
+        address: true,
+        pincode: true,
+        phone: true,
+        email: true,
+        supportedCategories: true,
         manufacturerAuthorizations: true,
       },
     }),
@@ -315,6 +339,20 @@ async function buildOrganizationRows(): Promise<OrganizationListRow[]> {
   }
 
   const manufacturerLinksByOrg = new Map<string, string[]>();
+  const branchesByOrg = new Map<
+    string,
+    Array<{
+      id: string;
+      name: string;
+      city: string | null;
+      state: string | null;
+      address: string | null;
+      pincode: string | null;
+      phone: string | null;
+      email: string | null;
+      supportedCategories: string[];
+    }>
+  >();
   for (const center of centers) {
     const current = manufacturerLinksByOrg.get(center.organizationId) ?? [];
     current.push(...center.manufacturerAuthorizations);
@@ -322,6 +360,20 @@ async function buildOrganizationRows(): Promise<OrganizationListRow[]> {
       center.organizationId,
       Array.from(new Set(current)),
     );
+
+    const branchRows = branchesByOrg.get(center.organizationId) ?? [];
+    branchRows.push({
+      id: center.id,
+      name: center.name,
+      city: center.city,
+      state: center.state,
+      address: center.address,
+      pincode: center.pincode,
+      phone: center.phone,
+      email: center.email,
+      supportedCategories: center.supportedCategories,
+    });
+    branchesByOrg.set(center.organizationId, branchRows);
   }
 
   return organizations.map((org) => {
@@ -331,9 +383,11 @@ async function buildOrganizationRows(): Promise<OrganizationListRow[]> {
       name: org.name,
       type: org.type,
       slug: org.slug,
+      address: org.address,
       city: org.city,
       state: org.state,
       country: org.country,
+      pincode: org.pincode,
       subscriptionTier: org.subscriptionTier,
       subscriptionExpiresAt: org.subscriptionExpiresAt
         ? org.subscriptionExpiresAt.toISOString()
@@ -346,6 +400,7 @@ async function buildOrganizationRows(): Promise<OrganizationListRow[]> {
       linkedManufacturerNames: linkedManufacturerIds
         .map((id) => organizationsById.get(id)?.name ?? "")
         .filter((name) => name.length > 0),
+      serviceCenterBranches: branchesByOrg.get(org.id) ?? [],
     };
   });
 }
