@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { getCachedAuth } from "@/lib/clerk-session";
+import { db } from "@/lib/db";
 
 export default async function DashboardLayout({
   children,
@@ -15,10 +16,27 @@ export default async function DashboardLayout({
     redirect("/sign-in");
   }
 
-  const { role } = await resolveAppRoleForSession({
+  const { role, dbUser } = await resolveAppRoleForSession({
     clerkUserId: userId,
     sessionClaims,
   });
 
-  return <DashboardShell role={role}>{children}</DashboardShell>;
+  const organizationName = dbUser.organizationId
+    ? (
+        await db.organization.findUnique({
+          where: {
+            id: dbUser.organizationId,
+          },
+          select: {
+            name: true,
+          },
+        })
+      )?.name ?? null
+    : null;
+
+  return (
+    <DashboardShell role={role} organizationName={organizationName}>
+      {children}
+    </DashboardShell>
+  );
 }

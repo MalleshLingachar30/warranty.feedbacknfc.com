@@ -20,6 +20,7 @@ import { NAVIGATION_BY_ROLE, type AppRole, getRoleLabel } from "@/lib/roles";
 
 interface DashboardShellProps {
   role: AppRole;
+  organizationName?: string | null;
   children: React.ReactNode;
 }
 
@@ -60,7 +61,13 @@ function SidebarNav({
   );
 }
 
-export function DashboardShell({ role, children }: DashboardShellProps) {
+export function DashboardShell({
+  role,
+  organizationName,
+  children,
+}: DashboardShellProps) {
+  const roleLabel = getRoleLabel(role);
+
   return (
     <div className="min-h-screen bg-slate-100">
       <div className="flex min-h-screen">
@@ -69,7 +76,12 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
               FeedbackNFC | Warranty
             </p>
-            <p className="text-xs text-slate-500">{getRoleLabel(role)}</p>
+            {organizationName ? (
+              <p className="text-sm font-medium text-slate-700">
+                {organizationName}
+              </p>
+            ) : null}
+            <p className="text-xs text-slate-500">{roleLabel}</p>
           </div>
           <Separator className="mb-4" />
           <SidebarNav role={role} />
@@ -89,7 +101,18 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                   <SheetContent side="left" className="w-[280px]">
                     <SheetHeader>
                       <SheetTitle>FeedbackNFC | Warranty</SheetTitle>
-                      <SheetDescription>{getRoleLabel(role)}</SheetDescription>
+                      <SheetDescription>
+                        {organizationName ? (
+                          <span className="flex flex-col gap-0.5">
+                            <span className="text-sm font-medium text-slate-700">
+                              {organizationName}
+                            </span>
+                            <span>{roleLabel}</span>
+                          </span>
+                        ) : (
+                          roleLabel
+                        )}
+                      </SheetDescription>
                     </SheetHeader>
                     <div className="mt-6">
                       <SidebarNav role={role} />
@@ -100,7 +123,9 @@ export function DashboardShell({ role, children }: DashboardShellProps) {
                   <p className="text-sm font-semibold text-slate-900 md:text-base">
                     FeedbackNFC | Warranty
                   </p>
-                  <p className="text-xs text-slate-500">Dashboard</p>
+                  <p className="text-xs text-slate-500">
+                    {organizationName ?? "Dashboard"}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
