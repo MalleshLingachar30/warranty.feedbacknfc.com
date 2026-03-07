@@ -22,7 +22,7 @@ export function RegisterProductCard() {
     const stickerNumber = parseStickerNumber(value);
     if (!stickerNumber) {
       setError(
-        "Enter a valid sticker number or sticker URL (e.g. 12345 or feedbacknfc.com/nfc/12345).",
+        "Enter a valid sticker number or sticker URL (e.g. 12345 or warranty.feedbacknfc.com/nfc/12345).",
       );
       return;
     }

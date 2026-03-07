@@ -491,7 +491,7 @@ export function StickerWizardClient({
                   ⚠ NFC encoding is only required for blank chips or when you are
                   changing the programmed URL. If you are reusing existing{" "}
                   <code className="mx-1 rounded bg-amber-100 px-1 py-0.5">
-                    feedbacknfc.com/nfc/12345
+                    warranty.feedbacknfc.com/nfc/12345
                   </code>{" "}
                   cards, allocate the matching sticker range and keep the
                   existing encoding.
@@ -909,7 +909,7 @@ export function StickerWizardClient({
                       Available for NFC + QR and NFC Only sticker modes. Skip
                       this when reusing already-programmed{" "}
                       <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                        feedbacknfc.com/nfc/12345
+                        warranty.feedbacknfc.com/nfc/12345
                       </code>{" "}
                       cards.
                     </p>
