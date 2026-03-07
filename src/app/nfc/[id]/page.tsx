@@ -2,6 +2,7 @@ import { CustomerConfirmResolution } from "@/components/nfc/customer-confirm-res
 import { CustomerProductView } from "@/components/nfc/customer-product-view";
 import { CustomerTicketTracker } from "@/components/nfc/customer-ticket-tracker";
 import { NfcLanguageToggle } from "@/components/nfc/language-toggle";
+import { PublicProductView } from "@/components/nfc/public-product-view";
 import {
   ManagerAssetView,
   TechnicianAssetInfo,
@@ -16,12 +17,13 @@ import { UnregisteredSticker } from "@/components/nfc/unregistered-sticker";
 import { WarrantyActivation } from "@/components/nfc/warranty-activation";
 import { auth } from "@clerk/nextjs/server";
 import type { TicketStatus } from "@prisma/client";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { db } from "@/lib/db";
 import { detectNfcLanguage } from "@/lib/nfc-i18n";
+import { normalizePhone, validateOwnerSession } from "@/lib/otp-session";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 import { parseStickerNumber } from "@/lib/sticker-number";
 import {
@@ -719,6 +721,7 @@ export default async function NfcStickerPage({
 
   let role: AppRole | "anonymous_customer" = "anonymous_customer";
   let technicianProfileId: string | null = null;
+  let dbUserPhone: string | null = null;
   let preferredCustomerLanguage: string | null =
     product.customer?.languagePreference ?? null;
 
@@ -728,7 +731,9 @@ export default async function NfcStickerPage({
         clerkId: userId,
       },
       select: {
+        id: true,
         role: true,
+        phone: true,
         languagePreference: true,
         technicianProfile: {
           select: {
@@ -753,8 +758,18 @@ export default async function NfcStickerPage({
         null;
     }
 
+    dbUserPhone = dbUser?.phone ?? null;
     technicianProfileId = dbUser?.technicianProfile?.id ?? null;
   }
+
+  const ownerSession = await validateOwnerSession(await cookies(), product.id);
+  const normalizedOwnerPhone = normalizePhone(product.customerPhone ?? "");
+  const clerkOwnerVerified =
+    role === "customer" &&
+    Boolean(dbUserPhone) &&
+    normalizePhone(dbUserPhone ?? "") === normalizedOwnerPhone;
+  const otpOwnerVerified =
+    ownerSession.valid && ownerSession.phone === normalizedOwnerPhone;
 
   const nfcLanguage = detectNfcLanguage({
     queryLang: queryLanguage,
@@ -770,55 +785,14 @@ export default async function NfcStickerPage({
     />
   );
 
-  if (
-    role === "anonymous_customer" ||
-    role === "customer"
-  ) {
-    if (mappedProduct.warrantyStatus === "pending_activation") {
-      return (
-        <WarrantyActivation
-          product={mapActivationProduct(mappedProduct, productModel)}
-          language={nfcLanguage}
-          languageToggle={languageToggle}
-          activationSource={scanSource === "unknown" ? null : scanSource}
-          activationContext={scanContext}
-        />
-      );
-    }
-
-    if (ticketView?.status === "pending_confirmation") {
-      return (
-        <CustomerConfirmResolution
-          ticket={ticketView}
-          language={nfcLanguage}
-          languageToggle={languageToggle}
-        />
-      );
-    }
-
-    if (ticketView) {
-      return (
-        <CustomerTicketTracker
-          ticket={ticketView}
-          language={nfcLanguage}
-          languageToggle={languageToggle}
-        />
-      );
-    }
-
+  if (mappedProduct.warrantyStatus === "pending_activation") {
     return (
-      <CustomerProductView
-        stickerNumber={sticker.stickerNumber}
-        product={mappedProduct}
-        productModel={productModel}
-        openTicket={openTicketMapped}
-        serviceHistory={serviceHistory}
-        certificateUrl={
-          mappedProduct.warrantyCertificateUrl ??
-          `/api/products/${mappedProduct.id}/certificate?download=1`
-        }
+      <WarrantyActivation
+        product={mapActivationProduct(mappedProduct, productModel)}
         language={nfcLanguage}
         languageToggle={languageToggle}
+        activationSource={scanSource === "unknown" ? null : scanSource}
+        activationContext={scanContext}
       />
     );
   }
@@ -884,17 +858,48 @@ export default async function NfcStickerPage({
     );
   }
 
+  if (clerkOwnerVerified || otpOwnerVerified) {
+    if (ticketView?.status === "pending_confirmation") {
+      return (
+        <CustomerConfirmResolution
+          ticket={ticketView}
+          language={nfcLanguage}
+          languageToggle={languageToggle}
+        />
+      );
+    }
+
+    if (ticketView) {
+      return (
+        <CustomerTicketTracker
+          ticket={ticketView}
+          language={nfcLanguage}
+          languageToggle={languageToggle}
+        />
+      );
+    }
+
+    return (
+      <CustomerProductView
+        stickerNumber={sticker.stickerNumber}
+        product={mappedProduct}
+        productModel={productModel}
+        openTicket={openTicketMapped}
+        serviceHistory={serviceHistory}
+        certificateUrl={
+          mappedProduct.warrantyCertificateUrl ??
+          `/api/products/${mappedProduct.id}/certificate?download=1`
+        }
+        language={nfcLanguage}
+        languageToggle={languageToggle}
+      />
+    );
+  }
+
   return (
-    <CustomerProductView
-      stickerNumber={sticker.stickerNumber}
+    <PublicProductView
       product={mappedProduct}
       productModel={productModel}
-      openTicket={openTicketMapped}
-      serviceHistory={serviceHistory}
-      certificateUrl={
-        mappedProduct.warrantyCertificateUrl ??
-        `/api/products/${mappedProduct.id}/certificate?download=1`
-      }
       language={nfcLanguage}
       languageToggle={languageToggle}
     />

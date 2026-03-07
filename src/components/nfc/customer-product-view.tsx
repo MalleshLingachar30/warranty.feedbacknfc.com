@@ -245,6 +245,12 @@ export function CustomerProductView({
       headerActions={languageToggle}
     >
       <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex justify-end">
+          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {copy.customerProductView.verifiedOwnerBadge}
+          </Badge>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">

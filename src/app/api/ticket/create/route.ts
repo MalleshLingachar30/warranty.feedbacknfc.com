@@ -1,7 +1,10 @@
+import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { assignTechnician } from "@/lib/ai-assignment";
 import { db as prisma } from "@/lib/db";
+import { authorizeOwnerAccess } from "@/lib/otp-session";
 import { computeSlaDeadlines, runSlaSweep } from "@/lib/sla-engine";
 import {
   sendServiceCenterTicketAssignedEmail,
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
         id: true,
         stickerId: true,
         customerId: true,
+        customerPhone: true,
         customerCity: true,
         organization: {
           select: {
@@ -118,6 +122,23 @@ export async function POST(request: Request) {
 
     if (!product) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
+    }
+
+    const authData = await auth();
+    const ownerAccess = await authorizeOwnerAccess({
+      cookiesStore: await cookies(),
+      productId: product.id,
+      ownerPhone: product.customerPhone,
+      clerkUserId: authData.userId,
+    });
+
+    if (!ownerAccess.valid) {
+      return NextResponse.json(
+        {
+          error: "Owner verification required to report an issue.",
+        },
+        { status: 403 },
+      );
     }
 
     const existingOpenTicket = await prisma.ticket.findFirst({
@@ -226,7 +247,7 @@ export async function POST(request: Request) {
           ticketId,
           eventType: "created",
           eventDescription: "Service request created by customer.",
-          actorUserId: customerUser.id,
+          actorUserId: ownerAccess.userId ?? customerUser.id,
           actorRole: "customer",
           actorName: reportedByName ?? customerUser.name ?? "Customer",
         },

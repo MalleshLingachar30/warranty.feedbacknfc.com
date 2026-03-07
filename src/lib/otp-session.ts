@@ -127,3 +127,53 @@ export async function validateOwnerSession(
     productId: session.productId,
   };
 }
+
+export async function authorizeOwnerAccess(input: {
+  cookiesStore: CookieGetter;
+  productId: string;
+  ownerPhone: string | null | undefined;
+  clerkUserId?: string | null;
+}): Promise<{
+  valid: boolean;
+  via?: "clerk" | "otp";
+  userId?: string;
+}> {
+  const normalizedOwnerPhone = normalizePhone(input.ownerPhone ?? "");
+  if (!normalizedOwnerPhone) {
+    return { valid: false };
+  }
+
+  if (input.clerkUserId) {
+    const dbUser = await db.user.findUnique({
+      where: {
+        clerkId: input.clerkUserId,
+      },
+      select: {
+        id: true,
+        phone: true,
+      },
+    });
+
+    if (dbUser?.phone && normalizePhone(dbUser.phone) === normalizedOwnerPhone) {
+      return {
+        valid: true,
+        via: "clerk",
+        userId: dbUser.id,
+      };
+    }
+  }
+
+  const ownerSession = await validateOwnerSession(
+    input.cookiesStore,
+    input.productId,
+  );
+
+  if (ownerSession.valid && ownerSession.phone === normalizedOwnerPhone) {
+    return {
+      valid: true,
+      via: "otp",
+    };
+  }
+
+  return { valid: false };
+}

@@ -9,6 +9,7 @@ type NfcCopy = {
     warrantyStatus: string;
     validUntil: string;
     activeBadge: string;
+    verifiedOwnerBadge: string;
     daysRemaining: string;
     openServiceRequest: string;
     ticketLabel: string;
@@ -44,6 +45,26 @@ type NfcCopy = {
     openTicketReportedHours: string;
     openTicketReportedDays: string;
     downloadCertificate: string;
+  };
+  publicProductView: {
+    activeBadge: string;
+    expiredBadge: string;
+    warrantyStatus: string;
+    validUntil: string;
+    ownerProtectedMessage: string;
+    ownerPromptTitle: string;
+    ownerPromptDescription: string;
+    verifyWithOtp: string;
+    resendOtp: string;
+    phoneLabel: string;
+    phoneHint: string;
+    otpLabel: string;
+    otpPlaceholder: string;
+    otpSentMessage: string;
+    wrongOtpPrefix: string;
+    attemptsRemainingSuffix: string;
+    phoneMismatchMessage: string;
+    networkError: string;
   };
   warrantyActivation: {
     title: string;
@@ -146,6 +167,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       warrantyStatus: "Warranty Status",
       validUntil: "Valid until",
       activeBadge: "Active",
+      verifiedOwnerBadge: "Verified Owner",
       daysRemaining: "days remaining",
       openServiceRequest: "Open Service Request",
       ticketLabel: "Ticket",
@@ -182,6 +204,28 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       openTicketReportedHours: "h ago",
       openTicketReportedDays: "d ago",
       downloadCertificate: "Download Warranty Certificate",
+    },
+    publicProductView: {
+      activeBadge: "Active",
+      expiredBadge: "Expired",
+      warrantyStatus: "Warranty Status",
+      validUntil: "Valid until",
+      ownerProtectedMessage: "This product is registered to a verified owner.",
+      ownerPromptTitle: "Are you the product owner?",
+      ownerPromptDescription:
+        "Verify your identity with OTP to access warranty services and ticket actions.",
+      verifyWithOtp: "Verify with OTP",
+      resendOtp: "Resend OTP",
+      phoneLabel: "Phone Number",
+      phoneHint: "Enter the phone number registered during activation.",
+      otpLabel: "Verification Code",
+      otpPlaceholder: "Enter the 6-digit OTP",
+      otpSentMessage: "OTP sent. Enter the 6-digit code to continue.",
+      wrongOtpPrefix: "Incorrect code.",
+      attemptsRemainingSuffix: "attempts remaining.",
+      phoneMismatchMessage:
+        "This phone number is not registered as the product owner. Contact support for help.",
+      networkError: "Unable to verify ownership right now. Please try again.",
     },
     warrantyActivation: {
       title: "Activate Product Warranty",
@@ -296,6 +340,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       warrantyStatus: "वारंटी स्थिति",
       validUntil: "वैधता",
       activeBadge: "सक्रिय",
+      verifiedOwnerBadge: "सत्यापित मालिक",
       daysRemaining: "दिन शेष",
       openServiceRequest: "खुला सर्विस अनुरोध",
       ticketLabel: "टिकट",
@@ -332,6 +377,28 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       openTicketReportedHours: "घंटे पहले",
       openTicketReportedDays: "दिन पहले",
       downloadCertificate: "वारंटी प्रमाणपत्र डाउनलोड करें",
+    },
+    publicProductView: {
+      activeBadge: "सक्रिय",
+      expiredBadge: "समाप्त",
+      warrantyStatus: "वारंटी स्थिति",
+      validUntil: "वैधता",
+      ownerProtectedMessage: "यह उत्पाद एक सत्यापित मालिक के नाम पंजीकृत है।",
+      ownerPromptTitle: "क्या आप उत्पाद के मालिक हैं?",
+      ownerPromptDescription:
+        "वारंटी सेवाओं और टिकट कार्यों के लिए OTP से अपनी पहचान सत्यापित करें।",
+      verifyWithOtp: "OTP से सत्यापित करें",
+      resendOtp: "OTP फिर से भेजें",
+      phoneLabel: "फोन नंबर",
+      phoneHint: "सक्रियण के समय पंजीकृत फोन नंबर दर्ज करें।",
+      otpLabel: "सत्यापन कोड",
+      otpPlaceholder: "6 अंकों का OTP दर्ज करें",
+      otpSentMessage: "OTP भेज दिया गया है। आगे बढ़ने के लिए 6 अंकों का कोड दर्ज करें।",
+      wrongOtpPrefix: "गलत कोड।",
+      attemptsRemainingSuffix: "प्रयास शेष।",
+      phoneMismatchMessage:
+        "यह फोन नंबर उत्पाद मालिक के रूप में पंजीकृत नहीं है। सहायता के लिए समर्थन से संपर्क करें।",
+      networkError: "अभी स्वामित्व सत्यापित नहीं हो सका। कृपया पुनः प्रयास करें।",
     },
     warrantyActivation: {
       title: "उत्पाद वारंटी सक्रिय करें",

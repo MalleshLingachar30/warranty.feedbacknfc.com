@@ -1,7 +1,10 @@
+import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { type Prisma } from "@prisma/client";
 
 import { db as prisma } from "@/lib/db";
+import { authorizeOwnerAccess } from "@/lib/otp-session";
 import { runSlaSweep } from "@/lib/sla-engine";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
@@ -291,6 +294,23 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Ticket not found." }, { status: 404 });
     }
 
+    const authData = await auth();
+    const ownerAccess = await authorizeOwnerAccess({
+      cookiesStore: await cookies(),
+      productId: ticket.productId,
+      ownerPhone: ticket.product.customerPhone,
+      clerkUserId: authData.userId,
+    });
+
+    if (!ownerAccess.valid) {
+      return NextResponse.json(
+        {
+          error: "Owner verification required to confirm resolution.",
+        },
+        { status: 403 },
+      );
+    }
+
     if (action === "confirm") {
       if (
         ticket.status !== "pending_confirmation" &&
@@ -324,6 +344,7 @@ export async function POST(request: Request, context: RouteContext) {
             eventType: "confirmed",
             eventDescription:
               body.comment ?? "Customer confirmed service resolution.",
+            actorUserId: ownerAccess.userId,
             actorRole: "customer",
             actorName: "Customer",
           },
@@ -617,6 +638,7 @@ export async function POST(request: Request, context: RouteContext) {
           eventType: "reopened",
           eventDescription:
             body.comment ?? "Customer reported issue not resolved.",
+          actorUserId: ownerAccess.userId,
           actorRole: "customer",
           actorName: "Customer",
         },
