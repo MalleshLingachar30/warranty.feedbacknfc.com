@@ -165,6 +165,7 @@ model User {
   timelineEvents     TicketTimeline[]    @relation("TimelineActor")
   stickerAllocations StickerAllocation[] @relation("AllocatedByUser")
   customerProducts   Product[]           @relation("CustomerProducts")
+  scanLogs          ScanLog[]           @relation("ScanLogActor")
 
   @@map("users")
 }
@@ -231,11 +232,14 @@ model Product {
   customerId              String?        @map("customer_id") @db.Uuid
   customerName            String?        @map("customer_name") @db.VarChar(255)
   customerPhone           String?        @map("customer_phone") @db.VarChar(20)
+  customerPhoneVerified   Boolean        @default(false) @map("customer_phone_verified")
   customerEmail           String?        @map("customer_email") @db.VarChar(255)
   customerAddress         String?        @map("customer_address")
   customerCity            String?        @map("customer_city") @db.VarChar(100)
   customerState           String?        @map("customer_state") @db.VarChar(100)
   customerPincode         String?        @map("customer_pincode") @db.VarChar(10)
+  activatedVia            String?        @map("activated_via") @db.VarChar(20)
+  activatedAtLocation     String?        @map("activated_at_location") @db.VarChar(255)
   installationLocation    Json?          @map("installation_location")
   metadata                Json           @default(dbgenerated("'{}'::jsonb"))
   createdAt               DateTime       @default(now()) @map("created_at")
@@ -247,6 +251,8 @@ model Product {
   customer     User?           @relation("CustomerProducts", fields: [customerId], references: [id])
   tickets      Ticket[]
   claims       WarrantyClaim[]
+  otpSessions  OtpSession[]
+  scanLogs     ScanLog[]
 
   @@index([warrantyStatus, warrantyEndDate], map: "idx_products_warranty")
   @@map("products")
@@ -425,6 +431,7 @@ model StickerAllocation {
   applianceSerialPrefix String?               @map("appliance_serial_prefix") @db.VarChar(50)
   applianceSerialStart  String?               @map("appliance_serial_start") @db.VarChar(100)
   applianceSerialEnd    String?               @map("appliance_serial_end") @db.VarChar(100)
+  includeCartonQr       Boolean               @default(true) @map("include_carton_qr")
   allocatedById         String?               @map("allocated_by") @db.Uuid
   allocatedAt           DateTime              @default(now()) @map("allocated_at")
   notes                 String?
@@ -450,4 +457,43 @@ model StickerScanEvent {
   @@index([stickerId, scannedAt], map: "idx_sticker_scans_sticker_time")
   @@index([stickerNumber], map: "idx_sticker_scans_number")
   @@map("sticker_scan_events")
+}
+
+model OtpSession {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone            String   @db.VarChar(20)
+  productId        String   @map("product_id") @db.Uuid
+  purpose          String   @db.VarChar(30)
+  otpCode          String   @map("otp_code") @db.VarChar(6)
+  otpExpiresAt     DateTime @map("otp_expires_at")
+  verified         Boolean  @default(false)
+  sessionToken     String?  @unique(map: "otp_sessions_session_token_key") @map("session_token") @db.VarChar(255)
+  sessionExpiresAt DateTime? @map("session_expires_at")
+  attempts         Int      @default(0)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([phone, productId], map: "idx_otp_sessions_phone_product")
+  @@map("otp_sessions")
+}
+
+model ScanLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stickerNumber Int    @map("sticker_number")
+  productId   String?  @map("product_id") @db.Uuid
+  scanSource  String?  @map("scan_source") @db.VarChar(10)
+  scanContext String?  @map("scan_context") @db.VarChar(20)
+  viewerType  String   @map("viewer_type") @db.VarChar(30)
+  userId      String?  @map("user_id") @db.Uuid
+  ipAddress   String?  @map("ip_address") @db.VarChar(45)
+  userAgent   String?  @map("user_agent")
+  actionTaken String?  @map("action_taken") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  product Product? @relation(fields: [productId], references: [id])
+  user    User?    @relation("ScanLogActor", fields: [userId], references: [id])
+
+  @@index([stickerNumber, createdAt], map: "idx_scan_log_sticker")
+  @@map("scan_log")
 }

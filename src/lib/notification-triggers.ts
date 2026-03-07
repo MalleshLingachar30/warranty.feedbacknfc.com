@@ -79,6 +79,23 @@ export async function onWarrantyActivated(input: {
   });
 }
 
+export async function onOtpVerificationCode(input: {
+  customerPhone: string;
+  otpCode: string;
+  languagePreference?: string | null;
+}): Promise<void> {
+  const language = normalizeNotificationLanguage(input.languagePreference);
+  const message =
+    language === "hi"
+      ? `आपका FeedbackNFC सत्यापन कोड है: ${input.otpCode}। 5 मिनट के लिए वैध। यह कोड किसी से साझा न करें।`
+      : `Your FeedbackNFC verification code is: ${input.otpCode}. Valid for 5 minutes. Do not share this code.`;
+
+  await sendSMS({
+    to: input.customerPhone,
+    message,
+  });
+}
+
 export async function onTicketCreated(input: {
   technicianPhone?: string;
   issueCategory: string;

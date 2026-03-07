@@ -2,6 +2,7 @@ import "server-only";
 
 import { sendEmail } from "@/lib/notifications";
 import {
+  onOtpVerificationCode,
   onClaimApproved,
   onClaimRejected,
   onClaimSubmitted,
@@ -110,6 +111,14 @@ export async function sendWarrantyActivatedNotification(input: {
   languagePreference?: string | null;
 }) {
   await onWarrantyActivated(input);
+}
+
+export async function sendOtpVerificationCodeNotification(input: {
+  customerPhone: string;
+  otpCode: string;
+  languagePreference?: string | null;
+}) {
+  await onOtpVerificationCode(input);
 }
 
 export async function sendWarrantyExpiryReminderNotification(input: {
