@@ -5,6 +5,7 @@ import { resolveOrganizationContext } from "@/lib/org-context";
 
 export type ManufacturerPageContext = {
   organizationId: string | null;
+  organizationName: string | null;
   clerkUserId: string;
   dbUserId: string | null;
 };
@@ -24,8 +25,26 @@ export const resolveManufacturerPageContext = cache(
       requiredOrganizationType: "manufacturer",
     });
 
+    let organizationName: string | null = null;
+
+    if (organizationId) {
+      const organization = await import("@/lib/db").then(({ db }) =>
+        db.organization.findUnique({
+          where: {
+            id: organizationId,
+          },
+          select: {
+            name: true,
+          },
+        }),
+      );
+
+      organizationName = organization?.name ?? null;
+    }
+
     return {
       organizationId,
+      organizationName,
       clerkUserId,
       dbUserId,
     };
