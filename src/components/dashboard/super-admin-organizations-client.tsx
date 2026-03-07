@@ -417,228 +417,240 @@ export function SuperAdminOrganizationsClient({
             </Button>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Building2 className="size-4" />
-                  Manufacturer View
-                </CardTitle>
-                <CardDescription>
-                  Organization profile details shown as a read-only snapshot.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input
-                  value={
-                    selectedOrganization.type === "manufacturer"
-                      ? selectedOrganization.name
-                      : ""
-                  }
-                  disabled
-                  placeholder="Manufacturer name"
-                />
-                <div className="grid gap-3 md:grid-cols-2">
+          <div
+            className={`grid gap-4 ${
+              selectedOrganization.type === "service_center"
+                ? "xl:grid-cols-2"
+                : "xl:grid-cols-2"
+            }`}
+          >
+            {selectedOrganization.type === "manufacturer" ? (
+              <Card className="border-slate-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Building2 className="size-4" />
+                    Manufacturer View
+                  </CardTitle>
+                  <CardDescription>
+                    Organization profile details shown as a read-only snapshot.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   <Input
                     value={
                       selectedOrganization.type === "manufacturer"
-                        ? (selectedOrganization.city ?? "")
+                        ? selectedOrganization.name
                         : ""
                     }
                     disabled
-                    placeholder="City"
+                    placeholder="Manufacturer name"
                   />
-                  <Input
-                    value={
-                      selectedOrganization.type === "manufacturer"
-                        ? (selectedOrganization.state ?? "")
-                        : ""
-                    }
-                    disabled
-                    placeholder="State"
-                  />
-                </div>
-                <Input
-                  value={
-                    selectedOrganization.type === "manufacturer"
-                      ? (selectedOrganization.contactEmail ?? "")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Contact email"
-                />
-                <Input
-                  value={
-                    selectedOrganization.type === "manufacturer"
-                      ? (selectedOrganization.contactPhone ?? "")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Contact phone"
-                />
-                <div className="rounded-md border bg-slate-50 p-3 text-sm">
-                  <p className="mb-2 font-medium">First admin</p>
-                  <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-2">
                     <Input
                       value={
                         selectedOrganization.type === "manufacturer"
-                          ? (selectedAdmin?.name ?? "")
+                          ? (selectedOrganization.city ?? "")
                           : ""
                       }
                       disabled
-                      placeholder="Admin name"
+                      placeholder="City"
                     />
                     <Input
                       value={
                         selectedOrganization.type === "manufacturer"
-                          ? (selectedAdmin?.email ?? "")
+                          ? (selectedOrganization.state ?? "")
                           : ""
                       }
                       disabled
-                      placeholder="Existing user email"
-                    />
-                    <Input
-                      value={
-                        selectedOrganization.type === "manufacturer"
-                          ? (selectedAdmin?.clerkId ?? "")
-                          : ""
-                      }
-                      disabled
-                      placeholder="Clerk user ID"
+                      placeholder="State"
                     />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <Input
+                    value={
+                      selectedOrganization.type === "manufacturer"
+                        ? (selectedOrganization.contactEmail ?? "")
+                        : ""
+                    }
+                    disabled
+                    placeholder="Contact email"
+                  />
+                  <Input
+                    value={
+                      selectedOrganization.type === "manufacturer"
+                        ? (selectedOrganization.contactPhone ?? "")
+                        : ""
+                    }
+                    disabled
+                    placeholder="Contact phone"
+                  />
+                  <div className="rounded-md border bg-slate-50 p-3 text-sm">
+                    <p className="mb-2 font-medium">First admin</p>
+                    <div className="space-y-2">
+                      <Input
+                        value={
+                          selectedOrganization.type === "manufacturer"
+                            ? (selectedAdmin?.name ?? "")
+                            : ""
+                        }
+                        disabled
+                        placeholder="Admin name"
+                      />
+                      <Input
+                        value={
+                          selectedOrganization.type === "manufacturer"
+                            ? (selectedAdmin?.email ?? "")
+                            : ""
+                        }
+                        disabled
+                        placeholder="Existing user email"
+                      />
+                      <Input
+                        value={
+                          selectedOrganization.type === "manufacturer"
+                            ? (selectedAdmin?.clerkId ?? "")
+                            : ""
+                        }
+                        disabled
+                        placeholder="Clerk user ID"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
-            <Card className="border-slate-200">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Wrench className="size-4" />
-                  Service Center View
-                </CardTitle>
-                <CardDescription>
-                  Branch and manufacturer-link details for a selected service
-                  center.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? selectedOrganization.name
-                      : ""
-                  }
-                  disabled
-                  placeholder="Service-center organization name"
-                />
-                <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? (selectedBranch?.name ?? "")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Branch / center name"
-                />
-                <div className="grid gap-3 md:grid-cols-2">
+            {selectedOrganization.type === "service_center" ? (
+              <Card className="border-slate-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wrench className="size-4" />
+                    Service Center View
+                  </CardTitle>
+                  <CardDescription>
+                    Branch and manufacturer-link details for a selected service
+                    center.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
                   <Input
                     value={
                       selectedOrganization.type === "service_center"
-                        ? (selectedBranch?.city ??
-                          selectedOrganization.city ??
-                          "")
+                        ? selectedOrganization.name
                         : ""
                     }
                     disabled
-                    placeholder="City"
+                    placeholder="Service-center organization name"
                   />
                   <Input
                     value={
                       selectedOrganization.type === "service_center"
-                        ? (selectedBranch?.state ??
-                          selectedOrganization.state ??
-                          "")
+                        ? (selectedBranch?.name ?? "")
                         : ""
                     }
                     disabled
-                    placeholder="State"
+                    placeholder="Branch / center name"
                   />
-                </div>
-                <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? (selectedBranch?.email ??
-                        selectedOrganization.contactEmail ??
-                        "")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Contact email"
-                />
-                <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? (selectedBranch?.phone ??
-                        selectedOrganization.contactPhone ??
-                        "")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Contact phone"
-                />
-                <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? selectedBranch?.supportedCategories.join(", ")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Supported categories"
-                />
-                <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? selectedOrganization.linkedManufacturerNames.join(", ")
-                      : ""
-                  }
-                  disabled
-                  placeholder="Linked manufacturer"
-                />
-                <div className="rounded-md border bg-slate-50 p-3 text-sm">
-                  <p className="mb-2 font-medium">First admin</p>
-                  <div className="space-y-2">
+                  <div className="grid gap-3 md:grid-cols-2">
                     <Input
                       value={
                         selectedOrganization.type === "service_center"
-                          ? (selectedAdmin?.name ?? "")
+                          ? (selectedBranch?.city ??
+                            selectedOrganization.city ??
+                            "")
                           : ""
                       }
                       disabled
-                      placeholder="Admin name"
+                      placeholder="City"
                     />
                     <Input
                       value={
                         selectedOrganization.type === "service_center"
-                          ? (selectedAdmin?.email ?? "")
+                          ? (selectedBranch?.state ??
+                            selectedOrganization.state ??
+                            "")
                           : ""
                       }
                       disabled
-                      placeholder="Existing user email"
-                    />
-                    <Input
-                      value={
-                        selectedOrganization.type === "service_center"
-                          ? (selectedAdmin?.clerkId ?? "")
-                          : ""
-                      }
-                      disabled
-                      placeholder="Clerk user ID"
+                      placeholder="State"
                     />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <Input
+                    value={
+                      selectedOrganization.type === "service_center"
+                        ? (selectedBranch?.email ??
+                          selectedOrganization.contactEmail ??
+                          "")
+                        : ""
+                    }
+                    disabled
+                    placeholder="Contact email"
+                  />
+                  <Input
+                    value={
+                      selectedOrganization.type === "service_center"
+                        ? (selectedBranch?.phone ??
+                          selectedOrganization.contactPhone ??
+                          "")
+                        : ""
+                    }
+                    disabled
+                    placeholder="Contact phone"
+                  />
+                  <Input
+                    value={
+                      selectedOrganization.type === "service_center"
+                        ? selectedBranch?.supportedCategories.join(", ")
+                        : ""
+                    }
+                    disabled
+                    placeholder="Supported categories"
+                  />
+                  <Input
+                    value={
+                      selectedOrganization.type === "service_center"
+                        ? selectedOrganization.linkedManufacturerNames.join(
+                            ", ",
+                          )
+                        : ""
+                    }
+                    disabled
+                    placeholder="Linked manufacturer"
+                  />
+                  <div className="rounded-md border bg-slate-50 p-3 text-sm">
+                    <p className="mb-2 font-medium">First admin</p>
+                    <div className="space-y-2">
+                      <Input
+                        value={
+                          selectedOrganization.type === "service_center"
+                            ? (selectedAdmin?.name ?? "")
+                            : ""
+                        }
+                        disabled
+                        placeholder="Admin name"
+                      />
+                      <Input
+                        value={
+                          selectedOrganization.type === "service_center"
+                            ? (selectedAdmin?.email ?? "")
+                            : ""
+                        }
+                        disabled
+                        placeholder="Existing user email"
+                      />
+                      <Input
+                        value={
+                          selectedOrganization.type === "service_center"
+                            ? (selectedAdmin?.clerkId ?? "")
+                            : ""
+                        }
+                        disabled
+                        placeholder="Clerk user ID"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
             <Card className="border-slate-200">
               <CardHeader>
