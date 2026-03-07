@@ -82,7 +82,7 @@ export function issueOwnerSessionCookie(
     name: WARRANTY_SESSION_COOKIE_NAME,
     value: sessionToken,
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: OWNER_SESSION_EXPIRY_SECONDS,

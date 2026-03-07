@@ -49,20 +49,34 @@ type NfcCopy = {
     title: string;
     description: string;
     footer: string;
+    otpIntro: string;
     activatedTitle: string;
     activatedDescription: string;
     activatedFooter: string;
     activatedSuccess: string;
+    stickerReminder: string;
     downloadCertificate: string;
     customerName: string;
     phoneNumber: string;
+    phoneHint: string;
+    otpLabel: string;
     otpPlaceholder: string;
+    otpSentMessage: string;
+    otpVerifiedMessage: string;
     emailOptional: string;
     addressOptional: string;
     installationDate: string;
+    continueButton: string;
+    sendOtpButton: string;
+    sendingOtpButton: string;
+    verifyOtpButton: string;
+    verifyingOtpButton: string;
+    resendOtpButton: string;
     activateButton: string;
     activatingButton: string;
     networkError: string;
+    requestOtpError: string;
+    verifyOtpError: string;
     productImage: string;
     warrantyDurationSuffix: string;
     manufacturerLabel: string;
@@ -173,22 +187,38 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       title: "Activate Product Warranty",
       description:
         "Complete this one-time form to activate your warranty and unlock service support.",
-      footer: "OTP verification is currently stubbed for MVP testing.",
+      footer: "Phone ownership verification is required before activation.",
+      otpIntro:
+        "Enter the customer details first, then request an OTP for this phone number.",
       activatedTitle: "Warranty Activated",
       activatedDescription: "Warranty Activated! Valid until",
       activatedFooter:
         "You can scan this sticker anytime to raise a service request and track progress.",
       activatedSuccess: "Warranty activation completed successfully.",
+      stickerReminder:
+        "A warranty sticker is attached to the product. Keep it safe and scan it anytime you need service.",
       downloadCertificate: "Download Warranty Certificate",
       customerName: "Customer Name",
       phoneNumber: "Phone Number",
-      otpPlaceholder: "Enter OTP (stubbed for now)",
+      phoneHint: "Use a valid mobile number with country code.",
+      otpLabel: "Verification Code",
+      otpPlaceholder: "Enter the 6-digit OTP",
+      otpSentMessage: "OTP sent. Enter the 6-digit code to continue.",
+      otpVerifiedMessage: "Phone number verified. Completing activation...",
       emailOptional: "Email (Optional)",
       addressOptional: "Address (Optional)",
       installationDate: "Installation Date",
+      continueButton: "Continue",
+      sendOtpButton: "Send OTP",
+      sendingOtpButton: "Sending OTP...",
+      verifyOtpButton: "Verify and Activate",
+      verifyingOtpButton: "Verifying OTP...",
+      resendOtpButton: "Resend OTP",
       activateButton: "Activate Warranty",
       activatingButton: "Activating warranty...",
       networkError: "Network error while activating warranty. Please try again.",
+      requestOtpError: "Unable to send OTP. Please check the phone number and try again.",
+      verifyOtpError: "Unable to verify OTP. Please request a new code and try again.",
       productImage: "Product Image",
       warrantyDurationSuffix: "Manufacturer Warranty",
       manufacturerLabel: "Manufacturer",
@@ -307,22 +337,38 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       title: "उत्पाद वारंटी सक्रिय करें",
       description:
         "वारंटी सक्रिय करने और सर्विस सपोर्ट पाने के लिए यह एक बार वाला फॉर्म भरें।",
-      footer: "MVP टेस्टिंग के लिए OTP सत्यापन फिलहाल स्टब किया गया है।",
+      footer: "सक्रियण से पहले फोन स्वामित्व सत्यापन आवश्यक है।",
+      otpIntro:
+        "पहले ग्राहक विवरण भरें, फिर इसी फोन नंबर पर OTP भेजें।",
       activatedTitle: "वारंटी सक्रिय हुई",
       activatedDescription: "वारंटी सफलतापूर्वक सक्रिय हुई! वैधता",
       activatedFooter:
         "इस स्टिकर को स्कैन करके आप कभी भी सर्विस अनुरोध दर्ज कर सकते हैं।",
       activatedSuccess: "वारंटी सक्रियण सफलतापूर्वक पूरा हुआ।",
+      stickerReminder:
+        "उत्पाद पर वारंटी स्टिकर लगा है। इसे सुरक्षित रखें और सेवा के लिए कभी भी स्कैन करें।",
       downloadCertificate: "वारंटी प्रमाणपत्र डाउनलोड करें",
       customerName: "ग्राहक का नाम",
       phoneNumber: "फोन नंबर",
-      otpPlaceholder: "OTP दर्ज करें (फिलहाल स्टब)",
+      phoneHint: "देश कोड सहित मान्य मोबाइल नंबर दर्ज करें।",
+      otpLabel: "सत्यापन कोड",
+      otpPlaceholder: "6 अंकों का OTP दर्ज करें",
+      otpSentMessage: "OTP भेज दिया गया है। आगे बढ़ने के लिए 6 अंकों का कोड दर्ज करें।",
+      otpVerifiedMessage: "फोन नंबर सत्यापित हो गया। सक्रियण पूरा किया जा रहा है...",
       emailOptional: "ईमेल (वैकल्पिक)",
       addressOptional: "पता (वैकल्पिक)",
       installationDate: "इंस्टॉलेशन तिथि",
+      continueButton: "आगे बढ़ें",
+      sendOtpButton: "OTP भेजें",
+      sendingOtpButton: "OTP भेजा जा रहा है...",
+      verifyOtpButton: "सत्यापित करें और सक्रिय करें",
+      verifyingOtpButton: "OTP सत्यापित किया जा रहा है...",
+      resendOtpButton: "OTP फिर से भेजें",
       activateButton: "वारंटी सक्रिय करें",
       activatingButton: "वारंटी सक्रिय की जा रही है...",
       networkError: "नेटवर्क त्रुटि। कृपया दोबारा प्रयास करें।",
+      requestOtpError: "OTP भेजा नहीं जा सका। फोन नंबर जाँचकर पुनः प्रयास करें।",
+      verifyOtpError: "OTP सत्यापित नहीं हो सका। नया कोड मांगकर पुनः प्रयास करें।",
       productImage: "उत्पाद चित्र",
       warrantyDurationSuffix: "निर्माता वारंटी",
       manufacturerLabel: "निर्माता",

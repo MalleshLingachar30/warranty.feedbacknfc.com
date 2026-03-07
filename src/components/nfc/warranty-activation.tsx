@@ -17,6 +17,7 @@ interface WarrantyActivationProps {
   language: NfcLanguage;
   languageToggle?: ReactNode;
   activationSource?: "qr" | "nfc" | null;
+  activationContext?: "carton" | "product" | null;
 }
 
 interface ActivationFormState {
@@ -54,6 +55,7 @@ export function WarrantyActivation({
   language,
   languageToggle,
   activationSource,
+  activationContext,
 }: WarrantyActivationProps) {
   const copy = getNfcCopy(language);
   const defaultInstallationDate = useMemo(() => {
@@ -76,6 +78,8 @@ export function WarrantyActivation({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [otpMessage, setOtpMessage] = useState<string | null>(null);
+  const [otpRequested, setOtpRequested] = useState(false);
   const [success, setSuccess] = useState<ActivationSuccess | null>(null);
 
   const warrantyDuration = monthLabel(
@@ -85,7 +89,82 @@ export function WarrantyActivation({
   );
 
   const onFieldChange = (field: keyof ActivationFormState, value: string) => {
+    if (field === "customerPhone" && otpRequested) {
+      setOtpRequested(false);
+      setOtpMessage(null);
+      setError(null);
+      setFormState((prev) => ({ ...prev, customerPhone: value, otpCode: "" }));
+      return;
+    }
+
     setFormState((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const activateWarranty = async () => {
+    const response = await fetch("/api/warranty/activate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        productId: product.id,
+        customerName: formState.customerName,
+        customerPhone: formState.customerPhone,
+        customerEmail: formState.customerEmail || null,
+        customerAddress: formState.customerAddress || null,
+        installationDate: formState.installationDate,
+        activationSource,
+        activationContext,
+      }),
+    });
+
+    const payload = (await response.json()) as {
+      error?: string;
+      warrantyEndDate?: string;
+      certificateUrl?: string;
+    };
+
+    if (!response.ok || !payload.warrantyEndDate) {
+      setError(
+        payload.error ??
+          (language === "hi"
+            ? "वारंटी सक्रिय नहीं हो सकी। कृपया दोबारा प्रयास करें।"
+            : "Unable to activate warranty. Please try again."),
+      );
+      return;
+    }
+
+    setSuccess({
+      warrantyEndDate: payload.warrantyEndDate,
+      certificateUrl: payload.certificateUrl ?? null,
+    });
+  };
+
+  const requestOtp = async () => {
+    const response = await fetch("/api/otp/request", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        phone: formState.customerPhone,
+        productId: product.id,
+        purpose: "activation",
+      }),
+    });
+
+    const payload = (await response.json()) as {
+      message?: string;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      setError(payload.message ?? payload.error ?? copy.warrantyActivation.requestOtpError);
+      return;
+    }
+
+    setOtpRequested(true);
+    setOtpMessage(payload.message ?? copy.warrantyActivation.otpSentMessage);
   };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -95,43 +174,40 @@ export function WarrantyActivation({
     setError(null);
 
     try {
-      const response = await fetch("/api/warranty/activate", {
+      if (!otpRequested) {
+        await requestOtp();
+        return;
+      }
+
+      const verifyResponse = await fetch("/api/otp/verify", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           productId: product.id,
-          customerName: formState.customerName,
-          customerPhone: formState.customerPhone,
-          otpCode: formState.otpCode,
-          customerEmail: formState.customerEmail || null,
-          customerAddress: formState.customerAddress || null,
-          installationDate: formState.installationDate,
-          activationSource,
+          phone: formState.customerPhone,
+          otp: formState.otpCode,
         }),
       });
 
-      const payload = (await response.json()) as {
+      const verifyPayload = (await verifyResponse.json()) as {
         error?: string;
-        warrantyEndDate?: string;
-        certificateUrl?: string;
+        message?: string;
+        attemptsRemaining?: number;
       };
 
-      if (!response.ok || !payload.warrantyEndDate) {
+      if (!verifyResponse.ok) {
         setError(
-          payload.error ??
-            (language === "hi"
-              ? "वारंटी सक्रिय नहीं हो सकी। कृपया दोबारा प्रयास करें।"
-              : "Unable to activate warranty. Please try again."),
+          verifyPayload.message ??
+            verifyPayload.error ??
+            copy.warrantyActivation.verifyOtpError,
         );
         return;
       }
 
-      setSuccess({
-        warrantyEndDate: payload.warrantyEndDate,
-        certificateUrl: payload.certificateUrl ?? null,
-      });
+      setOtpMessage(copy.warrantyActivation.otpVerifiedMessage);
+      await activateWarranty();
     } catch {
       setError(copy.warrantyActivation.networkError);
     } finally {
@@ -154,6 +230,9 @@ export function WarrantyActivation({
           </div>
           <p className="text-sm text-emerald-900">
             {copy.warrantyActivation.activatedSuccess}
+          </p>
+          <p className="mt-3 text-sm text-emerald-800">
+            {copy.warrantyActivation.stickerReminder}
           </p>
           {success.certificateUrl ? (
             <a href={success.certificateUrl} target="_blank" rel="noreferrer">
@@ -242,12 +321,7 @@ export function WarrantyActivation({
             placeholder={copy.warrantyActivation.phoneNumber}
             inputMode="tel"
           />
-          <Input
-            value={formState.otpCode}
-            onChange={(event) => onFieldChange("otpCode", event.target.value)}
-            placeholder={copy.warrantyActivation.otpPlaceholder}
-            inputMode="numeric"
-          />
+          <p className="text-xs text-slate-500">{copy.warrantyActivation.phoneHint}</p>
         </div>
 
         <div className="space-y-2">
@@ -292,6 +366,52 @@ export function WarrantyActivation({
           </div>
         </div>
 
+        <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-medium text-slate-900">
+            {copy.warrantyActivation.otpIntro}
+          </p>
+          {otpRequested ? (
+            <div className="mt-3 space-y-2">
+              <label htmlFor="otpCode" className="text-sm font-medium text-slate-700">
+                {copy.warrantyActivation.otpLabel}
+              </label>
+              <Input
+                id="otpCode"
+                required
+                value={formState.otpCode}
+                onChange={(event) => onFieldChange("otpCode", event.target.value)}
+                placeholder={copy.warrantyActivation.otpPlaceholder}
+                inputMode="numeric"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  setError(null);
+                  setOtpMessage(null);
+                  setIsSubmitting(true);
+                  try {
+                    await requestOtp();
+                  } catch {
+                    setError(copy.warrantyActivation.requestOtpError);
+                  } finally {
+                    setIsSubmitting(false);
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                {copy.warrantyActivation.resendOtpButton}
+              </Button>
+            </div>
+          ) : null}
+        </section>
+
+        {otpMessage ? (
+          <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+            {otpMessage}
+          </p>
+        ) : null}
+
         {error ? (
           <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {error}
@@ -301,8 +421,12 @@ export function WarrantyActivation({
         <Button type="submit" className="h-11 w-full" disabled={isSubmitting}>
           {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           {isSubmitting
-            ? copy.warrantyActivation.activatingButton
-            : copy.warrantyActivation.activateButton}
+            ? otpRequested
+              ? copy.warrantyActivation.verifyingOtpButton
+              : copy.warrantyActivation.sendingOtpButton
+            : otpRequested
+              ? copy.warrantyActivation.verifyOtpButton
+              : copy.warrantyActivation.sendOtpButton}
         </Button>
       </form>
     </NfcPublicShell>

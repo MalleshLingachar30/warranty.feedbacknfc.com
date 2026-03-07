@@ -46,7 +46,11 @@ import type {
 
 interface NfcStickerPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ lang?: string | string[]; src?: string | string[] }>;
+  searchParams: Promise<{
+    lang?: string | string[];
+    src?: string | string[];
+    ctx?: string | string[];
+  }>;
 }
 
 const OPEN_TICKET_STATUSES: TicketStatus[] = [
@@ -540,7 +544,10 @@ export default async function NfcStickerPage({
   const queryString = toSearchParamString(resolvedSearchParams);
   const stickerNumber = parseStickerNumber(id);
   const srcParam = firstQueryValue(resolvedSearchParams.src);
+  const ctxParam = firstQueryValue(resolvedSearchParams.ctx);
   const scanSource = srcParam === "qr" ? "qr" : srcParam === "nfc" ? "nfc" : "unknown";
+  const scanContext =
+    ctxParam === "carton" || ctxParam === "product" ? ctxParam : null;
 
   if (stickerNumber === null) {
     if (isRootStickerHost) {
@@ -758,8 +765,8 @@ export default async function NfcStickerPage({
   const languageToggle = (
     <NfcLanguageToggle
       currentLanguage={nfcLanguage}
-      englishHref={`/nfc/${sticker.stickerNumber}?lang=en${srcParam ? `&src=${encodeURIComponent(srcParam)}` : ""}`}
-      hindiHref={`/nfc/${sticker.stickerNumber}?lang=hi${srcParam ? `&src=${encodeURIComponent(srcParam)}` : ""}`}
+      englishHref={`/nfc/${sticker.stickerNumber}?lang=en${srcParam ? `&src=${encodeURIComponent(srcParam)}` : ""}${scanContext ? `&ctx=${encodeURIComponent(scanContext)}` : ""}`}
+      hindiHref={`/nfc/${sticker.stickerNumber}?lang=hi${srcParam ? `&src=${encodeURIComponent(srcParam)}` : ""}${scanContext ? `&ctx=${encodeURIComponent(scanContext)}` : ""}`}
     />
   );
 
@@ -774,6 +781,7 @@ export default async function NfcStickerPage({
           language={nfcLanguage}
           languageToggle={languageToggle}
           activationSource={scanSource === "unknown" ? null : scanSource}
+          activationContext={scanContext}
         />
       );
     }

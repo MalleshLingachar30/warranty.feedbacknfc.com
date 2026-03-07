@@ -1,6 +1,11 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { db as prisma } from "@/lib/db";
+import {
+  normalizePhone,
+  validateOwnerSession,
+} from "@/lib/otp-session";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
   sendCustomerWarrantyActivatedEmail,
@@ -11,15 +16,12 @@ interface ActivateWarrantyRequest {
   productId?: string;
   customerName?: string;
   customerPhone?: string;
-  otpCode?: string;
   customerEmail?: string | null;
   customerAddress?: string | null;
   installationDate?: string;
   activationSource?: string | null;
-}
-
-function normalizePhone(phone: string): string {
-  return phone.replace(/[^\d+]/g, "");
+  activationContext?: string | null;
+  activatedAtLocation?: string | null;
 }
 
 function buildSyntheticClerkId(phone: string): string {
@@ -51,6 +53,25 @@ function asRecord(value: unknown): Record<string, unknown> {
   }
 
   return value as Record<string, unknown>;
+}
+
+function resolveActivatedVia(input: {
+  activationContext: string | null | undefined;
+  activationSource: string | null | undefined;
+}): "carton_qr" | "product_qr" | "product_nfc" {
+  if (input.activationContext === "carton") {
+    return "carton_qr";
+  }
+
+  if (input.activationContext === "product") {
+    return "product_qr";
+  }
+
+  if (input.activationSource === "nfc") {
+    return "product_nfc";
+  }
+
+  return "product_qr";
 }
 
 export async function POST(request: Request) {
@@ -107,6 +128,15 @@ export async function POST(request: Request) {
     const warrantyEndDate = addMonths(now, warrantyDurationMonths);
 
     const normalizedPhone = normalizePhone(body.customerPhone);
+    const cookieStore = await cookies();
+    const ownerSession = await validateOwnerSession(cookieStore, product.id);
+
+    if (!ownerSession.valid || ownerSession.phone !== normalizedPhone) {
+      return NextResponse.json(
+        { error: "Owner verification required before activation." },
+        { status: 403 },
+      );
+    }
 
     const userLookupFilters: Array<{ phone?: string; email?: string }> = [];
 
@@ -162,6 +192,14 @@ export async function POST(request: Request) {
       body.activationSource === "qr" || body.activationSource === "nfc"
         ? body.activationSource
         : "unknown";
+    const activationContext =
+      body.activationContext === "carton" || body.activationContext === "product"
+        ? body.activationContext
+        : null;
+    const activatedVia = resolveActivatedVia({
+      activationContext,
+      activationSource: body.activationSource ?? null,
+    });
 
     await prisma.$transaction([
       prisma.product.update({
@@ -174,13 +212,18 @@ export async function POST(request: Request) {
           customerId: customerUser.id,
           customerName: body.customerName,
           customerPhone: normalizedPhone,
+          customerPhoneVerified: true,
           customerEmail: body.customerEmail ?? null,
           customerAddress: body.customerAddress ?? null,
+          activatedVia,
+          activatedAtLocation: body.activatedAtLocation ?? null,
           metadata: {
             ...existingMetadata,
             warrantyCertificateUrl: certificateUrl,
             warrantyCertificatePath: certificatePath,
             activationSource,
+            activationContext,
+            activatedVia,
           },
         },
       }),
