@@ -37,6 +37,7 @@ type WizardState = {
   stickerStart: string;
   stickerEnd: string;
   stickerVariant: "standard" | "high_temp" | "premium";
+  includeCartonQr: boolean;
   productModelId: string;
   serialPrefix: string;
   serialStart: string;
@@ -129,6 +130,7 @@ export function StickerWizardClient({
     stickerStart: "",
     stickerEnd: "",
     stickerVariant: defaultStickerVariant,
+    includeCartonQr: true,
     productModelId: initialProductModels[0]?.id ?? "",
     serialPrefix: "",
     serialStart: "",
@@ -205,6 +207,9 @@ export function StickerWizardClient({
 
   const selectedProductModel = initialProductModels.find(
     (productModel) => productModel.id === wizard.productModelId,
+  );
+  const selectedAllocation = allocationHistory.find(
+    (allocation) => allocation.id === productionAllocationId,
   );
 
   const technologyLabel =
@@ -296,6 +301,7 @@ export function StickerWizardClient({
           stickerStartNumber: parsedStickerStart,
           stickerEndNumber: parsedStickerEnd,
           stickerVariant: effectiveStickerVariant,
+          includeCartonQr: wizard.includeCartonQr,
           productModelId: wizard.productModelId,
           serialPrefix: wizard.serialPrefix,
           serialStartNumber: parsedSerialStart,
@@ -309,6 +315,7 @@ export function StickerWizardClient({
           id: string;
           allocationId: string;
           totalCount: number;
+          includeCartonQr?: boolean;
         };
         inventory?: StickerInventorySummary;
       };
@@ -332,6 +339,7 @@ export function StickerWizardClient({
         productModelId: wizard.productModelId,
         productModelName: selectedProductModel?.name ?? "Unknown Model",
         count: json.allocation.totalCount,
+        includeCartonQr: json.allocation.includeCartonQr ?? wizard.includeCartonQr,
       };
 
       setAllocationHistory((current) => [newHistoryRow, ...current]);
@@ -355,6 +363,7 @@ export function StickerWizardClient({
       stickerStart: "",
       stickerEnd: "",
       stickerVariant: defaultStickerVariant,
+      includeCartonQr: true,
       productModelId: initialProductModels[0]?.id ?? "",
       serialPrefix: "",
       serialStart: "",
@@ -485,6 +494,28 @@ export function StickerWizardClient({
                   </select>
                 </div>
               </div>
+
+              <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={wizard.includeCartonQr}
+                  onChange={(event) =>
+                    setWizard((current) => ({
+                      ...current,
+                      includeCartonQr: event.target.checked,
+                    }))
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium">
+                    Include carton QR labels
+                  </span>{" "}
+                  <span className="text-muted-foreground">
+                    (recommended for retail activation)
+                  </span>
+                </span>
+              </label>
 
               {stickerConfig.mode === "nfc_qr" || stickerConfig.mode === "nfc_only" ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -680,6 +711,33 @@ export function StickerWizardClient({
                       {stickerCount.toLocaleString()}
                     </p>
                   </div>
+                  <div className="rounded-md border bg-background p-3 md:col-span-2">
+                    <p className="text-xs text-muted-foreground">
+                      Sticker Deliverables
+                    </p>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        {stickerCount.toLocaleString()} product sticker QR codes (
+                        <code className="mx-1 rounded bg-muted px-1 py-0.5">
+                          ctx=product
+                        </code>
+                        )
+                      </p>
+                      {wizard.includeCartonQr ? (
+                        <p>
+                          {stickerCount.toLocaleString()} carton QR labels (
+                          <code className="mx-1 rounded bg-muted px-1 py-0.5">
+                            ctx=carton
+                          </code>
+                          )
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Carton QR labels not included in this allocation.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -696,6 +754,12 @@ export function StickerWizardClient({
                 <p className="text-sm text-muted-foreground">
                   Allocation ID:{" "}
                   <span className="font-medium">{lastAllocationId}</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Carton QR labels:{" "}
+                  <span className="font-medium">
+                    {wizard.includeCartonQr ? "Included" : "Not included"}
+                  </span>
                 </p>
                 <Button className="mt-3" onClick={resetWizard}>
                   Start New Allocation
@@ -793,7 +857,8 @@ export function StickerWizardClient({
                     .map((allocation) => (
                       <option key={allocation.id} value={allocation.id}>
                         {allocation.allocationId} ({allocation.stickerStart}-
-                        {allocation.stickerEnd}, {allocation.productModelName})
+                        {allocation.stickerEnd}, {allocation.productModelName}
+                        {allocation.includeCartonQr ? ", carton QR" : ""})
                       </option>
                     ))}
                 </select>
@@ -864,38 +929,110 @@ export function StickerWizardClient({
                     </label>
                   </div>
 
-                  <a
-                    href={
-                      productionAllocationId && isProbablyUuid(productionAllocationId)
-                        ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
-                            productionAllocationId,
-                          )}&format=${encodeURIComponent(
-                            qrFormat,
-                          )}&qr_size_mm=${encodeURIComponent(
-                            String(qrSizeMm),
-                          )}&error_correction=${encodeURIComponent(
-                            qrErrorCorrection,
-                          )}`
-                        : undefined
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className={
-                      productionAllocationId && isProbablyUuid(productionAllocationId)
-                        ? "inline-flex"
-                        : "pointer-events-none inline-flex opacity-60"
-                    }
-                  >
-                    <Button
-                      type="button"
-                      disabled={
-                        !productionAllocationId ||
-                        !isProbablyUuid(productionAllocationId)
+                  <div className="flex flex-wrap gap-3">
+                    <a
+                      href={
+                        productionAllocationId && isProbablyUuid(productionAllocationId)
+                          ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
+                              productionAllocationId,
+                            )}&variant=product&format=${encodeURIComponent(
+                              qrFormat,
+                            )}&qr_size_mm=${encodeURIComponent(
+                              String(qrSizeMm),
+                            )}&error_correction=${encodeURIComponent(
+                              qrErrorCorrection,
+                            )}`
+                          : undefined
+                      }
+                      target="_blank"
+                      rel="noreferrer"
+                      className={
+                        productionAllocationId && isProbablyUuid(productionAllocationId)
+                          ? "inline-flex"
+                          : "pointer-events-none inline-flex opacity-60"
                       }
                     >
-                      Generate & Download
-                    </Button>
-                  </a>
+                      <Button
+                        type="button"
+                        disabled={
+                          !productionAllocationId ||
+                          !isProbablyUuid(productionAllocationId)
+                        }
+                      >
+                        Download Product Sticker QR Codes
+                      </Button>
+                    </a>
+
+                    {selectedAllocation?.includeCartonQr ? (
+                      <a
+                        href={
+                          productionAllocationId && isProbablyUuid(productionAllocationId)
+                            ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
+                                productionAllocationId,
+                              )}&variant=carton&format=${encodeURIComponent(
+                                qrFormat,
+                              )}&qr_size_mm=${encodeURIComponent(
+                                String(qrSizeMm),
+                              )}&error_correction=${encodeURIComponent(
+                                qrErrorCorrection,
+                              )}`
+                            : undefined
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className={
+                          productionAllocationId && isProbablyUuid(productionAllocationId)
+                            ? "inline-flex"
+                            : "pointer-events-none inline-flex opacity-60"
+                        }
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            !productionAllocationId ||
+                            !isProbablyUuid(productionAllocationId)
+                          }
+                        >
+                          Download Carton QR Labels
+                        </Button>
+                      </a>
+                    ) : null}
+
+                    {selectedAllocation?.includeCartonQr ? (
+                      <a
+                        href={
+                          productionAllocationId && isProbablyUuid(productionAllocationId)
+                            ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
+                                productionAllocationId,
+                              )}&variant=combined&format=csv&qr_size_mm=${encodeURIComponent(
+                                String(qrSizeMm),
+                              )}&error_correction=${encodeURIComponent(
+                                qrErrorCorrection,
+                              )}`
+                            : undefined
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className={
+                          productionAllocationId && isProbablyUuid(productionAllocationId)
+                            ? "inline-flex"
+                            : "pointer-events-none inline-flex opacity-60"
+                        }
+                      >
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={
+                            !productionAllocationId ||
+                            !isProbablyUuid(productionAllocationId)
+                          }
+                        >
+                          Download Combined CSV
+                        </Button>
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -980,21 +1117,22 @@ export function StickerWizardClient({
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Allocation ID</TableHead>
-                <TableHead>Range</TableHead>
-                <TableHead>Product Model</TableHead>
-                <TableHead className="text-right">Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {allocationHistory.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground">
-                    No allocations recorded yet.
-                  </TableCell>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Allocation ID</TableHead>
+                  <TableHead>Range</TableHead>
+                  <TableHead>Product Model</TableHead>
+                  <TableHead>Deliverables</TableHead>
+                  <TableHead className="text-right">Count</TableHead>
                 </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allocationHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-muted-foreground">
+                      No allocations recorded yet.
+                    </TableCell>
+                  </TableRow>
               ) : (
                 allocationHistory.map((allocation) => (
                   <TableRow key={allocation.id}>
@@ -1007,6 +1145,11 @@ export function StickerWizardClient({
                     </TableCell>
                     <TableCell>
                       {allocation.productModelName || "Unknown Model"}
+                    </TableCell>
+                    <TableCell>
+                      {allocation.includeCartonQr
+                        ? "Product + carton QR"
+                        : "Product QR only"}
                     </TableCell>
                     <TableCell className="text-right">
                       {allocation.count.toLocaleString()}

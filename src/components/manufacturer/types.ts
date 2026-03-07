@@ -68,6 +68,7 @@ export type AllocationHistoryRow = {
   productModelId: string;
   productModelName: string;
   count: number;
+  includeCartonQr: boolean;
 };
 
 export type ServiceCenterRow = {

@@ -22,6 +22,7 @@ export const runtime = "nodejs";
 type OutputFormat = "pdf_sheet" | "png_zip" | "csv";
 type ErrorCorrection = "L" | "M" | "Q" | "H";
 type QrSizeMm = 25 | 30 | 35;
+type QrVariant = "product" | "carton" | "combined";
 
 function normalizeQrDarkColor(value: string | null | undefined) {
   const candidate = value?.trim();
@@ -61,6 +62,14 @@ function parseQrSizeMm(value: string | null): QrSizeMm {
   }
 
   return 30;
+}
+
+function parseQrVariant(value: string | null): QrVariant {
+  if (value === "carton" || value === "combined") {
+    return value;
+  }
+
+  return "product";
 }
 
 function toQrPixels(qrSizeMm: QrSizeMm, dpi = 300) {
@@ -188,6 +197,7 @@ export async function GET(request: Request) {
 
     const format = parseOutputFormat(url.searchParams.get("format"));
     const qrSizeMm = parseQrSizeMm(url.searchParams.get("qr_size_mm"));
+    const variant = parseQrVariant(url.searchParams.get("variant"));
     const errorCorrection = parseErrorCorrection(
       url.searchParams.get("error_correction"),
     );
@@ -231,11 +241,19 @@ export async function GET(request: Request) {
         stickerStartNumber: true,
         stickerEndNumber: true,
         totalCount: true,
+        includeCartonQr: true,
       },
     });
 
     if (!allocation) {
       throw new ApiError("Allocation not found.", 404);
+    }
+
+    if (variant !== "product" && !allocation.includeCartonQr) {
+      throw new ApiError(
+        "This allocation was created without carton QR labels.",
+        400,
+      );
     }
 
     const start = allocation.stickerStartNumber;
@@ -266,14 +284,22 @@ export async function GET(request: Request) {
       const stickerNumber = start + index;
       const serial =
         serialByNumber.get(stickerNumber) ?? buildStickerSerial(stickerNumber);
+      const productUrl = buildStickerPublicUrl({
+        urlBase: stickerConfig.urlBase,
+        stickerNumber,
+        context: "product",
+      });
+      const cartonUrl = buildStickerPublicUrl({
+        urlBase: stickerConfig.urlBase,
+        stickerNumber,
+        context: "carton",
+      });
       return {
         stickerNumber,
         serial,
-        url: buildStickerPublicUrl({
-          urlBase: stickerConfig.urlBase,
-          stickerNumber,
-          source: "qr",
-        }),
+        productUrl,
+        cartonUrl,
+        url: variant === "carton" ? cartonUrl : productUrl,
       };
     });
 
@@ -283,9 +309,26 @@ export async function GET(request: Request) {
     );
 
     if (format === "csv") {
-      const lines = ["sticker_number,serial,url"];
+      const lines =
+        variant === "combined"
+          ? ["sticker_number,serial,product_qr_url,carton_qr_url"]
+          : variant === "carton"
+            ? ["sticker_number,serial,carton_qr_url"]
+            : ["sticker_number,serial,product_qr_url"];
       for (const item of stickerItems) {
-        lines.push(`${item.stickerNumber},${item.serial},${item.url}`);
+        if (variant === "combined") {
+          lines.push(
+            `${item.stickerNumber},${item.serial},${item.productUrl},${item.cartonUrl}`,
+          );
+          continue;
+        }
+
+        if (variant === "carton") {
+          lines.push(`${item.stickerNumber},${item.serial},${item.cartonUrl}`);
+          continue;
+        }
+
+        lines.push(`${item.stickerNumber},${item.serial},${item.productUrl}`);
       }
 
       const body = `${lines.join("\n")}\n`;
@@ -294,7 +337,7 @@ export async function GET(request: Request) {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename=\"${allocationLabel}-qr.csv\"`,
+          "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr.csv\"`,
           "Cache-Control": "private, max-age=60",
         },
       });
@@ -327,7 +370,7 @@ export async function GET(request: Request) {
               qrLogoScalePercent: stickerConfig.branding.qrLogoScalePercent,
             })
           : baseQrBuffer;
-        zip.file(`${item.serial}.png`, pngBuffer);
+        zip.file(`${variant}-${item.serial}.png`, pngBuffer);
       });
 
       await runWithConcurrency(tasks, 12);
@@ -344,7 +387,7 @@ export async function GET(request: Request) {
         status: 200,
         headers: {
           "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename=\"${allocationLabel}-qr-pngs.zip\"`,
+          "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-pngs.zip\"`,
           "Cache-Control": "private, max-age=60",
         },
       });
@@ -382,14 +425,27 @@ export async function GET(request: Request) {
     await runWithConcurrency(qrTasks, 12);
 
     const documentElement = createStickerSheetPdfDocument({
-      title: `${organization.name} • ${allocationLabel}`,
+      title:
+        variant === "carton"
+          ? `${organization.name} • ${allocationLabel} • Carton QR Labels`
+          : `${organization.name} • ${allocationLabel} • Product QR Labels`,
       urlBaseLabel: stickerConfig.urlBase,
-      qrSizeMm,
+      qrSizeMm: variant === "carton" ? 25 : qrSizeMm,
       branding: {
         ...stickerConfig.branding,
         logoUrl,
       },
       items: sheetItems,
+      labelVariant: variant === "carton" ? "carton" : "product",
+      showSerial: variant !== "carton",
+      instructionTextEn:
+        variant === "carton"
+          ? "Activate Warranty Now"
+          : stickerConfig.branding.instructionTextEn,
+      instructionTextSecondary:
+        variant === "carton"
+          ? "अभी वारंटी सक्रिय करें"
+          : undefined,
     });
 
     const pdfBuffer = await renderToBuffer(documentElement);
@@ -399,7 +455,7 @@ export async function GET(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename=\"${allocationLabel}-qr-sheet.pdf\"`,
+        "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-sheet.pdf\"`,
         "Cache-Control": "private, max-age=60",
       },
     });

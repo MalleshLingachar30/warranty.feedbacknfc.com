@@ -147,6 +147,7 @@ export default async function ManufacturerStickersPage() {
         productModelId: allocation.productModelId ?? "",
         productModelName: allocation.productModel?.name ?? "Unknown Model",
         count: allocation.totalCount,
+        includeCartonQr: allocation.includeCartonQr,
       };
     });
 

@@ -72,9 +72,18 @@ type TechnicianPerformanceRow = {
 };
 
 type ActivationCountRow = {
-  qr: number;
-  nfc: number;
+  cartonQr: number;
+  productQr: number;
+  productNfc: number;
   unknown: number;
+};
+
+type ActivationMetricsRow = {
+  activatedProducts: number;
+  totalBoundProducts: number;
+  avgActivationDays: number | null;
+  avgCartonActivationDays: number | null;
+  avgProductActivationDays: number | null;
 };
 
 export default async function ManufacturerAnalyticsPage() {
@@ -98,6 +107,7 @@ export default async function ManufacturerAnalyticsPage() {
     regionalRows,
     technicianRows,
     activationRow,
+    activationMetricsRow,
     stickerScanTop,
   ] = await Promise.all([
     db.$queryRaw<AnalyticsSummaryRow[]>(Prisma.sql`
@@ -188,17 +198,48 @@ export default async function ManufacturerAnalyticsPage() {
     db.$queryRaw<ActivationCountRow[]>(Prisma.sql`
       SELECT
         COUNT(*) FILTER (
-          WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) = 'qr'
-        )::int AS qr,
+          WHERE LOWER(BTRIM(COALESCE(p.activated_via, ''))) = 'carton_qr'
+        )::int AS "cartonQr",
         COUNT(*) FILTER (
-          WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) = 'nfc'
-        )::int AS nfc,
+          WHERE LOWER(BTRIM(COALESCE(p.activated_via, ''))) = 'product_qr'
+        )::int AS "productQr",
         COUNT(*) FILTER (
-          WHERE LOWER(BTRIM(COALESCE(p.metadata ->> 'activationSource', ''))) NOT IN ('qr', 'nfc')
+          WHERE LOWER(BTRIM(COALESCE(p.activated_via, ''))) = 'product_nfc'
+        )::int AS "productNfc",
+        COUNT(*) FILTER (
+          WHERE LOWER(BTRIM(COALESCE(p.activated_via, ''))) NOT IN ('carton_qr', 'product_qr', 'product_nfc')
         )::int AS unknown
       FROM products p
       WHERE p.organization_id = ${organizationId}::uuid
         AND p.warranty_status <> 'pending_activation'
+    `),
+    db.$queryRaw<ActivationMetricsRow[]>(Prisma.sql`
+      SELECT
+        COUNT(*) FILTER (WHERE p.warranty_status <> 'pending_activation')::int AS "activatedProducts",
+        COUNT(*)::int AS "totalBoundProducts",
+        AVG(
+          CASE
+            WHEN p.warranty_start_date IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (p.warranty_start_date - p.created_at)) / 86400.0
+            ELSE NULL
+          END
+        )::double precision AS "avgActivationDays",
+        AVG(
+          CASE
+            WHEN p.warranty_start_date IS NOT NULL AND p.activated_via = 'carton_qr'
+            THEN EXTRACT(EPOCH FROM (p.warranty_start_date - p.created_at)) / 86400.0
+            ELSE NULL
+          END
+        )::double precision AS "avgCartonActivationDays",
+        AVG(
+          CASE
+            WHEN p.warranty_start_date IS NOT NULL AND p.activated_via IN ('product_qr', 'product_nfc')
+            THEN EXTRACT(EPOCH FROM (p.warranty_start_date - p.created_at)) / 86400.0
+            ELSE NULL
+          END
+        )::double precision AS "avgProductActivationDays"
+      FROM products p
+      WHERE p.organization_id = ${organizationId}::uuid
     `),
     db.stickerScanEvent
       .groupBy({
@@ -282,13 +323,32 @@ export default async function ManufacturerAnalyticsPage() {
   });
 
   const activationCounts = {
-    qr: toNumber(activationRow[0]?.qr),
-    nfc: toNumber(activationRow[0]?.nfc),
+    cartonQr: toNumber(activationRow[0]?.cartonQr),
+    productQr: toNumber(activationRow[0]?.productQr),
+    productNfc: toNumber(activationRow[0]?.productNfc),
     unknown: toNumber(activationRow[0]?.unknown),
   };
 
   const totalActivations =
-    activationCounts.qr + activationCounts.nfc + activationCounts.unknown;
+    activationCounts.cartonQr +
+    activationCounts.productQr +
+    activationCounts.productNfc +
+    activationCounts.unknown;
+  const activatedProducts = toNumber(activationMetricsRow[0]?.activatedProducts);
+  const totalBoundProducts = toNumber(activationMetricsRow[0]?.totalBoundProducts);
+  const activationRate =
+    totalBoundProducts > 0 ? (activatedProducts / totalBoundProducts) * 100 : 0;
+  const avgActivationDays = toNumber(activationMetricsRow[0]?.avgActivationDays);
+  const avgCartonActivationDays = toNumber(
+    activationMetricsRow[0]?.avgCartonActivationDays,
+  );
+  const avgProductActivationDays = toNumber(
+    activationMetricsRow[0]?.avgProductActivationDays,
+  );
+  const retailActivationRate =
+    totalActivations > 0
+      ? (activationCounts.cartonQr / totalActivations) * 100
+      : 0;
 
   const topScannedStickers = stickerScanTop.map((row) => ({
     stickerNumber: row.stickerNumber,
@@ -332,41 +392,70 @@ export default async function ManufacturerAnalyticsPage() {
           description="Cities with ticket activity"
           icon={MapPinned}
         />
+        <MetricCard
+          title="Activation Rate"
+          value={formatPercent(activationRate)}
+          description={`${activatedProducts.toLocaleString()} of ${totalBoundProducts.toLocaleString()} bound products`}
+          icon={BarChart3}
+        />
+        <MetricCard
+          title="Average Activation Delay"
+          value={`${avgActivationDays.toFixed(1)}d`}
+          description={`Carton ${avgCartonActivationDays.toFixed(1)}d • Product ${avgProductActivationDays.toFixed(1)}d`}
+          icon={BarChart3}
+        />
+        <MetricCard
+          title="Retail Activation Rate"
+          value={formatPercent(retailActivationRate)}
+          description="Share activated at point of sale via carton QR"
+          icon={BarChart3}
+        />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Sticker Activation Sources</CardTitle>
+            <CardTitle>Activation Source Breakdown</CardTitle>
             <CardDescription>
-              Warranty activations captured from sticker links with{" "}
-              <span className="font-mono text-xs">?src=qr</span> /{" "}
-              <span className="font-mono text-xs">?src=nfc</span>.
+              Warranty activations grouped by carton QR, product QR, and product NFC.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
+          <CardContent className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-md border bg-background p-3">
-              <p className="text-xs text-muted-foreground">QR</p>
+              <p className="text-xs text-muted-foreground">Carton QR</p>
               <p className="text-xl font-semibold">
-                {activationCounts.qr.toLocaleString()}
+                {activationCounts.cartonQr.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground">
                 {formatPercent(
                   totalActivations > 0
-                    ? (activationCounts.qr / totalActivations) * 100
+                    ? (activationCounts.cartonQr / totalActivations) * 100
                     : 0,
                 )}
               </p>
             </div>
             <div className="rounded-md border bg-background p-3">
-              <p className="text-xs text-muted-foreground">NFC</p>
+              <p className="text-xs text-muted-foreground">Product QR</p>
               <p className="text-xl font-semibold">
-                {activationCounts.nfc.toLocaleString()}
+                {activationCounts.productQr.toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground">
                 {formatPercent(
                   totalActivations > 0
-                    ? (activationCounts.nfc / totalActivations) * 100
+                    ? (activationCounts.productQr / totalActivations) * 100
+                    : 0,
+                )}
+              </p>
+            </div>
+            <div className="rounded-md border bg-background p-3">
+              <p className="text-xs text-muted-foreground">Product NFC</p>
+              <p className="text-xl font-semibold">
+                {activationCounts.productNfc.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatPercent(
+                  totalActivations > 0
+                    ? (activationCounts.productNfc / totalActivations) * 100
                     : 0,
                 )}
               </p>

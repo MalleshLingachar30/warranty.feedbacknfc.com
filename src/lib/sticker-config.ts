@@ -190,8 +190,19 @@ export function buildStickerPublicUrl(input: {
   urlBase: string;
   stickerNumber: number;
   source?: "qr" | "nfc";
+  context?: "product" | "carton";
 }): string {
   const base = toStickerPublicBaseUrl(input.urlBase);
-  const sourceSuffix = input.source ? `?src=${input.source}` : "";
-  return `${base}/nfc/${input.stickerNumber}${sourceSuffix}`;
+  const params = new URLSearchParams();
+
+  if (input.source) {
+    params.set("src", input.source);
+  }
+
+  if (input.context) {
+    params.set("ctx", input.context);
+  }
+
+  const serialized = params.toString();
+  return `${base}/nfc/${input.stickerNumber}${serialized ? `?${serialized}` : ""}`;
 }

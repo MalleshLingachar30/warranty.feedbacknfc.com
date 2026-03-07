@@ -21,6 +21,7 @@ type AllocatePayload = {
   serialPrefix?: unknown;
   serialStartNumber?: unknown;
   serialEndNumber?: unknown;
+  includeCartonQr?: unknown;
 };
 
 const MAX_ALLOCATION_BATCH = 2000;
@@ -71,11 +72,14 @@ async function resetPendingProductsForStickerRange(input: {
         "customer_id" = NULL,
         "customer_name" = NULL,
         "customer_phone" = NULL,
+        "customer_phone_verified" = false,
         "customer_email" = NULL,
         "customer_address" = NULL,
         "customer_city" = NULL,
         "customer_state" = NULL,
-        "customer_pincode" = NULL
+        "customer_pincode" = NULL,
+        "activated_via" = NULL,
+        "activated_at_location" = NULL
       FROM "stickers" AS s
       WHERE p."sticker_id" = s."id"
         AND s."sticker_number" >= ${input.stickerStartNumber}
@@ -173,6 +177,7 @@ export async function POST(request: Request) {
       typeof body.productModelId === "string" ? body.productModelId.trim() : "";
     const serialPrefix =
       typeof body.serialPrefix === "string" ? body.serialPrefix.trim() : "";
+    const includeCartonQr = body.includeCartonQr !== false;
 
     if (
       stickerStartNumber === null ||
@@ -463,6 +468,7 @@ export async function POST(request: Request) {
           applianceSerialPrefix: serialPrefix,
           applianceSerialStart: String(resolvedSerialStartNumber),
           applianceSerialEnd: String(resolvedSerialEndNumber),
+          includeCartonQr,
           allocatedById: dbUserId,
           notes: `Bulk allocation for ${productModel.name}`,
         },
@@ -482,6 +488,7 @@ export async function POST(request: Request) {
         id: allocation.id,
         allocationId: formatAllocationId(allocation.id, allocation.allocatedAt),
         totalCount: allocation.totalCount,
+        includeCartonQr,
       },
       inventory,
     });

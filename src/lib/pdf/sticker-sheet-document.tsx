@@ -23,6 +23,10 @@ type StickerSheetDocumentProps = {
   branding: StickerBrandingConfig;
   qrSizeMm: 25 | 30 | 35;
   items: StickerSheetItem[];
+  labelVariant?: "product" | "carton";
+  showSerial?: boolean;
+  instructionTextEn?: string;
+  instructionTextSecondary?: string;
 };
 
 function mmToPt(mm: number) {
@@ -110,11 +114,17 @@ export function StickerSheetDocument({
   branding,
   qrSizeMm,
   items,
+  labelVariant = "product",
+  showSerial = true,
+  instructionTextEn,
+  instructionTextSecondary,
 }: StickerSheetDocumentProps) {
   const secondaryInstruction =
-    branding.regionalLanguage === "ar"
+    instructionTextSecondary ??
+    (branding.regionalLanguage === "ar"
       ? branding.instructionTextAr
-      : branding.instructionTextHi;
+      : branding.instructionTextHi);
+  const primaryInstruction = instructionTextEn ?? branding.instructionTextEn;
 
   const qrSizePt = mmToPt(qrSizeMm);
   const qrCenterLogoSizePt = (qrSizePt * branding.qrLogoScalePercent) / 100;
@@ -125,7 +135,7 @@ export function StickerSheetDocument({
   const usableWidth = pageWidth - padding * 2;
 
   const labelWidth = usableWidth / columns;
-  const labelHeight = qrSizePt + 34;
+  const labelHeight = qrSizePt + (labelVariant === "carton" ? 26 : 34);
   const rows = Math.max(
     1,
     Math.floor((pageHeight - padding * 2 - 26) / labelHeight),
@@ -165,9 +175,7 @@ export function StickerSheetDocument({
                   {branding.logoUrl ? (
                     <PdfImage src={branding.logoUrl} style={styles.logo} />
                   ) : null}
-                  <Text style={styles.instruction}>
-                    {branding.instructionTextEn}
-                  </Text>
+                  <Text style={styles.instruction}>{primaryInstruction}</Text>
                   <Text style={styles.instruction}>{secondaryInstruction}</Text>
                 </View>
 
@@ -195,10 +203,16 @@ export function StickerSheetDocument({
                   ) : null}
                 </View>
 
-                <View>
-                  <Text style={styles.serial}>{item.stickerSerial}</Text>
-                  <Text style={styles.domain}>{urlBaseLabel}</Text>
-                </View>
+                {showSerial ? (
+                  <View>
+                    <Text style={styles.serial}>{item.stickerSerial}</Text>
+                    <Text style={styles.domain}>{urlBaseLabel}</Text>
+                  </View>
+                ) : (
+                  <View>
+                    <Text style={styles.domain}>{urlBaseLabel}</Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
