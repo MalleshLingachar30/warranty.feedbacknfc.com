@@ -29,11 +29,11 @@ export function StickerNotFound() {
           +91 78999 10288
         </a>
         <a
-          href="mailto:support@feedbacknfc.com"
+          href="mailto:ml@feedbacknfc.com"
           className="flex items-center gap-2 text-sm text-slate-700 hover:text-blue-700"
         >
           <Mail className="h-4 w-4" />
-          support@feedbacknfc.com
+          ml@feedbacknfc.com
         </a>
       </div>
     </NfcPublicShell>
