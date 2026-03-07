@@ -22,11 +22,11 @@ export function StickerNotFound() {
       <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <p className="text-sm font-medium text-slate-900">Support Contacts</p>
         <a
-          href="tel:+919900099099"
+          href="tel:+917899910288"
           className="flex items-center gap-2 text-sm text-slate-700 hover:text-blue-700"
         >
           <PhoneCall className="h-4 w-4" />
-          +91 99000 99099
+          +91 78999 10288
         </a>
         <a
           href="mailto:support@feedbacknfc.com"
