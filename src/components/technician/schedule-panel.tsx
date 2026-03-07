@@ -192,7 +192,7 @@ export function SchedulePanel() {
     <section className="space-y-3">
       <Card className="border-slate-200">
         <CardHeader>
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-xl">My Schedule</CardTitle>
               <CardDescription>
@@ -204,7 +204,7 @@ export function SchedulePanel() {
             </div>
             <Button
               variant="outline"
-              className="h-11"
+              className="h-11 w-full sm:w-auto"
               onClick={() => void fetchSchedule()}
               disabled={isRefreshing}
             >

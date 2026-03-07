@@ -107,7 +107,7 @@ export function MyPerformancePanel() {
     <section className="space-y-3">
       <Card className="border-slate-200">
         <CardHeader>
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-xl">My Performance</CardTitle>
               <CardDescription>
@@ -119,7 +119,7 @@ export function MyPerformancePanel() {
             </div>
             <Button
               variant="outline"
-              className="h-11"
+              className="h-11 w-full sm:w-auto"
               onClick={() => void fetchPerformance()}
               disabled={isRefreshing}
             >

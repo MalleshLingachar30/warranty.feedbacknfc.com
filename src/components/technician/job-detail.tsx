@@ -294,7 +294,7 @@ export function JobDetail({
   return (
     <div className="flex h-full flex-col bg-slate-50">
       <div className="border-b border-slate-200 bg-white px-4 py-4">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-indigo-700">
               Job Detail
@@ -321,7 +321,7 @@ export function JobDetail({
           <CardContent className="space-y-3 text-sm text-slate-700">
             <p className="font-medium text-slate-900">{job.customerName}</p>
             <p>{job.customerAddress}</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <a href={`tel:${job.customerPhone}`}>
                 <Button variant="outline" className="h-11 w-full">
                   <Phone className="h-4 w-4" />
@@ -343,7 +343,7 @@ export function JobDetail({
             <CardTitle className="text-base">Issue</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-slate-700">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="font-medium text-slate-900">{job.issueCategory}</p>
               <Badge
                 variant="outline"
@@ -365,7 +365,7 @@ export function JobDetail({
               {job.productSerialNumber || "Unavailable"}
             </p>
             {job.customerPhotos.length > 0 ? (
-              <div className="grid grid-cols-3 gap-2 pt-1">
+              <div className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-3">
                 {job.customerPhotos.map((photoUrl, index) => (
                   <Image
                     key={`${photoUrl}-${index}`}
@@ -516,7 +516,7 @@ export function JobDetail({
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <label className="text-sm font-medium text-slate-800">
                     Parts used
                   </label>
@@ -545,7 +545,7 @@ export function JobDetail({
                     {parts.map((part) => (
                       <div
                         key={part.id}
-                        className="grid grid-cols-[1fr_88px_88px_40px] gap-2"
+                        className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_88px_88px_40px]"
                       >
                         <select
                           value={part.catalogPartId}
@@ -590,6 +590,7 @@ export function JobDetail({
                           type="button"
                           variant="outline"
                           size="icon-sm"
+                          className="w-full sm:w-auto"
                           onClick={() =>
                             setParts((previous) =>
                               previous.filter((item) => item.id !== part.id),

@@ -160,7 +160,7 @@ export function MyJobsBoard({
     <section className="space-y-3">
       <Card className="border-slate-200">
         <CardHeader className="space-y-2">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className="text-xl">{title}</CardTitle>
               <CardDescription>{description}</CardDescription>
@@ -171,7 +171,7 @@ export function MyJobsBoard({
             </div>
             <Button
               variant="outline"
-              className="h-11"
+              className="h-11 w-full sm:w-auto"
               onClick={() => void handleRefresh()}
               disabled={isRefreshing}
             >
@@ -214,7 +214,7 @@ export function MyJobsBoard({
                 className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:bg-slate-50"
                 onClick={() => setSelectedJobId(job.id)}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
                       {job.productName}
@@ -258,9 +258,9 @@ export function MyJobsBoard({
       >
         <SheetContent
           side="bottom"
-          className="h-[96dvh] gap-0 rounded-t-2xl p-0"
-          showCloseButton
-        >
+                className="h-[96dvh] gap-0 rounded-t-2xl p-0"
+                showCloseButton
+      >
           {selectedJob ? (
             <>
               <SheetHeader className="border-b border-slate-200 bg-white px-4 py-4">
