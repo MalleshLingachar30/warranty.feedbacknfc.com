@@ -37,6 +37,7 @@ function mapSeedClaims(): ClaimQueueRow[] {
     submittedDate: claim.submittedDate,
     rejectionReason:
       claim.status === "rejected" ? "Rejected by manufacturer" : null,
+    isDemo: true,
     documentation: {
       photos: claim.documentation.photos,
       beforePhotos: [],

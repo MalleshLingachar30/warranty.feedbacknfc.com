@@ -299,6 +299,7 @@ export function mapClaimSummary(
     submittedDate: (claim.submittedAt ?? claim.createdAt).toISOString(),
     documentation: null,
     rejectionReason: claim.rejectionReason,
+    isDemo: false,
   };
 }
 

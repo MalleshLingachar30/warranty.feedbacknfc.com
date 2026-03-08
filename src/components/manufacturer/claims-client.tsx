@@ -113,6 +113,7 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
   const selectedClaim =
     claims.find((claim) => claim.id === selectedClaimId) ?? null;
   const selectedDocumentation = selectedClaim?.documentation ?? null;
+  const selectedClaimIsDemo = selectedClaim?.isDemo === true;
 
   const loadClaimDetail = async (claimId: string) => {
     setClaimDetailError(null);
@@ -168,6 +169,13 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
 
   const approveClaim = async () => {
     if (!selectedClaim) {
+      return;
+    }
+
+    if (selectedClaim.isDemo) {
+      setActionError(
+        "Demo claims are read-only. Create or submit a real claim to approve payouts.",
+      );
       return;
     }
 
@@ -231,6 +239,13 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
 
   const rejectClaim = async () => {
     if (!selectedClaim) {
+      return;
+    }
+
+    if (selectedClaim.isDemo) {
+      setActionError(
+        "Demo claims are read-only. Create or submit a real claim to reject it.",
+      );
       return;
     }
 
@@ -302,6 +317,13 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {claims.some((claim) => claim.isDemo) ? (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Showing demo claims because no real manufacturer claims were found.
+              Demo claims can be viewed but cannot be approved or rejected.
+            </p>
+          ) : null}
+
           <Tabs
             value={filter}
             onValueChange={(value) => setFilter(value as ClaimFilter)}
@@ -383,6 +405,14 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
                   Full auto-generated documentation from service execution.
                 </DialogDescription>
               </DialogHeader>
+
+              {selectedClaimIsDemo ? (
+                <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  This is demo claim data for dashboard preview only. Approval and
+                  rejection are disabled because this claim does not exist in the
+                  live database.
+                </p>
+              ) : null}
 
               <div className="grid gap-4 py-2 xl:grid-cols-3">
                 <div className="space-y-4 xl:col-span-2">
@@ -636,11 +666,16 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
                         }
                       />
                       <Button
+                        type="button"
                         onClick={() => void approveClaim()}
                         className="w-full"
-                        disabled={isApproving}
+                        disabled={isApproving || selectedClaimIsDemo}
                       >
-                        {isApproving ? "Approving..." : "Approve"}
+                        {selectedClaimIsDemo
+                          ? "Approve unavailable for demo claim"
+                          : isApproving
+                            ? "Approving..."
+                            : "Approve"}
                       </Button>
                     </CardContent>
                   </Card>
@@ -663,12 +698,17 @@ export function ClaimsClient({ initialClaims }: ClaimsClientProps) {
                         className="min-h-24"
                       />
                       <Button
+                        type="button"
                         variant="destructive"
                         onClick={() => void rejectClaim()}
                         className="w-full"
-                        disabled={isRejecting}
+                        disabled={isRejecting || selectedClaimIsDemo}
                       >
-                        {isRejecting ? "Rejecting..." : "Reject"}
+                        {selectedClaimIsDemo
+                          ? "Reject unavailable for demo claim"
+                          : isRejecting
+                            ? "Rejecting..."
+                            : "Reject"}
                       </Button>
                     </CardContent>
                   </Card>

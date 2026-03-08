@@ -162,4 +162,5 @@ export type ClaimQueueRow = {
   submittedDate: string;
   documentation: ClaimDocumentationView | null;
   rejectionReason: string | null;
+  isDemo?: boolean;
 };
