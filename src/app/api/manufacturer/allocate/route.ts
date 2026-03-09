@@ -262,8 +262,24 @@ export async function POST(request: Request) {
           id: true,
           stickerNumber: true,
           status: true,
+          allocatedToOrgId: true,
         },
       });
+
+      const alreadyAllocatedStickers = existingStickers.filter(
+        (sticker) => sticker.allocatedToOrgId !== null,
+      );
+
+      if (alreadyAllocatedStickers.length > 0) {
+        const conflictLabel = formatStickerRangeLabel(
+          alreadyAllocatedStickers.map((sticker) => sticker.stickerNumber),
+        );
+
+        throw new ApiError(
+          `${conflictLabel} has already been allocated. Sticker numbers are single-use and cannot be allocated again. Use the existing QR download actions if you need to reprint labels.`,
+          409,
+        );
+      }
 
       const activatedSticker = existingStickers.find(
         (sticker) => sticker.status === "activated",
