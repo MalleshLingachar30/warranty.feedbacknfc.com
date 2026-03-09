@@ -9,7 +9,7 @@ import {
   normalizeManufacturerStickerConfig,
 } from "@/lib/sticker-config";
 import { createStickerSheetPdfDocument } from "@/lib/pdf/sticker-sheet-document";
-import { getStickerFontData } from "@/lib/sticker-label-fonts";
+import { STICKER_FONT_PATHS } from "@/lib/sticker-label-fonts";
 
 import {
   ApiError,
@@ -104,6 +104,14 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
+function buildDownloadTimestamp(date: Date) {
+  return date
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\..+$/, "")
+    .replace("T", "-");
+}
+
 async function loadLogoBuffer(logoUrl: string): Promise<Buffer | null> {
   if (!logoUrl) {
     return null;
@@ -195,44 +203,34 @@ async function runWithConcurrency(
   await Promise.all(runners);
 }
 
-function buildQrLabelSvg(input: {
-  width: number;
-  height: number;
-  primaryInstruction: string;
-  domainLabel: string;
-  serialLabel?: string | null;
-  primaryColor: string;
-  sansFontBase64: string;
-  arabicFontBase64: string;
-  devanagariFontBase64: string;
-}) {
-  const primaryInstructionY = input.serialLabel ? 68 : 58;
-  const serialSection = input.serialLabel
-    ? `<text x="50%" y="${input.height - 28}" text-anchor="middle" font-family="StickerSans" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.serialLabel)}</text>`
-    : "";
-
+function buildQrLabelSvg(input: { width: number; height: number }) {
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">
-      <style>
-        @font-face {
-          font-family: 'StickerSans';
-          src: url(data:font/ttf;base64,${input.sansFontBase64}) format('truetype');
-        }
-        @font-face {
-          font-family: 'StickerArabic';
-          src: url(data:font/ttf;base64,${input.arabicFontBase64}) format('truetype');
-        }
-        @font-face {
-          font-family: 'StickerDevanagari';
-          src: url(data:font/ttf;base64,${input.devanagariFontBase64}) format('truetype');
-        }
-      </style>
       <rect x="1" y="1" width="${input.width - 2}" height="${input.height - 2}" rx="18" ry="18" fill="#ffffff" stroke="#dbe4f0" stroke-width="2"/>
-      <text x="50%" y="${primaryInstructionY}" text-anchor="middle" font-family="StickerSans" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.primaryInstruction)}</text>
-      ${serialSection}
-      <text x="50%" y="${input.height - 10}" text-anchor="middle" font-family="StickerSans" font-size="13" fill="${escapeXml(input.primaryColor)}">${escapeXml(input.domainLabel)}</text>
     </svg>`,
   );
+}
+
+async function buildTextOverlayPng(input: {
+  text: string;
+  width: number;
+  fontSize: number;
+  color: string;
+  fontWeight?: 400 | 700;
+}) {
+  const markup = `<span foreground="${escapeXml(input.color)}" font_family="Noto Sans" font_size="${input.fontSize * 1024}" font_weight="${input.fontWeight ?? 400}">${escapeXml(input.text)}</span>`;
+
+  return sharp({
+    text: {
+      text: markup,
+      width: input.width,
+      align: "center",
+      rgba: true,
+      fontfile: STICKER_FONT_PATHS.sans,
+    },
+  })
+    .png()
+    .toBuffer();
 }
 
 async function composeQrLabelImage(input: {
@@ -251,21 +249,35 @@ async function composeQrLabelImage(input: {
   const height = topSection + input.qrPixels + bottomSection;
   const qrLeft = Math.floor((width - input.qrPixels) / 2);
   const qrTop = topSection;
-  const fontData = await getStickerFontData();
+  const textWidth = width - 24;
+  const instructionOverlay = await buildTextOverlayPng({
+    text: input.primaryInstruction,
+    width: textWidth,
+    fontSize: 18,
+    color: "#0f172a",
+    fontWeight: 700,
+  });
+  const domainOverlay = await buildTextOverlayPng({
+    text: input.domainLabel,
+    width: textWidth,
+    fontSize: 13,
+    color: input.primaryColor,
+  });
+  const serialOverlay = input.serialLabel
+    ? await buildTextOverlayPng({
+        text: input.serialLabel,
+        width: textWidth,
+        fontSize: 18,
+        color: "#0f172a",
+        fontWeight: 700,
+      })
+    : null;
 
   const composites: sharp.OverlayOptions[] = [
-    // Render all text against bundled fonts so Hindi/Arabic labels survive on Vercel.
     {
       input: buildQrLabelSvg({
         width,
         height,
-        primaryInstruction: input.primaryInstruction,
-        domainLabel: input.domainLabel,
-        serialLabel: input.serialLabel,
-        primaryColor: input.primaryColor,
-        sansFontBase64: fontData.sansBase64,
-        arabicFontBase64: fontData.arabicBase64,
-        devanagariFontBase64: fontData.devanagariBase64,
       }),
     },
     {
@@ -273,7 +285,25 @@ async function composeQrLabelImage(input: {
       left: qrLeft,
       top: qrTop,
     },
+    {
+      input: instructionOverlay,
+      left: 12,
+      top: input.logoBuffer ? 42 : 18,
+    },
+    {
+      input: domainOverlay,
+      left: 12,
+      top: height - 22,
+    },
   ];
+
+  if (serialOverlay) {
+    composites.push({
+      input: serialOverlay,
+      left: 12,
+      top: height - 44,
+    });
+  }
 
   if (input.logoBuffer) {
     const logo = await sharp(input.logoBuffer)
@@ -428,6 +458,8 @@ export async function GET(request: Request) {
       allocation.id,
       allocation.allocatedAt,
     );
+    const generatedAt = new Date();
+    const timestampLabel = buildDownloadTimestamp(generatedAt);
 
     if (format === "csv") {
       const lines =
@@ -458,8 +490,8 @@ export async function GET(request: Request) {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr.csv\"`,
-          "Cache-Control": "private, max-age=60",
+          "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-${timestampLabel}.csv\"`,
+          "Cache-Control": "no-store",
         },
       });
     }
@@ -504,7 +536,9 @@ export async function GET(request: Request) {
           logoBuffer,
         });
 
-        zip.file(`${variant}-${item.serial}.png`, labeledBuffer);
+        zip.file(`${variant}-${item.serial}.png`, labeledBuffer, {
+          date: generatedAt,
+        });
       });
 
       await runWithConcurrency(tasks, 12);
@@ -521,8 +555,8 @@ export async function GET(request: Request) {
         status: 200,
         headers: {
           "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-pngs.zip\"`,
-          "Cache-Control": "private, max-age=60",
+          "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-pngs-${timestampLabel}.zip\"`,
+          "Cache-Control": "no-store",
         },
       });
     }
@@ -585,8 +619,8 @@ export async function GET(request: Request) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-sheet.pdf\"`,
-        "Cache-Control": "private, max-age=60",
+        "Content-Disposition": `attachment; filename=\"${allocationLabel}-${variant}-qr-sheet-${timestampLabel}.pdf\"`,
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {

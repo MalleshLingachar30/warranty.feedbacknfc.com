@@ -10,9 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import { type ReactElement } from "react";
 
-import {
-  STICKER_FONT_PATHS,
-} from "@/lib/sticker-label-fonts";
+import { STICKER_FONT_PATHS } from "@/lib/sticker-label-fonts";
 import { type StickerBrandingConfig } from "@/lib/sticker-config";
 
 export type StickerSheetItem = {
