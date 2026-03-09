@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2Icon,
   ChevronLeftIcon,
@@ -49,6 +49,12 @@ type PreviewRow = {
   sticker: string;
   serial: string;
 };
+
+type RangeValidationState =
+  | { status: "idle"; message: null }
+  | { status: "checking"; message: null }
+  | { status: "valid"; message: null }
+  | { status: "invalid"; message: string };
 
 type StickerWizardClientProps = {
   initialProductModels: ManufacturerProductModel[];
@@ -137,6 +143,10 @@ export function StickerWizardClient({
     serialEnd: "",
   }));
   const [wizardError, setWizardError] = useState<string | null>(null);
+  const [rangeValidation, setRangeValidation] = useState<RangeValidationState>({
+    status: "idle",
+    message: null,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [allocationHistory, setAllocationHistory] = useState<
     AllocationHistoryRow[]
@@ -243,12 +253,94 @@ export function StickerWizardClient({
         : "Standard (up to 80°C)";
   const hasProductModels = initialProductModels.length > 0;
 
+  useEffect(() => {
+    if (step !== 1) {
+      return;
+    }
+
+    if (
+      !Number.isInteger(parsedStickerStart) ||
+      !Number.isInteger(parsedStickerEnd) ||
+      parsedStickerStart <= 0 ||
+      parsedStickerEnd <= 0 ||
+      parsedStickerEnd < parsedStickerStart
+    ) {
+      setRangeValidation({ status: "idle", message: null });
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setRangeValidation({ status: "checking", message: null });
+
+      try {
+        const response = await fetch(
+          `/api/manufacturer/allocate/validate?stickerStartNumber=${parsedStickerStart}&stickerEndNumber=${parsedStickerEnd}`,
+          {
+            method: "GET",
+            signal: controller.signal,
+          },
+        );
+
+        const payload = (await response.json()) as {
+          valid?: boolean;
+          message?: string;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Unable to validate sticker range.");
+        }
+
+        if (payload.valid) {
+          setRangeValidation({ status: "valid", message: null });
+          return;
+        }
+
+        setRangeValidation({
+          status: "invalid",
+          message:
+            payload.message ?? "This sticker range has already been allocated.",
+        });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setRangeValidation({
+          status: "invalid",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unable to validate sticker range.",
+        });
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [parsedStickerEnd, parsedStickerStart, step]);
+
   const goToNextStep = () => {
     setWizardError(null);
 
-    if (step === 1 && stickerCount <= 0) {
-      setWizardError("Enter a valid sticker start and end range.");
-      return;
+    if (step === 1) {
+      if (stickerCount <= 0) {
+        setWizardError("Enter a valid sticker start and end range.");
+        return;
+      }
+
+      if (rangeValidation.status === "checking") {
+        setWizardError("Validating sticker range. Please wait a moment.");
+        return;
+      }
+
+      if (rangeValidation.status === "invalid" && rangeValidation.message) {
+        setWizardError(rangeValidation.message);
+        return;
+      }
     }
 
     if (step === 2 && (!wizard.productModelId || !isProbablyUuid(wizard.productModelId))) {
@@ -461,6 +553,24 @@ export function StickerWizardClient({
                   <Input value={stickerCount.toLocaleString()} readOnly />
                 </div>
               </div>
+
+              {rangeValidation.status === "checking" ? (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  Checking whether this sticker range is available...
+                </div>
+              ) : null}
+
+              {rangeValidation.status === "valid" ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  Sticker range is available for allocation.
+                </div>
+              ) : null}
+
+              {rangeValidation.status === "invalid" && rangeValidation.message ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {rangeValidation.message}
+                </div>
+              ) : null}
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
