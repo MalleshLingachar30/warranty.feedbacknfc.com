@@ -199,8 +199,6 @@ function buildQrLabelSvg(input: {
   width: number;
   height: number;
   primaryInstruction: string;
-  secondaryInstruction: string;
-  secondaryLanguage: "hi" | "ar";
   domainLabel: string;
   serialLabel?: string | null;
   primaryColor: string;
@@ -208,13 +206,10 @@ function buildQrLabelSvg(input: {
   arabicFontBase64: string;
   devanagariFontBase64: string;
 }) {
-  const primaryInstructionY = input.serialLabel ? 62 : 52;
-  const secondaryInstructionY = primaryInstructionY + 16;
+  const primaryInstructionY = input.serialLabel ? 68 : 58;
   const serialSection = input.serialLabel
     ? `<text x="50%" y="${input.height - 28}" text-anchor="middle" font-family="StickerSans" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.serialLabel)}</text>`
     : "";
-  const secondaryFontFamily =
-    input.secondaryLanguage === "ar" ? "StickerArabic" : "StickerDevanagari";
 
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">
@@ -234,7 +229,6 @@ function buildQrLabelSvg(input: {
       </style>
       <rect x="1" y="1" width="${input.width - 2}" height="${input.height - 2}" rx="18" ry="18" fill="#ffffff" stroke="#dbe4f0" stroke-width="2"/>
       <text x="50%" y="${primaryInstructionY}" text-anchor="middle" font-family="StickerSans" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.primaryInstruction)}</text>
-      <text x="50%" y="${secondaryInstructionY}" text-anchor="middle" font-family="${secondaryFontFamily}" font-size="15" fill="#475569">${escapeXml(input.secondaryInstruction)}</text>
       ${serialSection}
       <text x="50%" y="${input.height - 10}" text-anchor="middle" font-family="StickerSans" font-size="13" fill="${escapeXml(input.primaryColor)}">${escapeXml(input.domainLabel)}</text>
     </svg>`,
@@ -245,15 +239,13 @@ async function composeQrLabelImage(input: {
   qrBuffer: Buffer;
   qrPixels: number;
   primaryInstruction: string;
-  secondaryInstruction: string;
-  secondaryLanguage: "hi" | "ar";
   domainLabel: string;
   serialLabel?: string | null;
   primaryColor: string;
   logoBuffer?: Buffer | null;
 }) {
   const paddingX = 24;
-  const topSection = input.serialLabel ? 88 : 74;
+  const topSection = input.serialLabel ? 72 : 58;
   const bottomSection = input.serialLabel ? 52 : 34;
   const width = input.qrPixels + paddingX * 2;
   const height = topSection + input.qrPixels + bottomSection;
@@ -268,8 +260,6 @@ async function composeQrLabelImage(input: {
         width,
         height,
         primaryInstruction: input.primaryInstruction,
-        secondaryInstruction: input.secondaryInstruction,
-        secondaryLanguage: input.secondaryLanguage,
         domainLabel: input.domainLabel,
         serialLabel: input.serialLabel,
         primaryColor: input.primaryColor,
@@ -508,15 +498,6 @@ export async function GET(request: Request) {
             variant === "carton"
               ? "Activate Warranty Now"
               : stickerConfig.branding.instructionTextEn,
-          secondaryInstruction:
-            variant === "carton"
-              ? stickerConfig.branding.regionalLanguage === "ar"
-                ? "فعّل الضمان الآن"
-                : "अभी वारंटी सक्रिय करें"
-              : stickerConfig.branding.regionalLanguage === "ar"
-                ? stickerConfig.branding.instructionTextAr
-                : stickerConfig.branding.instructionTextHi,
-          secondaryLanguage: stickerConfig.branding.regionalLanguage,
           domainLabel: stickerConfig.urlBase,
           serialLabel: variant === "carton" ? null : item.serial,
           primaryColor: qrDarkColor,
@@ -595,12 +576,6 @@ export async function GET(request: Request) {
         variant === "carton"
           ? "Activate Warranty Now"
           : stickerConfig.branding.instructionTextEn,
-      instructionTextSecondary:
-        variant === "carton"
-          ? stickerConfig.branding.regionalLanguage === "ar"
-            ? "فعّل الضمان الآن"
-            : "अभी वारंटी सक्रिय करें"
-          : undefined,
     });
 
     const pdfBuffer = await renderToBuffer(documentElement);

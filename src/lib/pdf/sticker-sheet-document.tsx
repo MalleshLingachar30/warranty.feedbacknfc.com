@@ -12,7 +12,6 @@ import { type ReactElement } from "react";
 
 import {
   STICKER_FONT_PATHS,
-  getStickerSecondaryFontFamily,
 } from "@/lib/sticker-label-fonts";
 import { type StickerBrandingConfig } from "@/lib/sticker-config";
 
@@ -46,7 +45,6 @@ type StickerSheetDocumentProps = {
   labelVariant?: "product" | "carton";
   showSerial?: boolean;
   instructionTextEn?: string;
-  instructionTextSecondary?: string;
 };
 
 function mmToPt(mm: number) {
@@ -142,17 +140,8 @@ export function StickerSheetDocument({
   labelVariant = "product",
   showSerial = true,
   instructionTextEn,
-  instructionTextSecondary,
 }: StickerSheetDocumentProps) {
-  const secondaryInstruction =
-    instructionTextSecondary ??
-    (branding.regionalLanguage === "ar"
-      ? branding.instructionTextAr
-      : branding.instructionTextHi);
   const primaryInstruction = instructionTextEn ?? branding.instructionTextEn;
-  const secondaryInstructionFontFamily = getStickerSecondaryFontFamily(
-    branding.regionalLanguage,
-  );
 
   const qrSizePt = mmToPt(qrSizeMm);
   const qrCenterLogoSizePt = (qrSizePt * branding.qrLogoScalePercent) / 100;
@@ -163,7 +152,7 @@ export function StickerSheetDocument({
   const usableWidth = pageWidth - padding * 2;
 
   const labelWidth = usableWidth / columns;
-  const labelHeight = qrSizePt + (labelVariant === "carton" ? 26 : 34);
+  const labelHeight = qrSizePt + (labelVariant === "carton" ? 18 : 26);
   const rows = Math.max(
     1,
     Math.floor((pageHeight - padding * 2 - 26) / labelHeight),
@@ -204,14 +193,6 @@ export function StickerSheetDocument({
                     <PdfImage src={branding.logoUrl} style={styles.logo} />
                   ) : null}
                   <Text style={styles.instruction}>{primaryInstruction}</Text>
-                  <Text
-                    style={[
-                      styles.instruction,
-                      { fontFamily: secondaryInstructionFontFamily },
-                    ]}
-                  >
-                    {secondaryInstruction}
-                  </Text>
                 </View>
 
                 <View
