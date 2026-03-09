@@ -9,6 +9,7 @@ import {
   normalizeManufacturerStickerConfig,
 } from "@/lib/sticker-config";
 import { createStickerSheetPdfDocument } from "@/lib/pdf/sticker-sheet-document";
+import { getStickerFontData } from "@/lib/sticker-label-fonts";
 
 import {
   ApiError,
@@ -199,23 +200,43 @@ function buildQrLabelSvg(input: {
   height: number;
   primaryInstruction: string;
   secondaryInstruction: string;
+  secondaryLanguage: "hi" | "ar";
   domainLabel: string;
   serialLabel?: string | null;
   primaryColor: string;
+  sansFontBase64: string;
+  arabicFontBase64: string;
+  devanagariFontBase64: string;
 }) {
   const primaryInstructionY = input.serialLabel ? 62 : 52;
   const secondaryInstructionY = primaryInstructionY + 16;
   const serialSection = input.serialLabel
-    ? `<text x="50%" y="${input.height - 28}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.serialLabel)}</text>`
+    ? `<text x="50%" y="${input.height - 28}" text-anchor="middle" font-family="StickerSans" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.serialLabel)}</text>`
     : "";
+  const secondaryFontFamily =
+    input.secondaryLanguage === "ar" ? "StickerArabic" : "StickerDevanagari";
 
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}">
+      <style>
+        @font-face {
+          font-family: 'StickerSans';
+          src: url(data:font/ttf;base64,${input.sansFontBase64}) format('truetype');
+        }
+        @font-face {
+          font-family: 'StickerArabic';
+          src: url(data:font/ttf;base64,${input.arabicFontBase64}) format('truetype');
+        }
+        @font-face {
+          font-family: 'StickerDevanagari';
+          src: url(data:font/ttf;base64,${input.devanagariFontBase64}) format('truetype');
+        }
+      </style>
       <rect x="1" y="1" width="${input.width - 2}" height="${input.height - 2}" rx="18" ry="18" fill="#ffffff" stroke="#dbe4f0" stroke-width="2"/>
-      <text x="50%" y="${primaryInstructionY}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.primaryInstruction)}</text>
-      <text x="50%" y="${secondaryInstructionY}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="15" fill="#475569">${escapeXml(input.secondaryInstruction)}</text>
+      <text x="50%" y="${primaryInstructionY}" text-anchor="middle" font-family="StickerSans" font-size="18" font-weight="700" fill="#0f172a">${escapeXml(input.primaryInstruction)}</text>
+      <text x="50%" y="${secondaryInstructionY}" text-anchor="middle" font-family="${secondaryFontFamily}" font-size="15" fill="#475569">${escapeXml(input.secondaryInstruction)}</text>
       ${serialSection}
-      <text x="50%" y="${input.height - 10}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="13" fill="${escapeXml(input.primaryColor)}">${escapeXml(input.domainLabel)}</text>
+      <text x="50%" y="${input.height - 10}" text-anchor="middle" font-family="StickerSans" font-size="13" fill="${escapeXml(input.primaryColor)}">${escapeXml(input.domainLabel)}</text>
     </svg>`,
   );
 }
@@ -225,6 +246,7 @@ async function composeQrLabelImage(input: {
   qrPixels: number;
   primaryInstruction: string;
   secondaryInstruction: string;
+  secondaryLanguage: "hi" | "ar";
   domainLabel: string;
   serialLabel?: string | null;
   primaryColor: string;
@@ -237,17 +259,23 @@ async function composeQrLabelImage(input: {
   const height = topSection + input.qrPixels + bottomSection;
   const qrLeft = Math.floor((width - input.qrPixels) / 2);
   const qrTop = topSection;
+  const fontData = await getStickerFontData();
 
   const composites: sharp.OverlayOptions[] = [
+    // Render all text against bundled fonts so Hindi/Arabic labels survive on Vercel.
     {
       input: buildQrLabelSvg({
         width,
         height,
         primaryInstruction: input.primaryInstruction,
         secondaryInstruction: input.secondaryInstruction,
+        secondaryLanguage: input.secondaryLanguage,
         domainLabel: input.domainLabel,
         serialLabel: input.serialLabel,
         primaryColor: input.primaryColor,
+        sansFontBase64: fontData.sansBase64,
+        arabicFontBase64: fontData.arabicBase64,
+        devanagariFontBase64: fontData.devanagariBase64,
       }),
     },
     {
@@ -482,10 +510,13 @@ export async function GET(request: Request) {
               : stickerConfig.branding.instructionTextEn,
           secondaryInstruction:
             variant === "carton"
-              ? "अभी वारंटी सक्रिय करें"
+              ? stickerConfig.branding.regionalLanguage === "ar"
+                ? "فعّل الضمان الآن"
+                : "अभी वारंटी सक्रिय करें"
               : stickerConfig.branding.regionalLanguage === "ar"
                 ? stickerConfig.branding.instructionTextAr
                 : stickerConfig.branding.instructionTextHi,
+          secondaryLanguage: stickerConfig.branding.regionalLanguage,
           domainLabel: stickerConfig.urlBase,
           serialLabel: variant === "carton" ? null : item.serial,
           primaryColor: qrDarkColor,
@@ -566,7 +597,9 @@ export async function GET(request: Request) {
           : stickerConfig.branding.instructionTextEn,
       instructionTextSecondary:
         variant === "carton"
-          ? "अभी वारंटी सक्रिय करें"
+          ? stickerConfig.branding.regionalLanguage === "ar"
+            ? "فعّل الضمان الآن"
+            : "अभी वारंटी सक्रिय करें"
           : undefined,
     });
 

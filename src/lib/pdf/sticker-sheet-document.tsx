@@ -1,6 +1,7 @@
 import {
   Document,
   type DocumentProps,
+  Font,
   Image as PdfImage,
   Page,
   StyleSheet,
@@ -9,6 +10,10 @@ import {
 } from "@react-pdf/renderer";
 import { type ReactElement } from "react";
 
+import {
+  STICKER_FONT_PATHS,
+  getStickerSecondaryFontFamily,
+} from "@/lib/sticker-label-fonts";
 import { type StickerBrandingConfig } from "@/lib/sticker-config";
 
 export type StickerSheetItem = {
@@ -16,6 +21,21 @@ export type StickerSheetItem = {
   stickerSerial: string;
   qrDataUrl: string;
 };
+
+Font.register({
+  family: "StickerSans",
+  src: STICKER_FONT_PATHS.sans,
+});
+
+Font.register({
+  family: "StickerArabic",
+  src: STICKER_FONT_PATHS.arabic,
+});
+
+Font.register({
+  family: "StickerDevanagari",
+  src: STICKER_FONT_PATHS.devanagari,
+});
 
 type StickerSheetDocumentProps = {
   title: string;
@@ -37,7 +57,7 @@ const styles = StyleSheet.create({
   page: {
     padding: 18,
     fontSize: 7,
-    fontFamily: "Helvetica",
+    fontFamily: "StickerSans",
     color: "#0f172a",
   },
   header: {
@@ -49,10 +69,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 11,
+    fontFamily: "StickerSans",
     fontWeight: 700,
   },
   headerMeta: {
     fontSize: 8,
+    fontFamily: "StickerSans",
     color: "#475569",
   },
   grid: {
@@ -78,6 +100,7 @@ const styles = StyleSheet.create({
   },
   instruction: {
     fontSize: 6,
+    fontFamily: "StickerSans",
     textAlign: "center",
     marginBottom: 2,
   },
@@ -98,11 +121,13 @@ const styles = StyleSheet.create({
   },
   serial: {
     fontSize: 7,
+    fontFamily: "StickerSans",
     fontWeight: 700,
     marginTop: 2,
   },
   domain: {
     fontSize: 6,
+    fontFamily: "StickerSans",
     color: "#475569",
     marginTop: 1,
   },
@@ -125,6 +150,9 @@ export function StickerSheetDocument({
       ? branding.instructionTextAr
       : branding.instructionTextHi);
   const primaryInstruction = instructionTextEn ?? branding.instructionTextEn;
+  const secondaryInstructionFontFamily = getStickerSecondaryFontFamily(
+    branding.regionalLanguage,
+  );
 
   const qrSizePt = mmToPt(qrSizeMm);
   const qrCenterLogoSizePt = (qrSizePt * branding.qrLogoScalePercent) / 100;
@@ -176,7 +204,14 @@ export function StickerSheetDocument({
                     <PdfImage src={branding.logoUrl} style={styles.logo} />
                   ) : null}
                   <Text style={styles.instruction}>{primaryInstruction}</Text>
-                  <Text style={styles.instruction}>{secondaryInstruction}</Text>
+                  <Text
+                    style={[
+                      styles.instruction,
+                      { fontFamily: secondaryInstructionFontFamily },
+                    ]}
+                  >
+                    {secondaryInstruction}
+                  </Text>
                 </View>
 
                 <View
