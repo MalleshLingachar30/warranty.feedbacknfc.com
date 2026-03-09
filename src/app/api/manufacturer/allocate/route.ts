@@ -380,6 +380,43 @@ export async function POST(request: Request) {
         );
       }
 
+      // Build the serial numbers this allocation would produce and check for duplicates.
+      const intendedSerials = stickerNumbers.map((_, index) =>
+        buildApplianceSerial(
+          serialPrefix,
+          resolvedSerialStartNumber + index,
+          serialPadLength,
+        ),
+      );
+
+      const existingSerialProducts = await tx.product.findMany({
+        where: {
+          organizationId,
+          productModelId,
+          serialNumber: {
+            in: intendedSerials,
+          },
+        },
+        select: {
+          serialNumber: true,
+        },
+      });
+
+      if (existingSerialProducts.length > 0) {
+        const duplicateSerials = existingSerialProducts.map(
+          (product) => product.serialNumber,
+        );
+        const label =
+          duplicateSerials.length === 1
+            ? `Serial ${duplicateSerials[0]}`
+            : `Serials ${duplicateSerials[0]}-${duplicateSerials[duplicateSerials.length - 1]}`;
+
+        throw new ApiError(
+          `${label} already exists for ${serialPrefix} products. Choose a different serial number range to avoid duplicates.`,
+          409,
+        );
+      }
+
       const existingProductMap = new Map(
         existingProducts.map((product) => [product.stickerId, product]),
       );
@@ -408,11 +445,7 @@ export async function POST(request: Request) {
           );
         }
 
-        const serialNumber = buildApplianceSerial(
-          serialPrefix,
-          resolvedSerialStartNumber + index,
-          serialPadLength,
-        );
+        const serialNumber = intendedSerials[index];
 
         if (!existingProductMap.has(sticker.id)) {
           createProducts.push({
