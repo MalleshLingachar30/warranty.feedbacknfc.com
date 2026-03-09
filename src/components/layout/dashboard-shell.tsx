@@ -127,7 +127,7 @@ export function DashboardShell({
                   <p className="text-sm font-semibold text-slate-900 md:text-base">
                     FeedbackNFC | Warranty
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 md:hidden">
                     {organizationName ?? "Dashboard"}
                   </p>
                 </div>
