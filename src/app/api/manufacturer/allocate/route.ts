@@ -44,50 +44,21 @@ function buildApplianceSerial(
   return `${prefix}${String(serialNumber).padStart(padLength, "0")}`;
 }
 
-async function resetPendingProductsForStickerRange(input: {
-  tx: Prisma.TransactionClient;
-  organizationId: string;
-  productModelId: string;
-  stickerStartNumber: number;
-  stickerEndNumber: number;
-  serialPrefix: string;
-  serialStartNumber: number;
-  serialPadLength: number;
-}) {
-  const updatedRows = await input.tx.$executeRaw(
-    Prisma.sql`
-      UPDATE "products" AS p
-      SET
-        "organization_id" = ${input.organizationId}::uuid,
-        "product_model_id" = ${input.productModelId}::uuid,
-        "serial_number" = ${input.serialPrefix}
-          || LPAD(
-            (${input.serialStartNumber} + (s."sticker_number" - ${input.stickerStartNumber}))::text,
-            CAST(${input.serialPadLength} AS integer),
-            '0'
-          ),
-        "warranty_status" = CAST('pending_activation' AS "WarrantyStatus"),
-        "warranty_start_date" = NULL,
-        "warranty_end_date" = NULL,
-        "customer_id" = NULL,
-        "customer_name" = NULL,
-        "customer_phone" = NULL,
-        "customer_phone_verified" = false,
-        "customer_email" = NULL,
-        "customer_address" = NULL,
-        "customer_city" = NULL,
-        "customer_state" = NULL,
-        "customer_pincode" = NULL,
-        "activated_via" = NULL,
-        "activated_at_location" = NULL
-      FROM "stickers" AS s
-      WHERE p."sticker_id" = s."id"
-        AND s."sticker_number" >= ${input.stickerStartNumber}
-        AND s."sticker_number" <= ${input.stickerEndNumber}
-    `,
-  );
+function formatStickerRangeLabel(numbers: number[]) {
+  const sorted = [...numbers].sort((left, right) => left - right);
 
-  return Number(updatedRows);
+  if (sorted.length === 0) {
+    return "selected range";
+  }
+
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+
+  if (first === last) {
+    return `Sticker ${first}`;
+  }
+
+  return `Stickers ${first}-${last}`;
 }
 
 async function getInventorySummary(organizationId: string) {
@@ -370,17 +341,34 @@ export async function POST(request: Request) {
         },
         select: {
           stickerId: true,
+          serialNumber: true,
           warrantyStatus: true,
+          sticker: {
+            select: {
+              stickerNumber: true,
+            },
+          },
         },
       });
 
-      const nonReusableProduct = existingProducts.find(
-        (product) => product.warrantyStatus !== "pending_activation",
-      );
+      if (existingProducts.length > 0) {
+        const conflictingStickerNumbers = existingProducts.map(
+          (product) => product.sticker.stickerNumber,
+        );
+        const conflictLabel = formatStickerRangeLabel(conflictingStickerNumbers);
+        const pendingActivationOnly = existingProducts.every(
+          (product) => product.warrantyStatus === "pending_activation",
+        );
 
-      if (nonReusableProduct) {
+        if (pendingActivationOnly) {
+          throw new ApiError(
+            `${conflictLabel} is already allocated and bound to product serials. Use the QR download actions to regenerate labels instead of reallocating the same range.`,
+            409,
+          );
+        }
+
         throw new ApiError(
-          "At least one sticker in this range is already attached to a product with warranty history.",
+          `${conflictLabel} is already attached to products with warranty history and cannot be reallocated.`,
           409,
         );
       }
@@ -428,26 +416,6 @@ export async function POST(request: Request) {
             serialNumber,
             warrantyStatus: "pending_activation",
           });
-        }
-      }
-
-      if (existingProducts.length > 0) {
-        const updatedProducts = await resetPendingProductsForStickerRange({
-          tx,
-          organizationId,
-          productModelId,
-          stickerStartNumber: resolvedStickerStartNumber,
-          stickerEndNumber: resolvedStickerEndNumber,
-          serialPrefix,
-          serialStartNumber: resolvedSerialStartNumber,
-          serialPadLength,
-        });
-
-        if (updatedProducts < existingProducts.length) {
-          throw new ApiError(
-            "Unable to update one or more existing sticker bindings.",
-            500,
-          );
         }
       }
 
