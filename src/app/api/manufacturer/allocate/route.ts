@@ -343,6 +343,7 @@ export async function POST(request: Request) {
           stickerId: true,
           serialNumber: true,
           warrantyStatus: true,
+          productModelId: true,
           sticker: {
             select: {
               stickerNumber: true,
@@ -351,24 +352,30 @@ export async function POST(request: Request) {
         },
       });
 
-      if (existingProducts.length > 0) {
-        const conflictingStickerNumbers = existingProducts.map(
+      // Block re-allocation only when stickers are already bound to the SAME product model.
+      // Allocating the same sticker range to a DIFFERENT product model is allowed.
+      const sameModelProducts = existingProducts.filter(
+        (product) => product.productModelId === productModelId,
+      );
+
+      if (sameModelProducts.length > 0) {
+        const conflictingStickerNumbers = sameModelProducts.map(
           (product) => product.sticker.stickerNumber,
         );
         const conflictLabel = formatStickerRangeLabel(conflictingStickerNumbers);
-        const pendingActivationOnly = existingProducts.every(
+        const pendingActivationOnly = sameModelProducts.every(
           (product) => product.warrantyStatus === "pending_activation",
         );
 
         if (pendingActivationOnly) {
           throw new ApiError(
-            `${conflictLabel} is already allocated and bound to product serials. Use the QR download actions to regenerate labels instead of reallocating the same range.`,
+            `${conflictLabel} is already allocated and bound to ${serialPrefix} product serials. Use the QR download actions to regenerate labels instead of reallocating the same range.`,
             409,
           );
         }
 
         throw new ApiError(
-          `${conflictLabel} is already attached to products with warranty history and cannot be reallocated.`,
+          `${conflictLabel} is already attached to ${serialPrefix} products with warranty history and cannot be reallocated.`,
           409,
         );
       }
