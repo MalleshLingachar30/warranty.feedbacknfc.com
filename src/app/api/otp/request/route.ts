@@ -175,11 +175,35 @@ export async function POST(request: Request) {
       },
     });
 
-    await sendOtpVerificationCodeNotification({
-      customerPhone: normalizedPhone,
-      otpCode,
-      languagePreference,
-    });
+    try {
+      await sendOtpVerificationCodeNotification({
+        customerPhone: normalizedPhone,
+        otpCode,
+        languagePreference,
+        strictDelivery: true,
+      });
+    } catch (deliveryError) {
+      await db.otpSession.deleteMany({
+        where: {
+          phone: normalizedPhone,
+          productId: product.id,
+          purpose: purposeInput,
+          otpCode,
+          verified: false,
+        },
+      });
+
+      console.error("OTP delivery failed", deliveryError);
+
+      return NextResponse.json(
+        {
+          error: "otp_delivery_failed",
+          message:
+            "Unable to deliver OTP right now. Please try again in a moment.",
+        },
+        { status: 503 },
+      );
+    }
 
     return NextResponse.json({
       success: true,

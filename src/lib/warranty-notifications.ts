@@ -117,6 +117,7 @@ export async function sendOtpVerificationCodeNotification(input: {
   customerPhone: string;
   otpCode: string;
   languagePreference?: string | null;
+  strictDelivery?: boolean;
 }) {
   await onOtpVerificationCode(input);
 }

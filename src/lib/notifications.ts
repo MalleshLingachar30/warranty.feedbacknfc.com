@@ -7,6 +7,7 @@ type TwilioClient = ReturnType<typeof twilio>;
 type SmsInput = {
   to: string;
   message: string;
+  strict?: boolean;
 };
 
 type EmailInput = {
@@ -54,6 +55,12 @@ export async function sendSMS(input: SmsInput): Promise<void> {
   }
 
   if (!client || !from) {
+    if (input.strict) {
+      throw new Error(
+        "SMS delivery is not configured. Missing Twilio credentials or sender number.",
+      );
+    }
+
     console.info(`[sms:mock] to=${to} body=${input.message}`);
     return;
   }
@@ -66,6 +73,10 @@ export async function sendSMS(input: SmsInput): Promise<void> {
     });
   } catch (error) {
     console.error("Failed to send SMS", error);
+
+    if (input.strict) {
+      throw new Error("SMS delivery failed.");
+    }
   }
 }
 

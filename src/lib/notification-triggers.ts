@@ -78,6 +78,7 @@ export async function onOtpVerificationCode(input: {
   customerPhone: string;
   otpCode: string;
   languagePreference?: string | null;
+  strictDelivery?: boolean;
 }): Promise<void> {
   const language = normalizeNotificationLanguage(input.languagePreference);
   const message =
@@ -88,6 +89,7 @@ export async function onOtpVerificationCode(input: {
   await sendSMS({
     to: input.customerPhone,
     message,
+    strict: input.strictDelivery,
   });
 }
 
