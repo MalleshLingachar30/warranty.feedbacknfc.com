@@ -71,25 +71,26 @@ export async function GET(request: Request) {
       },
     });
 
-    if (conflictingStickers.length === 0) {
+    // Stickers already owned by the current org are not conflicts — they
+    // can be re-allocated to a different product model.
+    const foreignStickers = conflictingStickers.filter(
+      (sticker) => sticker.allocatedToOrgId !== organizationId,
+    );
+
+    if (foreignStickers.length === 0) {
       return NextResponse.json({
         valid: true,
       });
     }
 
     const conflictLabel = formatStickerRangeLabel(
-      conflictingStickers.map((sticker) => sticker.stickerNumber),
-    );
-    const belongsToCurrentManufacturer = conflictingStickers.every(
-      (sticker) => sticker.allocatedToOrgId === organizationId,
+      foreignStickers.map((sticker) => sticker.stickerNumber),
     );
 
     return NextResponse.json({
       valid: false,
-      message: belongsToCurrentManufacturer
-        ? `${conflictLabel} has already been allocated. Sticker numbers are single-use and cannot be allocated again. Use the existing QR download actions if you need to reprint labels.`
-        : `${conflictLabel} is already allocated to another manufacturer and cannot be used in this batch.`,
-      conflictingStickerNumbers: conflictingStickers.map(
+      message: `${conflictLabel} is already allocated to another manufacturer and cannot be used in this batch.`,
+      conflictingStickerNumbers: foreignStickers.map(
         (sticker) => sticker.stickerNumber,
       ),
     });
