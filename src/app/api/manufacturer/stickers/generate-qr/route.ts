@@ -531,7 +531,7 @@ export async function GET(request: Request) {
               ? "Activate Warranty Now"
               : stickerConfig.branding.instructionTextEn,
           domainLabel: stickerConfig.urlBase,
-          serialLabel: variant === "carton" ? null : item.serial,
+          serialLabel: item.serial,
           primaryColor: qrDarkColor,
           logoBuffer,
         });
@@ -605,7 +605,7 @@ export async function GET(request: Request) {
       },
       items: sheetItems,
       labelVariant: variant === "carton" ? "carton" : "product",
-      showSerial: variant !== "carton",
+      showSerial: true,
       instructionTextEn:
         variant === "carton"
           ? "Activate Warranty Now"

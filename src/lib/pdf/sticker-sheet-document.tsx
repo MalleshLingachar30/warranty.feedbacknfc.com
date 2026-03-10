@@ -150,7 +150,7 @@ export function StickerSheetDocument({
   const usableWidth = pageWidth - padding * 2;
 
   const labelWidth = usableWidth / columns;
-  const labelHeight = qrSizePt + (labelVariant === "carton" ? 18 : 26);
+  const labelHeight = qrSizePt + 26;
   const rows = Math.max(
     1,
     Math.floor((pageHeight - padding * 2 - 26) / labelHeight),
