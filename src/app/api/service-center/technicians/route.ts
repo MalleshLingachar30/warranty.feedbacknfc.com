@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
+import { sendInstallInviteIfNeeded } from "@/lib/install-app-invite";
 
 import {
   ApiError,
@@ -273,6 +274,15 @@ export async function POST(request: Request) {
           },
         },
       },
+    });
+
+    void sendInstallInviteIfNeeded({
+      userId: user.id,
+      role: "technician",
+      fallbackEmail: user.email,
+      fallbackPhone: resolvedPhone,
+    }).catch((error) => {
+      console.error("Failed to send technician install invite", error);
     });
 
     return NextResponse.json({

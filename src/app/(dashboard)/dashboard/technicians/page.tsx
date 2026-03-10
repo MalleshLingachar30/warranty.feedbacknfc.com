@@ -3,6 +3,7 @@ import { Gauge, Star, UserCheck, Users } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { SendInstallInviteButton } from "@/components/pwa/send-install-invite-button";
 import { AddTechnicianDialog } from "@/components/service-center/add-technician-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -185,12 +186,13 @@ export default async function ServiceCenterTechniciansPage() {
                 <TableHead>Completed Jobs</TableHead>
                 <TableHead>Avg Resolution</TableHead>
                 <TableHead>Rating</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {technicians.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground">
+                  <TableCell colSpan={9} className="text-muted-foreground">
                     No technicians are registered for this service-center
                     organization.
                   </TableCell>
@@ -265,6 +267,12 @@ export default async function ServiceCenterTechniciansPage() {
                       <TableCell>{formatHours(avgResolutionHours)}</TableCell>
                       <TableCell>
                         {decimalToNumber(technician.rating).toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <SendInstallInviteButton
+                          target="technician"
+                          technicianId={technician.id}
+                        />
                       </TableCell>
                     </TableRow>
                   );

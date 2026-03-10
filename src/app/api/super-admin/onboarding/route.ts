@@ -4,6 +4,7 @@ import { OrganizationType, UserRole, type Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
+import { sendInstallInviteIfNeeded } from "@/lib/install-app-invite";
 
 import {
   ApiError,
@@ -409,6 +410,7 @@ export async function POST(request: Request) {
   try {
     await requireSuperAdminContext();
     const body = parseJsonBody<OnboardingPayload>(await request.json());
+    let invitedAdminUserId: string | null = null;
 
     if (body.action === "create_manufacturer") {
       const orgInput =
@@ -529,7 +531,7 @@ export async function POST(request: Request) {
           },
         });
 
-        await assignAdminToOrganization(
+        const assignedAdmin = await assignAdminToOrganization(
           tx,
           organization.id,
           "service_center_admin",
@@ -537,6 +539,8 @@ export async function POST(request: Request) {
             ? (body.admin as AdminInput)
             : null,
         );
+
+        invitedAdminUserId = assignedAdmin?.id ?? null;
       });
     } else if (body.action === "assign_admin") {
       const organizationId = asString(body.organizationId);
@@ -577,7 +581,7 @@ export async function POST(request: Request) {
       }
 
       await db.$transaction(async (tx) => {
-        await assignAdminToOrganization(
+        const assignedAdmin = await assignAdminToOrganization(
           tx,
           organizationId,
           adminRole,
@@ -585,9 +589,22 @@ export async function POST(request: Request) {
             ? (body.admin as AdminInput)
             : null,
         );
+
+        if (adminRole === "service_center_admin") {
+          invitedAdminUserId = assignedAdmin?.id ?? null;
+        }
       });
     } else {
       throw new ApiError("Unsupported onboarding action.", 400);
+    }
+
+    if (invitedAdminUserId) {
+      void sendInstallInviteIfNeeded({
+        userId: invitedAdminUserId,
+        role: "service_center_admin",
+      }).catch((error) => {
+        console.error("Failed to send service-center install invite", error);
+      });
     }
 
     const organizations = await buildOrganizationRows();

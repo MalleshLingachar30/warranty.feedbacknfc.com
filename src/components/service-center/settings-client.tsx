@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
+import { SendInstallInviteButton } from "@/components/pwa/send-install-invite-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -415,6 +416,19 @@ export function ServiceCenterSettingsClient({
                 }
               />
             </label>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Install Invite</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-slate-700">
+            <p>
+              Send yourself a fresh install link for opening the warranty
+              workspace on your phone and adding it to your home screen.
+            </p>
+            <SendInstallInviteButton target="service_center_admin" />
           </CardContent>
         </Card>
 
