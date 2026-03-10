@@ -155,11 +155,7 @@ export function StickerWizardClient({
   const [lastAllocationId, setLastAllocationId] = useState("");
   const [lastAllocatedCount, setLastAllocatedCount] = useState(0);
 
-  const initialProductionAllocationId =
-    initialAllocationHistory.find((entry) => isProbablyUuid(entry.id))?.id ?? "";
-  const [productionAllocationId, setProductionAllocationId] = useState(
-    initialProductionAllocationId,
-  );
+  const [productionAllocationId, setProductionAllocationId] = useState("");
   const [qrSizeMm, setQrSizeMm] = useState<25 | 30 | 35>(30);
   const [qrErrorCorrection, setQrErrorCorrection] = useState<
     "L" | "M" | "Q" | "H"
