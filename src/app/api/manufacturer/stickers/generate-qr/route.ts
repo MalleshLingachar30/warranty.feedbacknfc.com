@@ -51,7 +51,7 @@ function parseErrorCorrection(value: string | null): ErrorCorrection {
     return value;
   }
 
-  return "H";
+  return "M";
 }
 
 function parseQrSizeMm(value: string | null): QrSizeMm {
@@ -438,11 +438,13 @@ export async function GET(request: Request) {
       const productUrl = buildStickerPublicUrl({
         urlBase: stickerConfig.urlBase,
         stickerNumber,
+        source: "qr",
         context: "product",
       });
       const cartonUrl = buildStickerPublicUrl({
         urlBase: stickerConfig.urlBase,
         stickerNumber,
+        source: "qr",
         context: "carton",
       });
       return {
@@ -508,7 +510,7 @@ export async function GET(request: Request) {
         const baseQrBuffer = await QRCode.toBuffer(item.url, {
           type: "png",
           width: qrPixels,
-          margin: 1,
+          margin: 2,
           errorCorrectionLevel: errorCorrection,
           color: {
             dark: qrDarkColor,
@@ -578,7 +580,7 @@ export async function GET(request: Request) {
       const sticker = stickerItems[index];
       qrTasks.push(async () => {
         const dataUrl = await QRCode.toDataURL(sticker.url, {
-          margin: 1,
+          margin: 2,
           width: qrPixels,
           errorCorrectionLevel: errorCorrection,
           color: {

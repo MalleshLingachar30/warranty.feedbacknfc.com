@@ -159,7 +159,7 @@ export function StickerWizardClient({
   const [qrSizeMm, setQrSizeMm] = useState<25 | 30 | 35>(30);
   const [qrErrorCorrection, setQrErrorCorrection] = useState<
     "L" | "M" | "Q" | "H"
-  >("H");
+  >("M");
   const [qrFormat, setQrFormat] = useState<"pdf_sheet" | "png_zip" | "csv">(
     "png_zip",
   );
@@ -1008,9 +1008,9 @@ export function StickerWizardClient({
                         }
                         className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                       >
-                        <option value="H">H (30%)</option>
-                        <option value="Q">Q (25%)</option>
                         <option value="M">M (15%)</option>
+                        <option value="Q">Q (25%)</option>
+                        <option value="H">H (30%)</option>
                         <option value="L">L (7%)</option>
                       </select>
                     </label>

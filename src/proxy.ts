@@ -3,7 +3,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isProtectedDashboardRoute = createRouteMatcher(["/dashboard(.*)"]);
 const isPublicRoute = createRouteMatcher([
   "/",
+  "/c(.*)",
   "/install-app(.*)",
+  "/q(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/nfc(.*)",

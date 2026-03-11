@@ -193,6 +193,15 @@ export function buildStickerPublicUrl(input: {
   context?: "product" | "carton";
 }): string {
   const base = toStickerPublicBaseUrl(input.urlBase);
+
+  if (input.source === "qr" && input.context === "carton") {
+    return `${base}/c/${input.stickerNumber}`;
+  }
+
+  if (input.source === "qr" && input.context === "product") {
+    return `${base}/q/${input.stickerNumber}`;
+  }
+
   const params = new URLSearchParams();
 
   if (input.source) {
