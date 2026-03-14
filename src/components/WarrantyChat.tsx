@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 interface Message {
   role: "user" | "assistant";
@@ -37,6 +37,23 @@ const SUGGESTIONS = [
   "How do I get started?",
 ];
 
+const FOLLOW_UP_SUGGESTIONS = [
+  "What does the free pilot include?",
+  "How does technician assignment work?",
+  "Can this integrate with our current ERP or CRM?",
+];
+
+const QUICK_LINKS = [
+  {
+    href: "https://wa.me/917899910288",
+    label: "WhatsApp Team",
+  },
+  {
+    href: "mailto:ml@feedbacknfc.com?subject=Warranty%20Pilot%20Enquiry",
+    label: "Email Team",
+  },
+];
+
 const COUNTRIES = [
   "India",
   "UAE",
@@ -67,7 +84,109 @@ const LANGUAGES = [
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[+\d][\d\s\-()]{6,20}$/;
+const LINKABLE_TOKEN_REGEX =
+  /(https?:\/\/[^\s]+|www\.[^\s]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:\+?\d[\d\s().-]{7,}\d))/gi;
 const STORAGE_KEY = "warranty-intelligence-chat";
+
+function shortLabel(value: string): string {
+  const bracketIndex = value.indexOf(" (");
+  return bracketIndex === -1 ? value : value.slice(0, bracketIndex);
+}
+
+function toHref(token: string): string {
+  if (EMAIL_REGEX.test(token)) {
+    return `mailto:${token}`;
+  }
+
+  if (/^https?:\/\//i.test(token)) {
+    return token;
+  }
+
+  if (/^www\./i.test(token)) {
+    return `https://${token}`;
+  }
+
+  const phone = token.replace(/[^\d+]/g, "");
+  return `tel:${phone}`;
+}
+
+function renderInlineText(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  const matcher = new RegExp(LINKABLE_TOKEN_REGEX);
+
+  for (const match of text.matchAll(matcher)) {
+    const token = match[0];
+    const start = match.index ?? 0;
+
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start));
+    }
+
+    nodes.push(
+      <a
+        key={`${token}-${start}`}
+        href={toHref(token)}
+        target={token.startsWith("http") || token.startsWith("www.") ? "_blank" : undefined}
+        rel={token.startsWith("http") || token.startsWith("www.") ? "noreferrer" : undefined}
+        className="font-medium text-purple-300 underline decoration-purple-400/50 underline-offset-3 transition-colors hover:text-purple-200"
+      >
+        {token}
+      </a>,
+    );
+
+    lastIndex = start + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes.length > 0 ? nodes : [text];
+}
+
+function MessageContent({ content }: { content: string }) {
+  const paragraphs = content.split("\n\n");
+
+  return (
+    <div className="space-y-3">
+      {paragraphs.map((paragraph, paragraphIndex) => (
+        <p key={`${paragraph.slice(0, 16)}-${paragraphIndex}`}>
+          {paragraph.split("\n").map((line, lineIndex) => (
+            <Fragment key={`${line.slice(0, 16)}-${lineIndex}`}>
+              {lineIndex > 0 ? <br /> : null}
+              {renderInlineText(line)}
+            </Fragment>
+          ))}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function SupportLink({
+  href,
+  label,
+}: {
+  href: string;
+  label: string;
+}) {
+  return (
+    <a
+      href={href}
+      target={href.startsWith("http") ? "_blank" : undefined}
+      rel={href.startsWith("http") ? "noreferrer" : undefined}
+      className="rounded-full px-3 py-2 text-xs transition-colors"
+      style={{
+        border: "1px solid #334155",
+        background: "transparent",
+        color: "#94a3b8",
+      }}
+    >
+      {label}
+    </a>
+  );
+}
 
 function TypingDots() {
   return (
@@ -238,7 +357,11 @@ export default function WarrantyChat() {
   const send = useCallback(
     async (
       text: string,
-      options?: { hideUserMessage?: boolean; leadContext?: LeadInfo | null },
+      options?: {
+        hideUserMessage?: boolean;
+        leadContext?: LeadInfo | null;
+        resetHistory?: boolean;
+      },
     ) => {
       if (!text.trim() || loading) {
         return;
@@ -249,7 +372,7 @@ export default function WarrantyChat() {
         content: text.trim(),
         hidden: options?.hideUserMessage || false,
       };
-      const history = [...msgs, userMsg];
+      const history = options?.resetHistory ? [userMsg] : [...msgs, userMsg];
       setMsgs(history);
 
       if (!options?.hideUserMessage) {
@@ -326,6 +449,21 @@ export default function WarrantyChat() {
       setTimeout(() => inputRef.current?.focus(), 100);
     },
     [lead, loading, msgs],
+  );
+
+  const startLeadConversation = useCallback(
+    async (leadInfo: LeadInfo) => {
+      const introMessage = `I am ${leadInfo.name} from ${leadInfo.company}, a ${leadInfo.userType} from ${leadInfo.country}. Please respond in ${leadInfo.language}. Greet me briefly and ask how you can help with warranty management.`;
+
+      setMsgs([]);
+      setInput("");
+      await send(introMessage, {
+        hideUserMessage: true,
+        leadContext: leadInfo,
+        resetHistory: true,
+      });
+    },
+    [send],
   );
 
   const handleKey = (event: React.KeyboardEvent) => {
@@ -418,12 +556,7 @@ export default function WarrantyChat() {
         sessionId: data.sessionId,
       };
       setLead(leadInfo);
-
-      const introMessage = `I am ${leadInfo.name} from ${leadInfo.company}, a ${leadInfo.userType} from ${leadInfo.country}. Please respond in ${leadInfo.language}. Greet me briefly and ask how you can help with warranty management.`;
-      await send(introMessage, {
-        hideUserMessage: true,
-        leadContext: leadInfo,
-      });
+      await startLeadConversation(leadInfo);
     } catch {
       setLeadError("Unable to start chat right now. Please try again.");
     } finally {
@@ -436,6 +569,14 @@ export default function WarrantyChat() {
     if (leadError) {
       setLeadError("");
     }
+  };
+
+  const restartChat = async () => {
+    if (!lead || loading) {
+      return;
+    }
+
+    await startLeadConversation(lead);
   };
 
   if (!isOpen) {
@@ -484,7 +625,27 @@ export default function WarrantyChat() {
               ? "AI Assistant • Ask me anything"
               : "Complete details to start chat"}
           </div>
+          {lead ? (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-white/6 px-2 py-0.5 text-[10px] text-slate-300">
+                {shortLabel(lead.language)}
+              </span>
+              <span className="rounded-full bg-white/6 px-2 py-0.5 text-[10px] text-slate-300">
+                {lead.userType}
+              </span>
+            </div>
+          ) : null}
         </div>
+        {lead ? (
+          <button
+            onClick={() => void restartChat()}
+            className="rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Start a new chat"
+            disabled={loading}
+          >
+            New
+          </button>
+        ) : null}
         <button
           onClick={() => setIsOpen(false)}
           className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
@@ -496,123 +657,174 @@ export default function WarrantyChat() {
 
       {!lead ? (
         <div className="flex-1 overflow-y-auto px-4 py-5">
-          <div className="mb-5">
+          <div className="mb-5 rounded-xl border border-white/8 bg-white/4 p-4">
             <p className="mb-1 text-sm font-semibold text-gray-200">
               Welcome to Warranty Intelligence
             </p>
             <p className="text-xs leading-relaxed text-gray-400">
-              Please share your details to start chatting with our assistant.
+              Share a few details to get a personalized walkthrough of pricing,
+              pilot rollout, sticker options, and integrations in your preferred
+              language.
             </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full bg-white/6 px-2.5 py-1 text-[11px] text-slate-300">
+                No app download
+              </span>
+              <span className="rounded-full bg-white/6 px-2.5 py-1 text-[11px] text-slate-300">
+                Free pilot guidance
+              </span>
+              <span className="rounded-full bg-white/6 px-2.5 py-1 text-[11px] text-slate-300">
+                Multi-language replies
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {QUICK_LINKS.map((link) => (
+                <SupportLink key={link.href} href={link.href} label={link.label} />
+              ))}
+            </div>
           </div>
 
           <form onSubmit={handleLeadSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="lead-name"
-                className="mb-1.5 block text-xs font-semibold text-gray-300"
-              >
-                Name
-              </label>
-              <input
-                id="lead-name"
-                ref={leadNameRef}
-                type="text"
-                value={leadForm.name}
-                onChange={(event) =>
-                  onLeadFieldChange("name", event.target.value)
-                }
-                className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                placeholder="Enter your full name"
-                autoComplete="name"
-                required
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="lead-name"
+                  className="mb-1.5 block text-xs font-semibold text-gray-300"
+                >
+                  Name
+                </label>
+                <input
+                  id="lead-name"
+                  ref={leadNameRef}
+                  type="text"
+                  value={leadForm.name}
+                  onChange={(event) =>
+                    onLeadFieldChange("name", event.target.value)
+                  }
+                  className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                  placeholder="Enter your full name"
+                  autoComplete="name"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lead-company"
+                  className="mb-1.5 block text-xs font-semibold text-gray-300"
+                >
+                  Company
+                </label>
+                <input
+                  id="lead-company"
+                  type="text"
+                  value={leadForm.company}
+                  onChange={(event) =>
+                    onLeadFieldChange("company", event.target.value)
+                  }
+                  className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                  placeholder="Your company name"
+                  autoComplete="organization"
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <label
-                htmlFor="lead-email"
-                className="mb-1.5 block text-xs font-semibold text-gray-300"
-              >
-                Email
-              </label>
-              <input
-                id="lead-email"
-                type="email"
-                value={leadForm.email}
-                onChange={(event) =>
-                  onLeadFieldChange("email", event.target.value)
-                }
-                className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                placeholder="name@example.com"
-                autoComplete="email"
-                required
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="lead-email"
+                  className="mb-1.5 block text-xs font-semibold text-gray-300"
+                >
+                  Email
+                </label>
+                <input
+                  id="lead-email"
+                  type="email"
+                  value={leadForm.email}
+                  onChange={(event) =>
+                    onLeadFieldChange("email", event.target.value)
+                  }
+                  className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                  placeholder="name@example.com"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lead-phone"
+                  className="mb-1.5 block text-xs font-semibold text-gray-300"
+                >
+                  Phone
+                </label>
+                <input
+                  id="lead-phone"
+                  type="tel"
+                  value={leadForm.phone}
+                  onChange={(event) =>
+                    onLeadFieldChange("phone", event.target.value)
+                  }
+                  className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                  placeholder="+91 98765 43210"
+                  autoComplete="tel"
+                  required
+                />
+              </div>
             </div>
 
-            <div>
-              <label
-                htmlFor="lead-phone"
-                className="mb-1.5 block text-xs font-semibold text-gray-300"
-              >
-                Phone
-              </label>
-              <input
-                id="lead-phone"
-                type="tel"
-                value={leadForm.phone}
-                onChange={(event) =>
-                  onLeadFieldChange("phone", event.target.value)
-                }
-                className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                placeholder="+91 98765 43210"
-                autoComplete="tel"
-                required
-              />
-            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="lead-country"
+                  className="mb-1.5 block text-xs font-semibold text-gray-300"
+                >
+                  Country
+                </label>
+                <select
+                  id="lead-country"
+                  value={leadForm.country}
+                  onChange={(event) =>
+                    onLeadFieldChange("country", event.target.value)
+                  }
+                  className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                  required
+                >
+                  {COUNTRIES.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label
-                htmlFor="lead-company"
-                className="mb-1.5 block text-xs font-semibold text-gray-300"
-              >
-                Company
-              </label>
-              <input
-                id="lead-company"
-                type="text"
-                value={leadForm.company}
-                onChange={(event) =>
-                  onLeadFieldChange("company", event.target.value)
-                }
-                className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                placeholder="Your company name"
-                autoComplete="organization"
-                required
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="lead-country"
-                className="mb-1.5 block text-xs font-semibold text-gray-300"
-              >
-                Country
-              </label>
-              <select
-                id="lead-country"
-                value={leadForm.country}
-                onChange={(event) =>
-                  onLeadFieldChange("country", event.target.value)
-                }
-                className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                required
-              >
-                {COUNTRIES.map((country) => (
-                  <option key={country} value={country}>
-                    {country}
+              <div>
+                <label
+                  htmlFor="lead-user-type"
+                  className="mb-1.5 block text-xs font-semibold text-gray-300"
+                >
+                  User Type
+                </label>
+                <select
+                  id="lead-user-type"
+                  value={leadForm.userType}
+                  onChange={(event) =>
+                    onLeadFieldChange("userType", event.target.value)
+                  }
+                  className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                  required
+                >
+                  <option value="" disabled>
+                    Select user type
                   </option>
-                ))}
-              </select>
+                  {USER_TYPES.map((userType) => (
+                    <option key={userType} value={userType}>
+                      {userType}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
@@ -642,33 +854,6 @@ export default function WarrantyChat() {
               </select>
             </div>
 
-            <div>
-              <label
-                htmlFor="lead-user-type"
-                className="mb-1.5 block text-xs font-semibold text-gray-300"
-              >
-                User Type
-              </label>
-              <select
-                id="lead-user-type"
-                value={leadForm.userType}
-                onChange={(event) =>
-                  onLeadFieldChange("userType", event.target.value)
-                }
-                className="w-full rounded-lg border border-[#3d3d55] bg-[#2d2d44] px-3 py-2 text-sm text-gray-100 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
-                required
-              >
-                <option value="" disabled>
-                  Select user type
-                </option>
-                {USER_TYPES.map((userType) => (
-                  <option key={userType} value={userType}>
-                    {userType}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {leadError ? (
               <div className="rounded-lg border border-red-500/40 bg-red-900/20 px-3 py-2 text-xs text-red-200">
                 {leadError}
@@ -683,6 +868,11 @@ export default function WarrantyChat() {
             >
               {leadSubmitting ? "Starting Chat..." : "Start Chat"}
             </button>
+
+            <p className="text-center text-[11px] leading-relaxed text-gray-500">
+              We use these details only to personalize the chat and follow up on
+              pilot or demo requests.
+            </p>
           </form>
         </div>
       ) : (
@@ -700,10 +890,15 @@ export default function WarrantyChat() {
                   Warranty Intelligence Assistant
                 </p>
                 <p className="mb-5 text-xs leading-relaxed text-gray-400">
-                  Ask about QR warranty activation, OTP verification,
-                  <br />
-                  pilot pricing, or sticker options.
+                  Ask about rollout timelines, QR warranty activation, OTP
+                  verification, pilot pricing, or sticker options for{" "}
+                  {lead.company}.
                 </p>
+                <div className="mb-4 flex flex-wrap justify-center gap-2">
+                  {QUICK_LINKS.map((link) => (
+                    <SupportLink key={link.href} href={link.href} label={link.label} />
+                  ))}
+                </div>
                 <div className="flex flex-wrap justify-center gap-2">
                   {SUGGESTIONS.map((suggestion) => (
                     <button
@@ -748,7 +943,7 @@ export default function WarrantyChat() {
                   <BotAvatar />
                 )}
                 <div
-                  className="max-w-[80%] whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed"
+                  className="max-w-[80%] break-words px-4 py-3 text-sm leading-relaxed"
                   style={{
                     borderRadius:
                       message.role === "user"
@@ -761,7 +956,7 @@ export default function WarrantyChat() {
                     color: "#e2e8f0",
                   }}
                 >
-                  {message.content}
+                  <MessageContent content={message.content} />
                 </div>
               </div>
             ))}
@@ -782,6 +977,39 @@ export default function WarrantyChat() {
             className="shrink-0 px-4 py-3"
             style={{ borderTop: "1px solid #2d2d44" }}
           >
+            <div className="mb-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-gray-500">
+                  Suggested Next Asks
+                </span>
+                <a
+                  href="https://wa.me/917899910288"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-purple-300 transition-colors hover:text-purple-200"
+                >
+                  Talk to team
+                </a>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {(visibleMsgs.length === 0 ? SUGGESTIONS.slice(0, 3) : FOLLOW_UP_SUGGESTIONS).map(
+                  (suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => void send(suggestion)}
+                      className="shrink-0 rounded-full px-3 py-1.5 text-[11px] transition-colors"
+                      style={{
+                        border: "1px solid #334155",
+                        background: "transparent",
+                        color: "#94a3b8",
+                      }}
+                    >
+                      {suggestion}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
             <div
               className="flex items-end gap-2 rounded-full px-4 py-2"
               style={{
@@ -824,7 +1052,7 @@ export default function WarrantyChat() {
             </div>
             <div className="mt-2 text-center">
               <span className="text-[10px] text-gray-500">
-                FeedbackNFC • Bengaluru, India
+                FeedbackNFC • Bengaluru, India • Free pilot guidance available
               </span>
             </div>
           </div>
