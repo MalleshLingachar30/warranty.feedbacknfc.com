@@ -156,6 +156,7 @@ function isClaudeMessage(value: unknown): value is ClaudeMessage {
 
 export async function POST(request: NextRequest) {
   try {
+    const monitorProbe = request.headers.get("x-chat-monitor-probe") === "1";
     const ip = getClientIp(request);
     if (!checkRateLimit(ip)) {
       return NextResponse.json(
@@ -189,7 +190,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        max_tokens: monitorProbe ? 256 : 4096,
         system: SYSTEM_PROMPT,
         messages,
       }),

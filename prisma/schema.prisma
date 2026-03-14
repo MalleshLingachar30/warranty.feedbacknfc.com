@@ -185,6 +185,23 @@ model ChatLead {
   @@map("chat_leads")
 }
 
+model EndpointMonitorState {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checkName           String   @unique @map("check_name") @db.VarChar(100)
+  status              String   @default("healthy") @db.VarChar(20)
+  consecutiveFailures Int      @default(0) @map("consecutive_failures")
+  lastCheckedAt       DateTime? @map("last_checked_at")
+  lastSuccessAt       DateTime? @map("last_success_at")
+  lastFailureAt       DateTime? @map("last_failure_at")
+  lastAlertedAt       DateTime? @map("last_alerted_at")
+  lastResolvedAt      DateTime? @map("last_resolved_at")
+  lastError           String?  @map("last_error")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("endpoint_monitor_states")
+}
+
 model ProductModel {
   id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId            String   @map("organization_id") @db.Uuid

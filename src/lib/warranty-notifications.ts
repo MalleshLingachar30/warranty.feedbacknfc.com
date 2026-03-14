@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sendEmail } from "@/lib/notifications";
+import { sendEmail, sendSMS } from "@/lib/notifications";
 import {
   onOtpVerificationCode,
   onClaimApproved,
@@ -233,4 +233,42 @@ export async function sendSlaBreachNotification(input: {
 
 export function formatClaimAmountForNotification(amount: number): string {
   return formatInr(amount);
+}
+
+function parseRecipients(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+export async function sendChatbotMonitorAlert(input: {
+  subject: string;
+  body: string;
+}) {
+  const emailRecipients = parseRecipients(process.env.CHATBOT_MONITOR_EMAIL_TO);
+  const smsRecipients = parseRecipients(process.env.CHATBOT_MONITOR_SMS_TO);
+
+  const tasks: Array<Promise<void>> = [];
+
+  if (emailRecipients.length > 0) {
+    tasks.push(
+      sendEmail({
+        to: emailRecipients,
+        subject: input.subject,
+        body: input.body,
+      }),
+    );
+  }
+
+  for (const recipient of smsRecipients) {
+    tasks.push(
+      sendSMS({
+        to: recipient,
+        message: `${input.subject}\n${input.body}`.slice(0, 1400),
+      }),
+    );
+  }
+
+  await Promise.all(tasks);
 }

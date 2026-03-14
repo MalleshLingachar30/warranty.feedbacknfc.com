@@ -6,6 +6,10 @@
   "devCommand": "npm run dev:vercel",
   "crons": [
     {
+      "path": "/api/monitor/chatbot",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/ticket/sla/sweep",
       "schedule": "30 0 * * *"
     },
