@@ -115,7 +115,102 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
-  console.log("\n3) Sticker lookup (pre-ticket)...");
+  console.log("\n3) Chat API validation...");
+  const emptyChat = await apiRequest("/api/chat", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [] }),
+  });
+  pretty("chat-empty-messages", emptyChat);
+  assert(emptyChat.status === 400, "Empty chat payload should return 400");
+  assert(
+    emptyChat.json?.error === "Messages required",
+    "Expected 'Messages required' for empty chat payload",
+  );
+
+  console.log("\n4) Chat lead validation...");
+  const invalidLead = await apiRequest("/api/chat/lead", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "E2E Invalid Lead",
+      email: "not-an-email",
+      phone: "123",
+      company: "Invalid Corp",
+      country: "India",
+      language: "English",
+      userType: "Manufacturer",
+    }),
+  });
+  pretty("chat-lead-invalid", invalidLead);
+  assert(invalidLead.status === 400, "Invalid lead payload should return 400");
+  assert(
+    invalidLead.json?.error === "Invalid email",
+    "Expected invalid email validation message",
+  );
+
+  console.log("\n5) Chat lead creation...");
+  const leadEmail = `e2e-chat-${Date.now()}@example.com`;
+  const createLead = await apiRequest("/api/chat/lead", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "E2E Chat Lead",
+      email: leadEmail,
+      phone: "+1 (555) 123-4567",
+      company: "E2E Warranty Co",
+      country: "India",
+      language: "English",
+      userType: "Manufacturer",
+    }),
+  });
+  pretty("chat-lead-create", createLead);
+  assert(createLead.status === 200, "Lead capture should return 200");
+  assert(
+    createLead.json?.success === true && typeof createLead.json?.sessionId === "string",
+    "Lead capture should return success with a sessionId",
+  );
+
+  const leadRecord = await prisma.chatLead.findUnique({
+    where: { sessionId: createLead.json.sessionId },
+    select: {
+      name: true,
+      email: true,
+      company: true,
+      language: true,
+      userType: true,
+    },
+  });
+  assert(leadRecord, "Expected persisted chat lead record");
+  assert(leadRecord.email === leadEmail, "Persisted chat lead email mismatch");
+
+  if (process.env.ANTHROPIC_API_KEY) {
+    console.log("\n6) Chat AI response smoke test...");
+    const chatSmoke = await apiRequest("/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "user",
+            content: "How does the QR warranty system work?",
+          },
+        ],
+      }),
+    });
+    pretty("chat-ai-smoke", chatSmoke);
+    assert(chatSmoke.status === 200, "Chat AI smoke test should return 200");
+    assert(
+      typeof chatSmoke.json?.reply === "string" && chatSmoke.json.reply.length > 0,
+      "Chat AI smoke test should return a non-empty reply",
+    );
+  } else {
+    console.log(
+      "\n6) Skipping chat AI response smoke test (ANTHROPIC_API_KEY not configured).",
+    );
+  }
+
+  console.log("\n7) Sticker lookup (pre-ticket)...");
   const lookup1 = await apiRequest(
     `/api/sticker/lookup?number=${seed.stickerNumber}`,
   );
@@ -134,7 +229,7 @@ async function main() {
     "Expected no open ticket before ticket creation",
   );
 
-  console.log("\n4) NFC landing page (scan attribution)...");
+  console.log("\n8) NFC landing page (scan attribution)...");
   const scanCountBefore = await prisma.stickerScanEvent.count({
     where: { stickerNumber: seed.stickerNumber },
   });
@@ -167,7 +262,7 @@ async function main() {
   assert(latestScan, "Expected scan event to exist");
   assert(latestScan.source === "qr", "Expected scan source to be 'qr'");
 
-  console.log("\n5) Warranty activation...");
+  console.log("\n9) Warranty activation...");
   const activate = await apiRequest("/api/warranty/activate", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -198,7 +293,7 @@ async function main() {
     "Expected product.metadata.activationSource to be 'qr'",
   );
 
-  console.log("\n6) Ticket creation...");
+  console.log("\n10) Ticket creation...");
   const createTicket = await apiRequest("/api/ticket/create", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -221,7 +316,7 @@ async function main() {
   assert(ticketId, "Ticket id missing from create response");
 
   console.log(
-    "\n7) Sticker lookup (post-ticket) should include open ticket...",
+    "\n11) Sticker lookup (post-ticket) should include open ticket...",
   );
   const lookup2 = await apiRequest(
     `/api/sticker/lookup?number=${seed.stickerNumber}`,
@@ -237,14 +332,14 @@ async function main() {
   );
 
   console.log(
-    "\n8) Forcing ticket status to pending_confirmation (E2E harness)...",
+    "\n12) Forcing ticket status to pending_confirmation (E2E harness)...",
   );
   await prisma.ticket.update({
     where: { id: ticketId },
     data: { status: "pending_confirmation" },
   });
 
-  console.log("\n9) Ticket confirm...\n");
+  console.log("\n13) Ticket confirm...\n");
   const confirm = await apiRequest(`/api/ticket/${ticketId}/confirm`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -257,7 +352,7 @@ async function main() {
     "Ticket should be resolved after confirm",
   );
 
-  console.log("\n10) Ticket reopen...\n");
+  console.log("\n14) Ticket reopen...\n");
   const reopen = await apiRequest(`/api/ticket/${ticketId}/confirm`, {
     method: "POST",
     headers: { "content-type": "application/json" },
