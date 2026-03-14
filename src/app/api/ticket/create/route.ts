@@ -1,8 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { assignTechnician } from "@/lib/ai-assignment";
+import { getOptionalAuth } from "@/lib/clerk-session";
 import { db as prisma } from "@/lib/db";
 import { authorizeOwnerAccess } from "@/lib/otp-session";
 import { writeScanLog } from "@/lib/scan-log";
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Product not found." }, { status: 404 });
     }
 
-    const authData = await auth();
+    const authData = await getOptionalAuth();
     const ownerAccess = await authorizeOwnerAccess({
       cookiesStore: await cookies(),
       productId: product.id,

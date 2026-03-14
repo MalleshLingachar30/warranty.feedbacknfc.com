@@ -15,12 +15,12 @@ import { StickerNotFound } from "@/components/nfc/sticker-not-found";
 import { type ProductView, type TicketView } from "@/components/nfc/types";
 import { UnregisteredSticker } from "@/components/nfc/unregistered-sticker";
 import { WarrantyActivation } from "@/components/nfc/warranty-activation";
-import { auth } from "@clerk/nextjs/server";
 import type { TicketStatus } from "@prisma/client";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
+import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { detectNfcLanguage } from "@/lib/nfc-i18n";
 import { normalizePhone, validateOwnerSession } from "@/lib/otp-session";
@@ -722,7 +722,7 @@ export default async function NfcStickerPage({
 
   const serviceHistory = toServiceHistoryItems(tickets);
 
-  const { userId, sessionClaims } = await auth();
+  const { userId, sessionClaims } = await getOptionalAuth();
   const queryLanguage = firstQueryValue(resolvedSearchParams.lang);
 
   let role: AppRole | "anonymous_customer" = "anonymous_customer";

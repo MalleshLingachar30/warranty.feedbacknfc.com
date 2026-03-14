@@ -5,6 +5,7 @@ const { execSync } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
 
 const baseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";
+const WARRANTY_SESSION_COOKIE_NAME = "warranty_session";
 
 function assert(condition, message) {
   if (!condition) {
@@ -75,6 +76,31 @@ async function waitForScanEvent(prisma, stickerNumber, minimumCount, timeoutMs =
   throw new Error(
     `Expected at least ${minimumCount} scan events for sticker ${stickerNumber}, found ${finalCount}.`,
   );
+}
+
+async function issueVerifiedOwnerSession(prisma, productId, phone) {
+  const normalizedPhone = phone.startsWith("+")
+    ? phone.replace(/[^\d+]/g, "")
+    : `+${phone.replace(/\D/g, "")}`;
+  const sessionToken = crypto.randomUUID();
+
+  await prisma.otpSession.create({
+    data: {
+      phone: normalizedPhone,
+      productId,
+      purpose: "activation",
+      otpCode: "123456",
+      otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      verified: true,
+      sessionToken,
+      sessionExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    },
+  });
+
+  return {
+    normalizedPhone,
+    cookieHeader: `${WARRANTY_SESSION_COOKIE_NAME}=${sessionToken}`,
+  };
 }
 
 async function main() {
@@ -263,13 +289,21 @@ async function main() {
   assert(latestScan.source === "qr", "Expected scan source to be 'qr'");
 
   console.log("\n9) Warranty activation...");
+  const activationSession = await issueVerifiedOwnerSession(
+    prisma,
+    seed.productId,
+    "+1 (555) 123-1234",
+  );
   const activate = await apiRequest("/api/warranty/activate", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      cookie: activationSession.cookieHeader,
+    },
     body: JSON.stringify({
       productId: seed.productId,
       customerName: "E2E Customer",
-      customerPhone: "+1 (555) 123-1234",
+      customerPhone: activationSession.normalizedPhone,
       customerEmail: "e2e.customer@example.com",
       customerAddress: "221B API Street",
       installationDate: "2026-03-04",
@@ -296,7 +330,10 @@ async function main() {
   console.log("\n10) Ticket creation...");
   const createTicket = await apiRequest("/api/ticket/create", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      cookie: activationSession.cookieHeader,
+    },
     body: JSON.stringify({
       productId: seed.productId,
       issueCategory: "water_leak",
@@ -342,7 +379,10 @@ async function main() {
   console.log("\n13) Ticket confirm...\n");
   const confirm = await apiRequest(`/api/ticket/${ticketId}/confirm`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      cookie: activationSession.cookieHeader,
+    },
     body: JSON.stringify({ action: "confirm", comment: "E2E confirm path" }),
   });
   pretty("ticket-confirm", confirm);
@@ -355,7 +395,10 @@ async function main() {
   console.log("\n14) Ticket reopen...\n");
   const reopen = await apiRequest(`/api/ticket/${ticketId}/confirm`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      cookie: activationSession.cookieHeader,
+    },
     body: JSON.stringify({ action: "reopen", comment: "E2E reopen path" }),
   });
   pretty("ticket-reopen", reopen);

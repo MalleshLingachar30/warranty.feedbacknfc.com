@@ -1,7 +1,7 @@
 import { type Prisma } from "@prisma/client";
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 
+import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import { writeScanLog } from "@/lib/scan-log";
@@ -105,7 +105,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const authData = await auth();
+    const authData = await getOptionalAuth();
 
     if (!authData.userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
