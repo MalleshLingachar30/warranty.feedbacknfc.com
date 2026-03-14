@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { Fragment } from "react";
 
 import { PwaRuntime } from "@/components/pwa/pwa-runtime";
 import { Toaster } from "@/components/ui/sonner";
@@ -48,28 +49,38 @@ export const viewport: Viewport = {
   themeColor: "#0066CC",
 };
 
+const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkEnabled = Boolean(clerkPublishableKey);
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const AuthProvider = clerkEnabled ? ClerkProvider : Fragment;
+
   return (
     <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClerkProvider
-          signInUrl="/sign-in"
-          signUpUrl="/sign-up"
-          signInFallbackRedirectUrl="/dashboard"
-          signUpFallbackRedirectUrl="/dashboard"
+        <AuthProvider
+          {...(clerkEnabled
+            ? {
+                publishableKey: clerkPublishableKey,
+                signInUrl: "/sign-in",
+                signUpUrl: "/sign-up",
+                signInFallbackRedirectUrl: "/dashboard",
+                signUpFallbackRedirectUrl: "/dashboard",
+              }
+            : {})}
         >
           <TooltipProvider>
             <PwaRuntime />
             {children}
             <Toaster />
           </TooltipProvider>
-        </ClerkProvider>
+        </AuthProvider>
       </body>
     </html>
   );

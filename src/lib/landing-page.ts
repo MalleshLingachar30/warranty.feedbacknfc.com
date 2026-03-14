@@ -1,5 +1,6 @@
 import { LANDING_PAGE_HTML } from "@/lib/generated/landing-page-content";
 
+export type LandingRegion = "in" | "sa";
 export type LandingLanguage = "en" | "ar";
 
 export interface LandingPageContent {
@@ -18,14 +19,25 @@ function extractMatch(source: string, regex: RegExp, fallback = ""): string {
 
 function normalizeLinks(bodyHtml: string): string {
   return bodyHtml
-    .replace(/href="ar\.html"/g, 'href="/?lang=ar"')
-    .replace(/href='ar\.html'/g, "href='/?lang=ar'")
-    .replace(/href="index\.html"/g, 'href="/?lang=en"')
-    .replace(/href='index\.html'/g, "href='/?lang=en'");
+    .replace(/href="sa-en\.html"/g, 'href="/?region=sa"')
+    .replace(/href='sa-en\.html'/g, "href='/?region=sa'")
+    .replace(/href="ar\.html"/g, 'href="/?region=sa&lang=ar"')
+    .replace(/href='ar\.html'/g, "href='/?region=sa&lang=ar'")
+    .replace(/href="index\.html"/g, 'href="/"')
+    .replace(/href='index\.html'/g, "href='/'");
 }
 
-export function loadLandingPageContent(lang: LandingLanguage): LandingPageContent {
-  const raw = LANDING_PAGE_HTML[lang];
+export function loadLandingPageContent(
+  region: LandingRegion,
+  lang: LandingLanguage,
+): LandingPageContent {
+  const normalizedRegion = region === "sa" ? "sa" : "in";
+  const normalizedLanguage =
+    normalizedRegion === "sa" && lang === "ar" ? "ar" : "en";
+  const raw =
+    normalizedRegion === "sa"
+      ? LANDING_PAGE_HTML.sa[normalizedLanguage]
+      : LANDING_PAGE_HTML.in.en;
 
   const htmlLang = extractMatch(raw, /<html[^>]*\slang="([^"]+)"[^>]*>/i, lang);
   const htmlDir = extractMatch(
@@ -51,7 +63,7 @@ export function loadLandingPageContent(lang: LandingLanguage): LandingPageConten
   );
 
   return {
-    lang: htmlLang === "ar" ? "ar" : "en",
+    lang: htmlLang === "ar" && normalizedRegion === "sa" ? "ar" : "en",
     dir: htmlDir === "rtl" ? "rtl" : "ltr",
     bodyClassName,
     styleCss,

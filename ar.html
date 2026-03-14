@@ -211,49 +211,71 @@
     <!-- Header / Navigation -->
     <header class="header-sticky bg-slate-900/80 text-white">
         <nav class="max-w-7xl mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <!-- Logo -->
-                <div class="flex items-center">
-                    <a href="/" class="flex items-center space-x-4 group">
-                        <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-20 md:h-24 w-auto transition-transform group-hover:scale-105">
-                        <span class="text-3xl md:text-4xl font-bold tracking-tight">FeedbackNFC</span>
+            <div class="flex items-center justify-between gap-6">
+                <div class="flex items-center shrink-0">
+                    <a href="/?region=sa&lang=ar" onclick="selectSaudiLanguage('ar'); return false;" class="flex items-center space-x-2 md:space-x-3 group shrink-0">
+                        <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-16 md:h-20 w-auto transition-transform group-hover:scale-105">
+                        <span class="text-2xl md:text-3xl xl:text-4xl font-bold tracking-tight whitespace-nowrap">FeedbackNFC</span>
                     </a>
                 </div>
 
-                <!-- Desktop Navigation -->
-                <div class="hidden md:flex items-center space-x-8">
+                <div class="hidden lg:flex items-center gap-6 xl:gap-8">
                     <a href="#features" class="text-gray-300 hover:text-white transition-colors">الميزات</a>
                     <a href="#how-it-works" class="text-gray-300 hover:text-white transition-colors">كيف يعمل</a>
                     <a href="#perfect-for" class="text-gray-300 hover:text-white transition-colors">الحلول</a>
                     <a href="#faq" class="text-gray-300 hover:text-white transition-colors">الأسئلة الشائعة</a>
-                    <a href="index.html" class="lang-toggle">
-                        <i data-lucide="globe" style="width: 16px; height: 16px;"></i> English
+
+                    <div class="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+                        <a href="/" onclick="selectRegion('in'); return false;" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                            <span>🇮🇳</span>
+                            <span>الهند</span>
+                        </a>
+                        <a href="/?region=sa&lang=ar" onclick="selectSaudiLanguage('ar'); return false;" class="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white shadow-inner ring-1 ring-white/20">
+                            <span>🇸🇦</span>
+                            <span>السعودية</span>
+                        </a>
+                    </div>
+
+                    <a href="/?region=sa" onclick="selectSaudiLanguage('en'); return false;" class="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10">
+                        <i data-lucide="globe" style="width: 16px; height: 16px;"></i>
+                        <span>English</span>
                     </a>
+                    <a href="/sign-in" class="text-sm font-semibold text-slate-200 transition-colors hover:text-white">تسجيل الدخول</a>
                     <button onclick="openModal('demo')" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold transition-all">
-                        اطلب عرضاً تجريبياً
+                        اطلب عرضاً مباشراً
                     </button>
                 </div>
 
-                <!-- Mobile Menu Button -->
-                <button id="mobileMenuBtn" class="md:hidden text-white p-2">
+                <button id="mobileMenuBtn" class="lg:hidden text-white p-2">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                     </svg>
                 </button>
             </div>
 
-            <!-- Mobile Navigation -->
-            <div id="mobileMenu" class="hidden md:hidden mt-4 pb-4 border-t border-slate-700">
+            <div id="mobileMenu" class="hidden lg:hidden mt-4 pb-4 border-t border-slate-700">
                 <div class="flex flex-col space-y-4 pt-4">
+                    <div class="flex flex-col gap-2">
+                        <a href="/" onclick="selectRegion('in'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                            <span>🇮🇳</span>
+                            <span>الهند</span>
+                        </a>
+                        <a href="/?region=sa&lang=ar" onclick="selectSaudiLanguage('ar'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20">
+                            <span>🇸🇦</span>
+                            <span>السعودية</span>
+                        </a>
+                        <a href="/?region=sa" onclick="selectSaudiLanguage('en'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                            <i data-lucide="globe" style="width: 16px; height: 16px;"></i>
+                            <span>English</span>
+                        </a>
+                    </div>
                     <a href="#features" class="text-gray-300 hover:text-white transition-colors">الميزات</a>
                     <a href="#how-it-works" class="text-gray-300 hover:text-white transition-colors">كيف يعمل</a>
                     <a href="#perfect-for" class="text-gray-300 hover:text-white transition-colors">الحلول</a>
                     <a href="#faq" class="text-gray-300 hover:text-white transition-colors">الأسئلة الشائعة</a>
-                    <a href="index.html" class="lang-toggle w-fit">
-                        <i data-lucide="globe" style="width: 16px; height: 16px;"></i> English
-                    </a>
+                    <a href="/sign-in" class="text-gray-300 hover:text-white transition-colors">تسجيل الدخول</a>
                     <button onclick="openModal('demo')" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold transition-all text-left">
-                        اطلب عرضاً تجريبياً
+                        اطلب عرضاً مباشراً
                     </button>
                 </div>
             </div>
@@ -261,7 +283,7 @@
     </header>
 
     <!-- Hero Section -->
-    <section class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white py-16 px-6 relative overflow-hidden">
+    <section class="bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 text-white py-16 px-6 relative overflow-hidden" style="background: linear-gradient(135deg, #0f172b 0%, #1d4ed8 45%, #0f172b 100%); color: #ffffff;">
         <!-- Subtle background pattern -->
         <div class="absolute inset-0 opacity-10">
             <div class="absolute inset-0" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 40px 40px;"></div>
@@ -437,9 +459,9 @@
     <!-- Solution: Context-Aware Experience -->
     <section class="py-20 px-6 bg-gradient-to-br from-purple-50 to-blue-50">
         <div class="max-w-6xl mx-auto text-center">
-            <h2 class="text-4xl font-bold text-gray-900 mb-4">ملصق واحد. إمكانيات لا نهائية.</h2>
+            <h2 class="text-4xl font-bold text-gray-900 mb-4">ملصقان. رحلة ضمان واحدة.</h2>
             <p class="text-xl text-gray-600 mb-12 max-w-3xl mx-auto">
-                The same NFC sticker transforms based on context - showing exactly what each person needs, when they need it, without any confusion or training.
+                ملصق على الكرتون لتفعيل الضمان عند نقطة البيع باستخدام هاتف العميل، وملصق آخر على المنتج للوصول السريع إلى خدمة الضمان لاحقاً.
             </p>
 
             <!-- عرض تفاعلي Preview -->
@@ -448,7 +470,7 @@
                     <i data-lucide="sparkles" class="w-16 h-16 text-purple-600"></i>
                 </div>
                 <h3 class="text-2xl font-bold text-gray-900 mb-4">واجهة واعية بالسياق</h3>
-                <p class="text-gray-600 mb-8">نفس الملصق، وتجربة مختلفة تماماً حسب دور المستخدم والحالة</p>
+                <p class="text-gray-600 mb-8">ملصقان وتجارب مختلفة حسب الدور: التفعيل عند البيع ثم خدمة ما بعد البيع</p>
                 
                 <!-- Role-Based Experiences -->
                 <div class="grid md:grid-cols-3 gap-6 text-left mb-8">
@@ -931,38 +953,37 @@
         </div>
     </section>
 
-    <!-- Global Benefits -->
+    <!-- Saudi Excellence -->
     <section class="py-20 px-6 bg-gradient-to-br from-green-50 to-emerald-50">
-        <div class="max-w-4xl mx-auto text-center">
+        <div class="max-w-6xl mx-auto text-center">
             <div class="mb-6 flex justify-center">
-                <i data-lucide="globe" class="w-16 h-16 text-emerald-600"></i>
+                <i data-lucide="landmark" class="w-16 h-16 text-emerald-600"></i>
             </div>
-            <h2 class="text-4xl font-bold text-gray-900 mb-6">مصمم للتميّز العالمي</h2>
-            <p class="text-xl text-gray-600 mb-8">
-                يدعم FeedbackNFC التحول الرقمي بتقنيات مبتكرة
-                تعزز حماية المستهلك وتحسن جودة الخدمة وترفع الكفاءة التشغيلية حول العالم.
+            <h2 class="text-4xl font-bold text-gray-900 mb-6">مصمم لتميّز السعودية</h2>
+            <p class="text-xl text-gray-600 mb-12 max-w-4xl mx-auto">
+                رقمنة كاملة لرحلة الضمان في المملكة: تفعيل موثق، سجل خدمة واضح، وتأكيد عميل قابل للتدقيق من أول لمسة.
             </p>
-            <div class="grid md:grid-cols-3 gap-6">
-                <div class="bg-white/60 backdrop-blur rounded-xl p-6">
-                    <div class="mb-3 flex justify-center">
-                        <i data-lucide="smartphone" class="w-8 h-8 text-emerald-600"></i>
-                    </div>
-                    <div class="font-bold text-gray-900 mb-2">رقمي أولاً</div>
-                    <div class="text-sm text-gray-600">إدارة ضمان آلية بدون ورق</div>
-                </div>
-                <div class="bg-white/60 backdrop-blur rounded-xl p-6">
-                    <div class="mb-3 flex justify-center">
+            <div class="grid md:grid-cols-3 gap-6 text-right">
+                <div class="bg-white/70 backdrop-blur rounded-xl p-6 shadow-sm">
+                    <div class="mb-3 flex justify-center md:justify-start">
                         <i data-lucide="shield-check" class="w-8 h-8 text-emerald-600"></i>
                     </div>
-                    <div class="font-bold text-gray-900 mb-2">حماية المستهلك</div>
-                    <div class="text-sm text-gray-600">امتثال كامل للوائح المحلية</div>
+                    <div class="font-bold text-gray-900 mb-2">امتثال لأنظمة الضمان السعودية</div>
+                    <div class="text-sm text-gray-600">توثيق رقمي لتاريخ الشراء وبداية الضمان وفترة التغطية وسجل الخدمة لدعم متطلبات الضمان في المملكة.</div>
                 </div>
-                <div class="bg-white/60 backdrop-blur rounded-xl p-6">
-                    <div class="mb-3 flex justify-center">
+                <div class="bg-white/70 backdrop-blur rounded-xl p-6 shadow-sm">
+                    <div class="mb-3 flex justify-center md:justify-start">
+                        <i data-lucide="building-2" class="w-8 h-8 text-emerald-600"></i>
+                    </div>
+                    <div class="font-bold text-gray-900 mb-2">جاهز للسوق السعودي</div>
+                    <div class="text-sm text-gray-600">مصمم لرحلات العملاء العربية وشبكات الموزعين ومراكز الخدمة المعتمدة داخل المملكة.</div>
+                </div>
+                <div class="bg-white/70 backdrop-blur rounded-xl p-6 shadow-sm">
+                    <div class="mb-3 flex justify-center md:justify-start">
                         <i data-lucide="target" class="w-8 h-8 text-emerald-600"></i>
                     </div>
-                    <div class="font-bold text-gray-900 mb-2">خدمة عالية الجودة</div>
-                    <div class="text-sm text-gray-600">تجربة خدمة عملاء متفوقة</div>
+                    <div class="font-bold text-gray-900 mb-2">منسجم مع رؤية 2030</div>
+                    <div class="text-sm text-gray-600">تجربة خدمة رقمية أسرع عبر الجوال، مع شفافية أعلى ومساءلة أفضل في عمليات الضمان.</div>
                 </div>
             </div>
         </div>
@@ -1011,21 +1032,21 @@
     </section>
 
     <!-- برنامج التجربة المجانية -->
-    <section class="py-20 px-6 bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+    <section class="py-20 px-6 bg-gradient-to-br from-purple-600 to-blue-600 text-white" style="background: linear-gradient(135deg, #9333ea 0%, #2563eb 100%); color: #ffffff;">
         <div class="max-w-4xl mx-auto text-center">
             <h2 class="text-4xl md:text-5xl font-bold mb-6">ابدأ بتجربة مجانية لمدة 3 أشهر</h2>
             <p class="text-xl md:text-2xl text-white/90 mb-8">
                 بدون مخاطر. بدون تكلفة. نوفر كل ما تحتاجه لإثبات العائد قبل الالتزام.
             </p>
 
-            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-12">
+            <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-12" style="background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(12px);">
                 <h3 class="text-2xl font-bold mb-6">ما الذي يشمله العرض (مجاناً)</h3>
                 <div class="grid md:grid-cols-2 gap-6 text-left">
                     <div class="flex items-start">
                         <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                         </svg>
-                        <span>500 إلى 1,000 ملصق NFC (لغات قابلة للتخصيص)</span>
+                        <span>500 إلى 1,000 ملصق ذكي NFC+QR (لغات قابلة للتخصيص)</span>
                     </div>
                     <div class="flex items-start">
                         <svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1089,9 +1110,10 @@
                         </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        التقليدي warranty software requires complex training (2-4 weeks), manual data entry at every step, 
-                        and still depends on phone calls for initial service requests. FeedbackNFC eliminates all of this: 
-                        customers tap an NFC sticker and everything is automated. Zero training. Zero phone calls. Zero manual entry.
+                        تتطلب أنظمة الضمان التقليدية تدريباً معقداً وإدخالاً يدوياً للبيانات في كل خطوة،
+                        كما تعتمد على المكالمات الهاتفية لبدء طلب الخدمة. أما FeedbackNFC فيحوّل العملية إلى
+                        تجربة أبسط بكثير: يلمس العميل الملصق أو يمسح الرمز، فتفتح الصفحة المناسبة فوراً،
+                        ويتم توثيق الخدمة آلياً من دون تعقيد.
                     </p>
                 </details>
 
@@ -1117,8 +1139,8 @@
                         </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Every NFC sticker also includes a QR code as backup. العميلs can scan the QR code with their 
-                        camera app and get the same experience. This ensures 100% compatibility with all smartphones.
+                        يحتوي كل ملصق NFC أيضاً على رمز QR احتياطي. يمكن للعملاء مسح الرمز باستخدام كاميرا الهاتف
+                        والحصول على نفس التجربة تماماً، مما يضمن التوافق الكامل مع جميع الهواتف الذكية.
                     </p>
                 </details>
 
@@ -1168,6 +1190,19 @@
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
+                        هل هذا متوافق مع أنظمة الضمان السعودية؟
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </summary>
+                    <p class="text-gray-600 mt-4">
+                        نعم. يوثّق FeedbackNFC تاريخ تفعيل الضمان وبداية التغطية وسجل الخدمة وتأكيد العميل رقمياً،
+                        بما يدعم متطلبات الامتثال والتدقيق في المملكة.
+                    </p>
+                </details>
+
+                <details class="bg-gray-50 rounded-xl p-6 group">
+                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         ماذا يحدث إذا لم نكن راضين بعد التجربة؟
                         <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1175,8 +1210,6 @@
                     </summary>
                     <p class="text-gray-600 mt-4">
                         ببساطة: يمكنكم التوقف دون أي التزام مالي. تجربة الـ3 أشهر مجانية بالكامل وبدون شروط خفية.
-                        نحن واثقون أنه بعد رؤية النتائج - توفير 70% في التكلفة، عملاء أكثر رضا، وخدمة أسرع -
-                        سترغبون في الاستمرار. وإن لم ترغبوا فلا مشكلة.
                     </p>
                 </details>
             </div>
@@ -1184,17 +1217,17 @@
     </section>
 
     <!-- Final CTA - Simplified without form -->
-    <section id="contact" class="py-20 px-6 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white relative overflow-hidden">
+    <section id="contact" class="py-20 px-6 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white relative overflow-hidden" style="background: linear-gradient(135deg, #581c87 0%, #1e3a8a 50%, #312e81 100%); color: #ffffff;">
         <!-- Decorative background elements -->
         <div class="absolute inset-0 opacity-10">
             <div class="absolute inset-0" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 40px 40px;"></div>
         </div>
 
         <div class="max-w-4xl mx-auto text-center relative z-10">
-            <h2 class="text-4xl md:text-5xl font-bold mb-6">جاهزون لتحويل برنامج الضمان لديكم؟</h2>
+            <h2 class="text-4xl md:text-5xl font-bold mb-6">جاهزون لتحويل خدمة الضمان في المملكة؟</h2>
             <p class="text-xl text-blue-100 mb-12">
-                انضموا إلى المصنعين المتقدمين الذين يخفضون التكاليف ويرفعون رضا العملاء
-                ويحققون ميزة تنافسية.
+                انضموا إلى المصنعين والشركاء الذين يسرّعون الاستجابة ويرفعون جودة الخدمة
+                ويحسنون الامتثال الرقمي في السعودية.
             </p>
 
             <!-- Simplified CTA Buttons -->
@@ -1208,8 +1241,9 @@
             </div>
 
             <p class="text-blue-200 mt-8 text-sm">
-                📍 نخدم المصنعين والموزعين حول العالم
+                📍 نخدم المصنعين والمنشآت عبر المملكة.
             </p>
+            <p class="text-blue-100 mt-3 text-sm">ArkanPro Communications &amp; IT · Info@arkanpro.com · +966 53 421 2795</p>
         </div>
     </section>
 
@@ -1222,45 +1256,46 @@
                         <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-12 w-auto">
                         <div class="text-white font-bold text-xl">FeedbackNFC</div>
                     </div>
-                    <p class="text-sm">خدمة الأصول بدون تدريب. لصيانة الشركات وبرامج ضمان المصنعين.</p>
+                    <p class="text-sm">خدمة ضمان ذكية للمصنعين والموزعين ومراكز الخدمة في السعودية.</p>
                 </div>
                 <div>
                     <div class="text-white font-semibold mb-4">الحلول</div>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="https://asset.feedbacknfc.com" class="hover:text-white transition-colors">الصيانة المؤسسية</a></li>
                         <li><a href="#" class="hover:text-white transition-colors">إدارة الضمان</a></li>
-                        <li><a href="#demo" class="hover:text-white transition-colors">عرض تفاعلي</a></li>
-                        <li><a href="#roi" class="hover:text-white transition-colors">حاسبة العائد</a></li>
+                        <li><a href="#how-it-works" class="hover:text-white transition-colors">كيف يعمل</a></li>
+                        <li><a href="#faq" class="hover:text-white transition-colors">الأسئلة الشائعة</a></li>
+                        <li><a href="#contact" class="hover:text-white transition-colors">اطلب عرضاً مباشراً</a></li>
                     </ul>
                 </div>
                 <div>
                     <div class="text-white font-semibold mb-4">الشركة</div>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="#" class="hover:text-white transition-colors">من نحن</a></li>
                         <li><a href="#contact" class="hover:text-white transition-colors">اتصل بنا</a></li>
                         <li><a href="#" class="hover:text-white transition-colors">برنامج التجربة المجانية</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">دراسات حالة</a></li>
+                        <li><a href="/sign-in" class="hover:text-white transition-colors">تسجيل الدخول</a></li>
+                        <li><a href="mailto:Info@arkanpro.com" class="hover:text-white transition-colors">Info@arkanpro.com</a></li>
                     </ul>
                 </div>
                 <div>
-                    <div class="text-white font-semibold mb-4">قانوني</div>
+                    <div class="text-white font-semibold mb-4">الحضور في السعودية</div>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="#" class="hover:text-white transition-colors">سياسة الخصوصية</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">شروط الخدمة</a></li>
-                        <li><a href="#" class="hover:text-white transition-colors">امتثال تنظيمي</a></li>
+                        <li>ArkanPro Communications &amp; IT</li>
+                        <li>الرياض · الخبر · الجبيل الصناعية</li>
+                        <li><a href="tel:+966534212795" class="hover:text-white transition-colors">+966 53 421 2795</a></li>
+                        <li>دعم بالعربية والإنجليزية</li>
                     </ul>
                 </div>
             </div>
             
             <div class="border-t border-gray-800 pt-8 text-center text-sm">
                 <p>&copy; 2025 FeedbackNFC. جميع الحقوق محفوظة.</p>
-                <p class="mt-2 text-gray-500">متوافق مع أنظمة الضمان العالمية</p>
+                <p class="mt-2 text-gray-500">مصمم لرحلات الضمان في السعودية وتجارب العملاء ثنائية اللغة.</p>
             </div>
         </div>
     </footer>
 
     <!-- اتصل بنا Form Modal -->
-    <div id="contactModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div id="contactModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div class="p-8">
                 <!-- Modal Header -->
@@ -1331,7 +1366,7 @@
                     <div class="flex gap-4">
                         <button type="submit"
                             class="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:from-purple-700 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg">
-                            Send الرسالة
+                            إرسال الرسالة
                         </button>
                         <button type="button" onclick="closeModal()"
                             class="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold text-lg hover:bg-gray-50 transition-all">
@@ -1368,11 +1403,80 @@
             }
         });
 
+        function buildLandingUrl(region, lang = 'en') {
+            const url = new URL(window.location.origin + '/');
+            if (region === 'sa') {
+                url.searchParams.set('region', 'sa');
+                if (lang === 'ar') {
+                    url.searchParams.set('lang', 'ar');
+                }
+            }
+            return `${url.pathname}${url.search}`;
+        }
+
+        function persistRegionSelection(region, lang = 'en') {
+            localStorage.setItem('warranty_region', region);
+            if (region === 'sa') {
+                localStorage.setItem('warranty_region_lang_sa', lang);
+            }
+        }
+
+        function selectRegion(region, lang = 'en') {
+            persistRegionSelection(region, lang);
+            window.location.assign(buildLandingUrl(region, lang));
+        }
+
+        function selectSaudiLanguage(lang) {
+            selectRegion('sa', lang);
+        }
+
+        (function initializeRegionSelection() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const currentRegion = params.get('region') === 'sa' ? 'sa' : 'in';
+                const currentLang = currentRegion === 'sa' && params.get('lang') === 'ar' ? 'ar' : 'en';
+
+                let storedRegion = localStorage.getItem('warranty_region');
+                if (!storedRegion) {
+                    const browserLanguage = (navigator.language || '').toLowerCase();
+                    let browserTimezone = '';
+                    try {
+                        browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                    } catch (error) {
+                        browserTimezone = '';
+                    }
+
+                    storedRegion =
+                        browserLanguage.includes('ar') || browserTimezone === 'Asia/Riyadh'
+                            ? 'sa'
+                            : 'in';
+                    localStorage.setItem('warranty_region', storedRegion);
+                }
+
+                const storedSaudiLang =
+                    localStorage.getItem('warranty_region_lang_sa') === 'ar' ? 'ar' : 'en';
+                const desiredRegion = storedRegion === 'sa' ? 'sa' : 'in';
+                const desiredLang = desiredRegion === 'sa' ? storedSaudiLang : 'en';
+                const currentUrl = `${window.location.pathname}${window.location.search}`;
+                const desiredUrl = buildLandingUrl(desiredRegion, desiredLang);
+
+                if (currentUrl !== desiredUrl) {
+                    window.location.replace(desiredUrl);
+                    return;
+                }
+
+                persistRegionSelection(currentRegion, currentLang);
+            } catch (error) {
+                console.error('تعذر استرجاع إعداد المنطقة للصفحة', error);
+            }
+        })();
+
         // Modal functions
         function openModal(requestType = '') {
             const modal = document.getElementById('contactModal');
             const select = document.getElementById('requestType');
             modal.classList.remove('hidden');
+            modal.classList.add('flex');
             document.body.style.overflow = 'hidden';
 
             if (requestType) {
@@ -1383,6 +1487,7 @@
         function closeModal() {
             const modal = document.getElementById('contactModal');
             modal.classList.add('hidden');
+            modal.classList.remove('flex');
             document.body.style.overflow = 'auto';
         }
 

@@ -208,7 +208,7 @@
         <nav class="max-w-7xl mx-auto px-6 py-4">
             <div class="flex items-center justify-between gap-6">
                 <div class="flex items-center shrink-0">
-                    <a href="/" onclick="selectRegion('in'); return false;" class="flex items-center space-x-2 md:space-x-3 group shrink-0">
+                    <a href="/?region=sa" onclick="selectRegion('sa'); return false;" class="flex items-center space-x-2 md:space-x-3 group shrink-0">
                         <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-16 md:h-20 w-auto transition-transform group-hover:scale-105">
                         <span class="text-2xl md:text-3xl xl:text-4xl font-bold tracking-tight whitespace-nowrap">FeedbackNFC</span>
                     </a>
@@ -221,16 +221,20 @@
                     <a href="#faq" class="text-gray-300 hover:text-white transition-colors">FAQ</a>
 
                     <div class="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
-                        <a href="/" onclick="selectRegion('in'); return false;" class="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white shadow-inner ring-1 ring-white/20">
+                        <a href="/" onclick="selectRegion('in'); return false;" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
                             <span>🇮🇳</span>
                             <span>India</span>
                         </a>
-                        <a href="/?region=sa" onclick="selectRegion('sa'); return false;" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                        <a href="/?region=sa" onclick="selectRegion('sa'); return false;" class="inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white shadow-inner ring-1 ring-white/20">
                             <span>🇸🇦</span>
                             <span>Saudi Arabia</span>
                         </a>
                     </div>
 
+                    <a href="/?region=sa&lang=ar" onclick="selectSaudiLanguage('ar'); return false;" class="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10">
+                        <i data-lucide="globe" style="width: 16px; height: 16px;"></i>
+                        <span>العربية</span>
+                    </a>
                     <a href="/sign-in" class="text-sm font-semibold text-slate-200 transition-colors hover:text-white">Sign In</a>
                     <button onclick="openModal('demo')" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-semibold transition-all">
                         See Live Demo
@@ -247,13 +251,17 @@
             <div id="mobileMenu" class="hidden lg:hidden mt-4 pb-4 border-t border-slate-700">
                 <div class="flex flex-col space-y-4 pt-4">
                     <div class="flex flex-col gap-2">
-                        <a href="/" onclick="selectRegion('in'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20">
+                        <a href="/" onclick="selectRegion('in'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
                             <span>🇮🇳</span>
                             <span>India</span>
                         </a>
-                        <a href="/?region=sa" onclick="selectRegion('sa'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                        <a href="/?region=sa" onclick="selectRegion('sa'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/20">
                             <span>🇸🇦</span>
                             <span>Saudi Arabia</span>
+                        </a>
+                        <a href="/?region=sa&lang=ar" onclick="selectSaudiLanguage('ar'); return false;" class="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-white/10 hover:text-white">
+                            <i data-lucide="globe" style="width: 16px; height: 16px;"></i>
+                            <span>العربية</span>
                         </a>
                     </div>
                     <a href="#features" class="text-gray-300 hover:text-white transition-colors">Features</a>
@@ -286,7 +294,7 @@
                     </h1>
 
                     <p class="text-xl text-slate-300 mb-8 leading-relaxed">
-                        Transform warranty claims from a 2-hour phone ordeal into a 30-second scan. Two smart stickers: one says "Activate Warranty Now" on the carton, and one says "Scan for Warranty Service" on the product.
+                        Transform warranty claims from a 2-hour phone ordeal into a 30-second tap - or scan. Two smart stickers: one says "Activate Warranty Now" on the carton, and one says "Scan for Warranty Service" on the product.
                     </p>
 
                     <!-- Key Metrics - Compact -->
@@ -352,7 +360,7 @@
                                 <span class="text-xl font-bold text-emerald-400">30 sec</span>
                             </div>
                             <div class="flex items-center gap-1 text-xs">
-                                <span class="bg-emerald-500/20 px-2 py-1 rounded text-emerald-200">Scan QR</span>
+                                <span class="bg-emerald-500/20 px-2 py-1 rounded text-emerald-200">Tap NFC</span>
                                 <span class="text-emerald-400/50">→</span>
                                 <span class="bg-emerald-500/20 px-2 py-1 rounded text-emerald-200">AI Assigns</span>
                                 <span class="text-emerald-400/50">→</span>
@@ -448,7 +456,7 @@
         <div class="max-w-6xl mx-auto text-center">
             <h2 class="text-4xl font-bold text-gray-900 mb-4">Two Stickers. One Warranty Journey.</h2>
             <p class="text-xl text-gray-600 mb-12 max-w-3xl mx-auto">
-                One sticker on the carton helps the salesman activate warranty with the customer's phone at the counter. A second sticker on the product gives instant access to lifetime warranty service.
+                One sticker on the carton handles activation at the counter, while a second sticker on the product handles service for the rest of the warranty journey.
             </p>
 
             <!-- Interactive Demo Preview -->
@@ -457,7 +465,7 @@
                     <i data-lucide="sparkles" class="w-16 h-16 text-purple-600"></i>
                 </div>
                 <h3 class="text-2xl font-bold text-gray-900 mb-4">Context-Aware Interface</h3>
-                <p class="text-gray-600 mb-8">Two stickers, context-aware experiences across retail activation and after-sales service</p>
+                <p class="text-gray-600 mb-8">Two stickers, role-aware experiences across activation and after-sales service</p>
                 
                 <!-- Role-Based Experiences -->
                 <div class="grid md:grid-cols-3 gap-6 text-left mb-8">
@@ -469,7 +477,7 @@
                         <div class="text-sm text-gray-600 mb-3">Simple, friendly interface</div>
                         <ul class="text-xs text-gray-500 space-y-1">
                             <li>• Pre-filled product details</li>
-                            <li>• 30-second service request</li>
+                            <li>• One-tap issue reporting</li>
                             <li>• Real-time status updates</li>
                             <li>• Multi-language support</li>
                         </ul>
@@ -511,7 +519,7 @@
                             <div class="font-bold text-gray-900 mb-2">OTP-Secured Ownership</div>
                             <div class="text-sm text-gray-600">
                                 Only the verified product owner can report issues or confirm resolution. Every action is
-                                secured with phone OTP - no unauthorized access, no fake claims, no disputes.
+                                secured with phone OTP - protecting both consumers and manufacturers from fake claims.
                             </div>
                         </div>
                     </div>
@@ -524,7 +532,7 @@
                     </div>
                     <div class="font-bold text-gray-900 mb-2">Smart Context Detection</div>
                     <div class="text-sm text-gray-600">
-                        The system automatically detects who's scanning and what they need:
+                        The system automatically detects who's tapping and what they need: 
                         <span class="font-semibold text-purple-600">Customer</span> → Service Request | 
                         <span class="font-semibold text-blue-600">Technician</span> → Work Order | 
                         <span class="font-semibold text-green-600">Manager</span> → Analytics Dashboard
@@ -538,48 +546,48 @@
     <section id="how-it-works" class="py-20 px-6 bg-white">
         <div class="max-w-6xl mx-auto">
             <h2 class="text-4xl font-bold text-gray-900 text-center mb-4">Real-World Example</h2>
-            <p class="text-xl text-gray-600 text-center mb-16">Follow Priya's water purifier warranty journey from purchase to service</p>
+            <p class="text-xl text-gray-600 text-center mb-16">Follow Sarah's AC warranty claim from start to finish</p>
 
             <!-- Timeline -->
             <div class="relative">
                 <!-- Timeline Line -->
                 <div class="absolute left-1/2 transform -translate-x-1/2 w-1 h-full bg-gradient-to-b from-purple-200 via-blue-200 to-green-200 rounded-full"></div>
 
-                <!-- Step 1: Point-of-Sale Activation -->
+                <!-- Step 1 -->
                 <div class="flex items-center mb-16">
                     <div class="w-1/2 pr-8 text-right">
                         <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 border-l-4 border-purple-500">
                             <div class="mb-3 flex justify-end">
-                                <i data-lucide="shopping-bag" class="w-8 h-8 text-purple-600"></i>
+                                <i data-lucide="thermometer" class="w-8 h-8 text-purple-600"></i>
                             </div>
-                            <h3 class="text-xl font-bold text-gray-900 mb-2">Priya Buys a Kent Water Purifier</h3>
-                            <p class="text-gray-600 text-sm">At the retail store, the shopkeeper scans the QR sticker on the carton to activate Priya's warranty right at the counter. Priya enters her phone number and receives an OTP to verify ownership.</p>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Sarah's AC Stops Cooling</h3>
+                            <p class="text-gray-600 text-sm">Sarah notices her AC isn't cooling properly. Instead of calling customer service, she taps the NFC sticker on her AC unit.</p>
                         </div>
                     </div>
                     <div class="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">1</div>
                     <div class="w-1/2 pl-8">
                         <div class="bg-gray-50 rounded-2xl p-6">
-                            <h4 class="font-bold text-gray-900 mb-2">What Happens at the Counter:</h4>
+                            <h4 class="font-bold text-gray-900 mb-2">What Sarah Sees:</h4>
                             <ul class="text-sm text-gray-600 space-y-1">
-                                <li>• Shopkeeper scans the carton QR label</li>
-                                <li>• Priya enters her phone number and verifies with OTP</li>
-                                <li>• Product details and serial number are pre-filled instantly</li>
-                                <li>• A digital warranty certificate is available before she leaves the store</li>
+                                <li>• Pre-filled form with AC model & serial number</li>
+                                <li>• Warranty status: "Active until Dec 2025"</li>
+                                <li>• Simple issue description dropdown</li>
+                                <li>• One-tap submit button</li>
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- Step 2: Issue Occurs -->
+                <!-- Step 2 -->
                 <div class="flex items-center mb-16">
                     <div class="w-1/2 pr-8 text-right">
                         <div class="bg-gray-50 rounded-2xl p-6">
-                            <h4 class="font-bold text-gray-900 mb-2">What Priya Sees:</h4>
+                            <h4 class="font-bold text-gray-900 mb-2">System Processing:</h4>
                             <ul class="text-sm text-gray-600 space-y-1">
-                                <li>• Pre-filled Kent Pearl 8L product details and serial number</li>
-                                <li>• Warranty status with 186 days remaining</li>
-                                <li>• Hindi issue form with photo upload</li>
-                                <li>• Secure OTP verification before submission</li>
+                                <li>• Validates warranty coverage</li>
+                                <li>• Matches issue to qualified technician</li>
+                                <li>• Checks parts inventory</li>
+                                <li>• Schedules appointment</li>
                             </ul>
                         </div>
                     </div>
@@ -587,49 +595,48 @@
                     <div class="w-1/2 pl-8">
                         <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-6 border-l-4 border-blue-500">
                             <div class="mb-3">
-                                <i data-lucide="droplets" class="w-8 h-8 text-blue-600"></i>
+                                <i data-lucide="bot" class="w-8 h-8 text-blue-600"></i>
                             </div>
-                            <h3 class="text-xl font-bold text-gray-900 mb-2">6 Months Later: Water Flow Drops</h3>
-                            <p class="text-gray-600 text-sm">Priya notices low water flow from her purifier. She scans the QR sticker on the unit, verifies her identity with an OTP, and submits a service request in Hindi - all in 30 seconds.</p>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">AI Assignment in 30 Seconds</h3>
+                            <p class="text-gray-600 text-sm">The system automatically assigns Ahmed, a certified AC technician with availability in Sarah's area, and confirms he has the necessary parts.</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Step 3: Technician Assigned -->
+                <!-- Step 3 -->
                 <div class="flex items-center mb-16">
                     <div class="w-1/2 pr-8 text-right">
                         <div class="bg-gradient-to-r from-green-50 to-green-100 rounded-2xl p-6 border-l-4 border-green-500">
                             <div class="mb-3 flex justify-end">
-                                <i data-lucide="bot" class="w-8 h-8 text-green-600"></i>
+                                <i data-lucide="tool" class="w-8 h-8 text-green-600"></i>
                             </div>
-                            <h3 class="text-xl font-bold text-gray-900 mb-2">Rajesh Gets Assigned Automatically</h3>
-                            <p class="text-gray-600 text-sm">The system validates active coverage, checks parts availability, and assigns Rajesh - a certified Kent technician just 4 km away. Rajesh gets a Hindi SMS with the job, address, and suggested RO membrane replacement.</p>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Ahmed Arrives with Right Parts</h3>
+                            <p class="text-gray-600 text-sm">Ahmed taps the product sticker and sees complete AC history, customer info, and the specific issue. He brings the correct refrigerant and tools.</p>
                         </div>
                     </div>
                     <div class="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">3</div>
                     <div class="w-1/2 pl-8">
                         <div class="bg-gray-50 rounded-2xl p-6">
-                            <h4 class="font-bold text-gray-900 mb-2">What Rajesh Sees:</h4>
+                            <h4 class="text-gray-900 mb-2">What Ahmed Sees:</h4>
                             <ul class="text-sm text-gray-600 space-y-1">
-                                <li>• Complete purifier service history</li>
-                                <li>• Customer contact with tap-to-call support</li>
-                                <li>• Issue details, photos, and recommended parts</li>
-                                <li>• Navigation to Priya's address</li>
-                                <li>• Filter replacement due date and parts checklist</li>
+                                <li>• Complete AC service history</li>
+                                <li>• Customer contact information</li>
+                                <li>• Issue details & troubleshooting steps</li>
+                                <li>• Parts needed & inventory status</li>
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- Step 4: Repair -->
+                <!-- Step 4 -->
                 <div class="flex items-center mb-16">
                     <div class="w-1/2 pr-8 text-right">
                         <div class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl p-6 border-l-4 border-orange-500">
                             <div class="mb-3 flex justify-end">
                                 <i data-lucide="wrench" class="w-8 h-8 text-orange-600"></i>
                             </div>
-                            <h3 class="text-xl font-bold text-gray-900 mb-2">Rajesh Completes the Service</h3>
-                            <p class="text-gray-600 text-sm">Rajesh replaces the RO membrane, captures before and after photos, logs labour time and parts used, then marks the job complete from the product sticker's QR-powered technician view.</p>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Ahmed Completes Repair</h3>
+                            <p class="text-gray-600 text-sm">Ahmed fixes the AC and taps the NFC sticker again to mark work completion. He uploads photos, documents parts used, and marks the job as complete.</p>
                         </div>
                     </div>
                     <div class="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 text-white rounded-full flex items-center justify-center text-xl font-bold z-10 relative">4</div>
@@ -637,25 +644,25 @@
                         <div class="bg-gray-50 rounded-2xl p-6">
                             <h4 class="font-bold text-gray-900 mb-2">Work Documentation:</h4>
                             <ul class="text-sm text-gray-600 space-y-1">
-                                <li>• Before & after photos</li>
-                                <li>• Parts replaced: RO membrane (₹850) + sediment filter</li>
-                                <li>• Technician notes in Hindi</li>
-                                <li>• Timestamp & location verified</li>
+                                <li>• Work completion photos</li>
+                                <li>• Parts used & costs</li>
+                                <li>• Technician notes</li>
+                                <li>• Timestamp & location data</li>
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- Step 5: Confirmation -->
+                <!-- Step 5 -->
                 <div class="flex items-center">
                     <div class="w-1/2 pr-8 text-right">
                         <div class="bg-gray-50 rounded-2xl p-6">
                             <h4 class="font-bold text-gray-900 mb-2">Auto-Generated Claim:</h4>
                             <ul class="text-sm text-gray-600 space-y-1">
-                                <li>• Complete documentation with photos</li>
-                                <li>• OTP-verified customer confirmation</li>
-                                <li>• Parts & labour cost breakdown</li>
-                                <li>• Ready for manufacturer reimbursement</li>
+                                <li>• Complete documentation</li>
+                                <li>• Photo evidence</li>
+                                <li>• Customer confirmation</li>
+                                <li>• Ready for reimbursement</li>
                             </ul>
                         </div>
                     </div>
@@ -665,8 +672,8 @@
                             <div class="mb-3">
                                 <i data-lucide="check-circle-2" class="w-8 h-8 text-emerald-600"></i>
                             </div>
-                            <h3 class="text-xl font-bold text-gray-900 mb-2">Priya Confirms - Job Done</h3>
-                            <p class="text-gray-600 text-sm">Priya receives an SMS asking her to confirm the repair. She scans the QR, verifies with OTP, and confirms the purifier is working again. The complete warranty claim is auto-generated and sent to Kent for reimbursement.</p>
+                            <h3 class="text-xl font-bold text-gray-900 mb-2">Sarah Confirms Resolution</h3>
+                            <p class="text-gray-600 text-sm">Sarah receives notification and taps the NFC to confirm the AC is working properly. System auto-generates complete warranty claim and sends to manufacturer for reimbursement.</p>
                         </div>
                     </div>
                 </div>
@@ -674,23 +681,19 @@
 
             <!-- Results Summary -->
             <div class="mt-16 bg-gradient-to-r from-green-50 to-blue-50 rounded-2xl p-8 text-center">
-                <h3 class="text-2xl font-bold text-gray-900 mb-4">Total Time: Same Day (vs 3-5 Days Traditional)</h3>
-                <div class="grid md:grid-cols-4 gap-6 text-sm">
+                <h3 class="text-2xl font-bold text-gray-900 mb-4">Total Time: 2 Hours (vs 2+ Days Traditional)</h3>
+                <div class="grid md:grid-cols-3 gap-6 text-sm">
                     <div class="bg-white/60 rounded-xl p-4">
                         <div class="font-bold text-gray-900 mb-1">Customer Effort</div>
-                        <div class="text-gray-600">2 scans + OTP (request + confirm) vs 2+ hours on phone</div>
+                        <div class="text-gray-600">2 taps (request + confirm) vs 2+ hours on phone</div>
                     </div>
                     <div class="bg-white/60 rounded-xl p-4">
-                        <div class="font-bold text-gray-900 mb-1">Total Time</div>
-                        <div class="text-gray-600">Same day resolution instead of multi-day back-and-forth</div>
+                        <div class="font-bold text-gray-900 mb-1">Technician Efficiency</div>
+                        <div class="text-gray-600">Right parts, first visit</div>
                     </div>
                     <div class="bg-white/60 rounded-xl p-4">
-                        <div class="font-bold text-gray-900 mb-1">Claim Documentation</div>
-                        <div class="text-gray-600">100% complete with photos, OTP confirmation, and cost breakdown</div>
-                    </div>
-                    <div class="bg-white/60 rounded-xl p-4">
-                        <div class="font-bold text-gray-900 mb-1">Rejection Risk</div>
-                        <div class="text-gray-600">Near zero because everything is captured automatically</div>
+                        <div class="font-bold text-gray-900 mb-1">Claim Processing</div>
+                        <div class="text-gray-600">Auto-generated, instant</div>
                     </div>
                 </div>
             </div>
@@ -717,7 +720,7 @@
                         </svg>
                     </div>
                     <h3 class="text-xl font-bold text-gray-900 mb-4">Automatic Warranty Activation</h3>
-                    <p class="text-gray-600">Warranty activates from a verified scan at the counter or by the customer. OTP-backed proof of purchase guarantees the full warranty period and 100% registration.</p>
+                    <p class="text-gray-600">The first verified tap records the warranty start date. That gives manufacturers proof of activation, a complete coverage trail, and far better registration than manual workflows.</p>
                 </div>
 
                 <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
@@ -766,48 +769,8 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
                         </svg>
                     </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">Regulatory Compliance</h3>
-                    <p class="text-gray-600">Built for Indian warranty regulations. CCPA compliant, Right to Repair ready, complete audit trail for Consumer Protection Act 2019 inspections.</p>
-                </div>
-
-                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-                    <div class="feature-icon bg-teal-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
-                        <svg class="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">Point-of-Sale Activation</h3>
-                    <p class="text-gray-600">Shopkeeper scans carton QR at the counter, customer enters phone number, OTP confirms ownership. Warranty starts from actual date of sale - not manufacturing date.</p>
-                </div>
-
-                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-                    <div class="feature-icon bg-pink-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
-                        <svg class="w-8 h-8 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">OTP-Secured Access</h3>
-                    <p class="text-gray-600">Every warranty action is verified via OTP to the registered phone number. No passwords, no accounts, no app downloads. Prevents fraudulent claims and ensures only the actual owner can request service.</p>
-                </div>
-
-                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-                    <div class="feature-icon bg-amber-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
-                        <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">Dual QR Stickers</h3>
-                    <p class="text-gray-600">Manufacturers issue two stickers per product: a carton sticker that says "Activate Warranty Now" for the salesman at the counter using the customer's phone, and a product sticker that says "Scan for Warranty Service" for the owner and technician after installation.</p>
-                </div>
-
-                <div class="feature-card bg-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-shadow">
-                    <div class="feature-icon bg-cyan-100 w-16 h-16 rounded-xl flex items-center justify-center mb-6">
-                        <svg class="w-8 h-8 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-bold text-gray-900 mb-4">Hindi + Multi-Language Support</h3>
-                    <p class="text-gray-600">Full Hindi interface for customers and technicians. SMS notifications in the customer's preferred language. Designed for India's diverse linguistic landscape.</p>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Saudi Warranty Readiness</h3>
+                    <p class="text-gray-600">Track activation dates, warranty periods, and service history in one place with a complete audit trail for regulated warranty operations in the Kingdom.</p>
                 </div>
             </div>
         </div>
@@ -855,11 +818,12 @@
         </div>
     </section>
 
-    <!-- Perfect For -->
+    <!-- Perfect For Section - WITH 4 CARDS -->
     <section id="perfect-for" class="py-20 px-6 bg-gray-50">
         <div class="max-w-6xl mx-auto">
             <h2 class="text-4xl font-bold text-gray-900 text-center mb-16">Perfect For</h2>
 
+            <!-- First Row - 3 Cards -->
             <div class="grid md:grid-cols-3 gap-8 mb-8">
                 <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg">
                     <div class="mb-6">
@@ -867,10 +831,30 @@
                     </div>
                     <h3 class="text-2xl font-bold text-gray-900 mb-4">Equipment Manufacturers</h3>
                     <ul class="space-y-3 text-gray-600">
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Water purifiers (Kent, Aquaguard, Pureit)</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Air conditioners & HVAC systems</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Home appliances & kitchen equipment</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Geysers, water heaters, inverters, and UPS systems</span></li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>HVAC systems & air conditioners</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Home appliances & electronics</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Computers & office equipment</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Industrial machinery</span>
+                        </li>
                     </ul>
                 </div>
 
@@ -880,27 +864,68 @@
                     </div>
                     <h3 class="text-2xl font-bold text-gray-900 mb-4">Regional Distributors</h3>
                     <ul class="space-y-3 text-gray-600">
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Manage multi-brand warranties across states</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Coordinate service networks at scale</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Accelerate manufacturer reimbursement in INR</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Reduce claim rejections with auto-documentation</span></li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Manage multi-brand warranties</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Coordinate service network</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Faster manufacturer reimbursement</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Reduce claim rejections</span>
+                        </li>
                     </ul>
                 </div>
 
                 <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg">
                     <div class="mb-6">
-                        <i data-lucide="heart-pulse" class="w-12 h-12 text-green-600"></i>
+                        <i data-lucide="shopping-cart" class="w-12 h-12 text-green-600"></i>
                     </div>
-                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Medical Equipment</h3>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Retailers & Resellers</h3>
                     <ul class="space-y-3 text-gray-600">
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Diagnostic equipment (MRI, CT, X-ray)</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Patient care devices (ventilators, monitors)</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Lab instruments and service-heavy devices</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Hospital infrastructure with strict audit requirements</span></li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Differentiate on service experience</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Increase customer loyalty</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Zero training for staff</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Premium warranty service offering</span>
+                        </li>
                     </ul>
                 </div>
             </div>
 
+            <!-- Second Row - 1 Centered Card (THE NEW 4TH CARD!) -->
             <div class="flex justify-center">
                 <div class="perfect-for-card bg-white rounded-xl p-8 shadow-lg w-full md:w-1/3">
                     <div class="mb-6">
@@ -908,79 +933,91 @@
                     </div>
                     <h3 class="text-2xl font-bold text-gray-900 mb-4">Authorized Service Centers</h3>
                     <ul class="space-y-3 text-gray-600">
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Complete job information before arrival</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Offline photo capture for field work</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Automated claim documentation and reimbursement packs</span></li>
-                        <li class="flex items-start"><svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>PWA field app experience with no download required</span></li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Complete job info before arrival</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Faster payment processing</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Automated claim documentation</span>
+                        </li>
+                        <li class="flex items-start">
+                            <svg class="w-6 h-6 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span>Reduced callbacks & rework</span>
+                        </li>
                     </ul>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- India Regulatory Alignment -->
+    <!-- Saudi Excellence -->
     <section class="py-20 px-6 bg-gradient-to-br from-green-50 to-emerald-50">
         <div class="max-w-6xl mx-auto text-center">
             <div class="mb-6 flex justify-center">
-                <i data-lucide="scale" class="w-16 h-16 text-emerald-600"></i>
+                <i data-lucide="landmark" class="w-16 h-16 text-emerald-600"></i>
             </div>
-            <h2 class="text-4xl font-bold text-gray-900 mb-6">Built for India's Warranty Regulations</h2>
+            <h2 class="text-4xl font-bold text-gray-900 mb-6">Built for Saudi Excellence</h2>
             <p class="text-xl text-gray-600 mb-12 max-w-4xl mx-auto">
-                Position warranty service as a compliance advantage - not just a support workflow. Every activation,
-                service visit, and reimbursement claim is backed by a digital audit trail.
+                Bring Saudi warranty operations onto a single digital workflow with proof of activation, service history,
+                and customer confirmation captured from the first tap.
             </p>
             <div class="grid md:grid-cols-3 gap-6 text-left">
                 <div class="bg-white/70 backdrop-blur rounded-xl p-6 shadow-sm">
                     <div class="mb-3 flex justify-center md:justify-start">
                         <i data-lucide="shield-check" class="w-8 h-8 text-emerald-600"></i>
                     </div>
-                    <div class="font-bold text-gray-900 mb-2">CCPA Compliant</div>
-                    <div class="text-sm text-gray-600">Warranty starts from verified point of sale with timestamp, customer identity, and OTP-backed proof of activation.</div>
+                    <div class="font-bold text-gray-900 mb-2">Saudi Warranty Law Compliance</div>
+                    <div class="text-sm text-gray-600">Digital activation with proof of purchase date, coverage period, and service history to support Saudi Arabia's mandatory warranty expectations.</div>
                 </div>
                 <div class="bg-white/70 backdrop-blur rounded-xl p-6 shadow-sm">
                     <div class="mb-3 flex justify-center md:justify-start">
-                        <i data-lucide="wrench" class="w-8 h-8 text-emerald-600"></i>
+                        <i data-lucide="building-2" class="w-8 h-8 text-emerald-600"></i>
                     </div>
-                    <div class="font-bold text-gray-900 mb-2">Right to Repair Ready</div>
-                    <div class="text-sm text-gray-600">Service history, parts hints, and authorized service-center information are available from a simple QR scan.</div>
+                    <div class="font-bold text-gray-900 mb-2">Kingdom Market Ready</div>
+                    <div class="text-sm text-gray-600">Designed for Saudi distributors, Arabic customer journeys, and regulated warranty documentation without adding operational complexity.</div>
                 </div>
                 <div class="bg-white/70 backdrop-blur rounded-xl p-6 shadow-sm">
                     <div class="mb-3 flex justify-center md:justify-start">
-                        <i data-lucide="file-check" class="w-8 h-8 text-emerald-600"></i>
+                        <i data-lucide="target" class="w-8 h-8 text-emerald-600"></i>
                     </div>
-                    <div class="font-bold text-gray-900 mb-2">Consumer Protection Act 2019</div>
-                    <div class="text-sm text-gray-600">Capture warranty coverage, service requests, resolutions, and customer confirmation in a complete audit-ready trail.</div>
+                    <div class="font-bold text-gray-900 mb-2">Vision 2030 Aligned</div>
+                    <div class="text-sm text-gray-600">Supports the Kingdom's digital-service goals with fast, smartphone-first customer interactions and stronger service accountability.</div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Trusted Technology -->
+    <!-- Social Proof / Trust -->
     <section class="py-20 px-6 bg-white">
         <div class="max-w-6xl mx-auto">
             <h2 class="text-4xl font-bold text-gray-900 text-center mb-4">Trusted Technology</h2>
-            <p class="text-xl text-gray-600 text-center mb-16">A proven platform, now adapted for India's QR-first warranty workflows</p>
+            <p class="text-xl text-gray-600 text-center mb-16">Proven platform already managing thousands of assets for leading organizations</p>
 
-            <div class="grid md:grid-cols-5 gap-6">
-                <div class="bg-gray-50 rounded-xl p-8 text-center">
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="bg-gray-50 rounded-xl p-8">
                     <div class="text-4xl font-bold text-purple-600 mb-2">5,000+</div>
                     <div class="text-gray-600">Assets Under Management</div>
                 </div>
-                <div class="bg-gray-50 rounded-xl p-8 text-center">
-                    <div class="text-4xl font-bold text-blue-600 mb-2">QR+NFC</div>
-                    <div class="text-gray-600">Dual-Mode Sticker Support</div>
-                </div>
-                <div class="bg-gray-50 rounded-xl p-8 text-center">
-                    <div class="text-4xl font-bold text-pink-600 mb-2">OTP</div>
-                    <div class="text-gray-600">Secured Ownership Verification</div>
-                </div>
-                <div class="bg-gray-50 rounded-xl p-8 text-center">
-                    <div class="text-4xl font-bold text-cyan-600 mb-2">95%</div>
+                <div class="bg-gray-50 rounded-xl p-8">
+                    <div class="text-4xl font-bold text-blue-600 mb-2">95%</div>
                     <div class="text-gray-600">User Satisfaction Rate</div>
                 </div>
-                <div class="bg-gray-50 rounded-xl p-8 text-center">
-                    <div class="text-4xl font-bold text-green-600 mb-2">HI + EN</div>
-                    <div class="text-gray-600">Hindi + English + More</div>
+                <div class="bg-gray-50 rounded-xl p-8">
+                    <div class="text-4xl font-bold text-green-600 mb-2">24/7</div>
+                    <div class="text-gray-600">Multi-Language Support</div>
                 </div>
             </div>
 
@@ -990,53 +1027,16 @@
                         <i data-lucide="lightbulb" class="w-12 h-12 text-purple-600"></i>
                     </div>
                     <div>
-                        <div class="text-xl font-bold text-gray-900 mb-3">Same Platform, New Warranty Layer</div>
+                        <div class="text-xl font-bold text-gray-900 mb-3">Same Platform, Warranty Extension</div>
                         <p class="text-gray-600 mb-4">
-                            FeedbackNFC already powers field-service workflows for live assets. This warranty experience extends the same
-                            zero-training model to point-of-sale activation, service claims, and manufacturer reimbursement.
+                            FeedbackNFC already powers asset maintenance for corporate facilities. Now we're extending 
+                            the same zero-training experience to manufacturer warranty programs. Proven technology, 
+                            new application.
                         </p>
                         <a href="https://asset.feedbacknfc.com" target="_blank" class="text-purple-600 font-semibold hover:text-purple-700">
                             See Corporate Platform →
                         </a>
                     </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Retail Activation -->
-    <section class="py-20 px-6 bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 text-white" style="background: linear-gradient(135deg, #0f172b 0%, #1d4ed8 45%, #312e81 100%); color: #ffffff;">
-        <div class="max-w-6xl mx-auto">
-            <div class="text-center mb-16">
-                <h2 class="text-4xl font-bold mb-4">Activate Warranty at the Counter - In 30 Seconds</h2>
-                <p class="text-xl text-blue-100 max-w-4xl mx-auto">
-                    Every product ships with two stickers: a carton label that says "Activate Warranty Now" and a product sticker that says
-                    "Scan for Warranty Service". At the point of sale, the salesman scans the carton label with the customer's phone, the customer verifies
-                    with OTP, and the warranty goes live instantly. No paperwork. No forgotten registrations. No warranty disputes.
-                </p>
-            </div>
-
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="rounded-2xl border border-white/10 bg-white/10 p-8 backdrop-blur" style="background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(12px);">
-                    <div class="mb-5 flex justify-center">
-                        <i data-lucide="scan-line" class="w-12 h-12 text-cyan-300"></i>
-                    </div>
-                    <div class="text-xl font-bold text-center mb-3">1. Salesman scans carton QR</div>
-                    <p class="text-sm text-blue-100 text-center">The carton sticker is clearly marked "Activate Warranty Now" so retail staff know it is the counter activation sticker.</p>
-                </div>
-                <div class="rounded-2xl border border-white/10 bg-white/10 p-8 backdrop-blur" style="background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(12px);">
-                    <div class="mb-5 flex justify-center">
-                        <i data-lucide="smartphone" class="w-12 h-12 text-cyan-300"></i>
-                    </div>
-                    <div class="text-xl font-bold text-center mb-3">2. Customer verifies with OTP</div>
-                    <p class="text-sm text-blue-100 text-center">Phone number verification locks ownership, prevents fake claims, and captures compliant proof of purchase.</p>
-                </div>
-                <div class="rounded-2xl border border-white/10 bg-white/10 p-8 backdrop-blur" style="background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(12px);">
-                    <div class="mb-5 flex justify-center">
-                        <i data-lucide="badge-check" class="w-12 h-12 text-cyan-300"></i>
-                    </div>
-                    <div class="text-xl font-bold text-center mb-3">3. Warranty activated instantly</div>
-                    <p class="text-sm text-blue-100 text-center">The customer leaves with a live digital warranty certificate and the manufacturer gets 100% registration.</p>
                 </div>
             </div>
         </div>
@@ -1053,12 +1053,12 @@
             <div class="bg-white/10 backdrop-blur-md rounded-2xl p-8 mb-12" style="background: rgba(255, 255, 255, 0.12); backdrop-filter: blur(12px);">
                 <h3 class="text-2xl font-bold mb-6">What's Included (Free)</h3>
                 <div class="grid md:grid-cols-2 gap-6 text-left">
-                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>1,000-5,000 QR smart stickers (or NFC+QR for premium products)</span></div>
+                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>500-1,000 NFC+QR smart stickers (customizable languages)</span></div>
                     <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Complete platform access for 3 months</span></div>
-                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Point-of-sale activation setup for your retail network</span></div>
-                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Carton QR labels for retail activation</span></div>
-                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Implementation support, onboarding, and weekly ROI reports</span></div>
-                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Hindi + English customer messaging and support</span></div>
+                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Implementation support and setup</span></div>
+                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Bilingual English + Arabic customer journeys</span></div>
+                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>Weekly ROI reports and service analytics</span></div>
+                    <div class="flex items-start"><svg class="w-6 h-6 text-green-300 mr-3 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg><span>QR fallback for full smartphone compatibility</span></div>
                 </div>
             </div>
 
@@ -1072,7 +1072,7 @@
             </div>
 
             <p class="text-white/80 mt-6 text-sm">
-                Limited availability for qualified manufacturers and distributors • No credit card required
+                Limited availability for qualified manufacturers and enterprises • No credit card required
             </p>
         </div>
     </section>
@@ -1086,148 +1086,143 @@
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         How does this differ from traditional warranty management software?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Traditional warranty software requires complex training, manual entry at every step, and still depends on phone calls
-                        for the initial request. FeedbackNFC replaces that with a scan-first flow: one carton sticker for activation, one product sticker for service, OTP verification, automated
-                        assignment, and complete documentation without the usual back-and-forth.
+                        Traditional warranty tools require training, manual entry, and phone calls just to start a service request.
+                        FeedbackNFC replaces that with a tap-first flow where the smart sticker opens the right experience instantly,
+                        technician assignment is automated, and documentation is captured as the work happens.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         Do customers need to download an app?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        No. It works with any smartphone - iPhone or Android. Customers simply scan the QR code with their phone camera and the
-                        warranty page opens instantly in the browser. No app download and no account creation.
+                        No! That's the beauty of NFC technology. When customers tap the sticker with their smartphone, 
+                        it opens directly in their mobile browser. No app download, no account creation, no barriers. 
+                        Works with any NFC-enabled phone (95%+ of smartphones in Saudi Arabia).
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
-                        How does the QR sticker work?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        What if a customer doesn't have an NFC-enabled phone?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Every product gets two smart stickers. The carton sticker says "Activate Warranty Now" and is used by the salesman at the counter with the customer's phone. The product sticker says "Scan for Warranty Service" and stays on the unit for service requests. Both open the right warranty page directly in the browser.
+                        Every NFC sticker also includes a QR code as backup. Customers can scan the code with their camera app
+                        and get the same experience, giving you full smartphone compatibility without changing the workflow.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         How does warranty activation work?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Warranty is activated right at the retail counter using the carton sticker marked "Activate Warranty Now." The product sticker is reserved for later service access. OTP verification records the real purchase owner and locks the true start date of warranty coverage.
+                        Warranty can start right at the point of sale using the carton sticker marked "Activate Warranty Now."
+                        The product sticker remains on the unit and is marked "Scan for Warranty Service" for future support.
+                        This gives you a clean separation between activation and after-sales service access.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         Can this integrate with our existing systems?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Yes. FeedbackNFC can integrate with ERP, CRM, CMMS, and warranty systems through APIs, or operate as a standalone platform.
-                        During the pilot, we assess your current setup and recommend the lowest-friction rollout.
+                        Yes! FeedbackNFC has API endpoints that can integrate with existing ERP, CMMS, and warranty management 
+                        systems. We can also work as a standalone platform if you prefer. During the pilot, we'll assess 
+                        your current systems and recommend the best integration approach.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         What's the pricing after the 3-month free pilot?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Pricing is based on the number of devices under warranty: ₹150-500 per device per year depending on volume. For a manufacturer
-                        selling 10,000 devices per year with 2-year warranties, the annual cost is typically ₹30-50 lakh. With service savings of
-                        roughly ₹1-2 crore annually, the ROI is generally 300-500%.
+                        Pricing is based on the number of devices under warranty: $2-6 per device per year, depending on
+                        volume. For a manufacturer selling 1,000 devices/year with 2-year warranties (2,000 devices under
+                        warranty at any time), the annual cost would be $6,000-12,000. Given that you'll save $60,000+
+                        annually, the ROI is 500-1000%. We'll provide exact pricing based on your volume during the pilot discussions.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
-                        How is the customer's identity verified?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        Is this compliant with Saudi warranty regulations?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Every warranty action is secured with phone OTP. When the customer activates warranty, they verify ownership with a one-time
-                        code. Future actions - like issue reporting or repair confirmation - require OTP re-verification, ensuring only the registered owner can act.
+                        Yes. FeedbackNFC captures warranty activation timestamps, proof of purchase date, service history, and customer confirmation
+                        to support Saudi warranty compliance and digital audit requirements.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
-                        Can warranty be activated at the retail store?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        Does it work in Arabic?
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        Yes. Every product can include a carton sticker marked "Activate Warranty Now" in addition to the tamper-evident product sticker marked "Scan for Warranty Service." At the counter, the salesman scans the carton sticker using the customer's phone, the customer verifies with OTP, and the warranty activates instantly before they leave the store.
-                    </p>
-                </details>
-
-                <details class="bg-gray-50 rounded-xl p-6 group">
-                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
-                        What sticker options are available?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </summary>
-                    <p class="text-gray-600 mt-4">
-                        We offer three modes: QR-only smart stickers (₹3-8 per unit for mass-market products), NFC+QR stickers (₹20-35 per unit for
-                        premium equipment), and NFC-only stickers for select workflows. All three connect to the same cloud platform.
-                    </p>
-                </details>
-
-                <details class="bg-gray-50 rounded-xl p-6 group">
-                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
-                        Does the platform work offline?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </summary>
-                    <p class="text-gray-600 mt-4">
-                        Yes. The technician experience is built as a Progressive Web App, so photos and field updates can queue locally when connectivity
-                        is poor and upload automatically when the connection returns.
-                    </p>
-                </details>
-
-                <details class="bg-gray-50 rounded-xl p-6 group">
-                    <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
-                        Is this compliant with Indian consumer protection regulations?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                    </summary>
-                    <p class="text-gray-600 mt-4">
-                        Yes. FeedbackNFC aligns with the CCPA's 2024 direction on warranty transparency, the Consumer Protection Act 2019, and the Right
-                        to Repair framework by keeping a complete digital record of activation, service requests, and resolutions.
+                        Yes. Customer-facing pages, notifications, and warranty certificates support both English and Arabic, and the Saudi landing
+                        page keeps a dedicated Arabic toggle.
                     </p>
                 </details>
 
                 <details class="bg-gray-50 rounded-xl p-6 group">
                     <summary class="font-bold text-lg text-gray-900 cursor-pointer flex justify-between items-center">
                         What happens if we're not satisfied after the pilot?
-                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
                     </summary>
                     <p class="text-gray-600 mt-4">
-                        You can walk away with no payment owed. The pilot is free, and the goal is to prove measurable operational value before any longer-term commitment.
+                        Simple: you walk away, no payment owed. The 3-month pilot is completely free with no strings attached.
                     </p>
                 </details>
             </div>
         </div>
     </section>
 
-    <!-- Final CTA -->
+    <!-- Final CTA - Simplified without form -->
     <section id="contact" class="py-20 px-6 bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white relative overflow-hidden" style="background: linear-gradient(135deg, #581c87 0%, #1e3a8a 50%, #312e81 100%); color: #ffffff;">
+        <!-- Decorative background elements -->
         <div class="absolute inset-0 opacity-10">
             <div class="absolute inset-0" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 40px 40px;"></div>
         </div>
 
         <div class="max-w-4xl mx-auto text-center relative z-10">
-            <h2 class="text-4xl md:text-5xl font-bold mb-6">Ready to Modernize Warranty Service in India?</h2>
+            <h2 class="text-4xl md:text-5xl font-bold mb-6">Ready to Transform Warranty Service Across the Kingdom?</h2>
             <p class="text-xl text-blue-100 mb-12">
-                Join manufacturers reducing service costs, improving consumer trust, and activating warranty at the moment of sale.
+                Join manufacturers and service partners delivering faster warranty response, stronger compliance,
+                and better customer service across Saudi Arabia.
             </p>
 
+            <!-- Simplified CTA Buttons -->
             <div class="flex flex-col sm:flex-row gap-6 justify-center">
                 <button onclick="openModal('pilot')" class="bg-white text-purple-900 px-10 py-5 rounded-xl font-semibold text-xl hover:bg-gray-100 transition-all transform hover:scale-105 shadow-2xl">
                     Apply for Free 3-Month Pilot
@@ -1237,8 +1232,10 @@
                 </button>
             </div>
 
-            <p class="text-blue-200 mt-8 text-sm">📍 Based in Bengaluru. Serving manufacturers across India.</p>
-            <p class="text-blue-100 mt-3 text-sm">Grobet India Agrotech Pvt Ltd · ml@feedbacknfc.com · +91 78999 10288</p>
+            <p class="text-blue-200 mt-8 text-sm">
+                📍 Serving manufacturers and enterprises across the Kingdom.
+            </p>
+            <p class="text-blue-100 mt-3 text-sm">ArkanPro Communications &amp; IT · Info@arkanpro.com · +966 53 421 2795</p>
         </div>
     </section>
 
@@ -1251,15 +1248,15 @@
                         <img src="https://feedbacknfc.com/logo.png" alt="FeedbackNFC Logo" class="h-12 w-auto">
                         <div class="text-white font-bold text-xl">FeedbackNFC</div>
                     </div>
-                    <p class="text-sm">QR-first warranty service without training. Built for manufacturers, distributors, retailers, and service centers across India.</p>
+                    <p class="text-sm">Tap-first warranty service for manufacturers, distributors, and service centers across Saudi Arabia.</p>
                 </div>
                 <div>
                     <div class="text-white font-semibold mb-4">Solutions</div>
                     <ul class="space-y-2 text-sm">
-                        <li><a href="#features" class="hover:text-white transition-colors">Warranty Management</a></li>
-                        <li><a href="#how-it-works" class="hover:text-white transition-colors">QR Activation Flow</a></li>
-                        <li><a href="#perfect-for" class="hover:text-white transition-colors">Industry Verticals</a></li>
-                        <li><a href="#faq" class="hover:text-white transition-colors">FAQ & Pricing</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Warranty Management</a></li>
+                        <li><a href="#how-it-works" class="hover:text-white transition-colors">How It Works</a></li>
+                        <li><a href="#faq" class="hover:text-white transition-colors">FAQ</a></li>
+                        <li><a href="#contact" class="hover:text-white transition-colors">Request Demo</a></li>
                     </ul>
                 </div>
                 <div>
@@ -1268,23 +1265,23 @@
                         <li><a href="#contact" class="hover:text-white transition-colors">Contact</a></li>
                         <li><a href="#" class="hover:text-white transition-colors">Free Pilot Program</a></li>
                         <li><a href="/sign-in" class="hover:text-white transition-colors">Sign In</a></li>
-                        <li><a href="mailto:ml@feedbacknfc.com" class="hover:text-white transition-colors">ml@feedbacknfc.com</a></li>
+                        <li><a href="mailto:Info@arkanpro.com" class="hover:text-white transition-colors">Info@arkanpro.com</a></li>
                     </ul>
                 </div>
                 <div>
-                    <div class="text-white font-semibold mb-4">India Presence</div>
+                    <div class="text-white font-semibold mb-4">Saudi Presence</div>
                     <ul class="space-y-2 text-sm">
-                        <li>Grobet India Agrotech Pvt Ltd</li>
-                        <li>Bengaluru, India</li>
-                        <li><a href="tel:+917899910288" class="hover:text-white transition-colors">+91 78999 10288</a></li>
-                        <li>CCPA-ready warranty workflows</li>
+                        <li>ArkanPro Communications &amp; IT</li>
+                        <li>Riyadh · Al Khobar · Jubail Industrial</li>
+                        <li><a href="tel:+966534212795" class="hover:text-white transition-colors">+966 53 421 2795</a></li>
+                        <li>English + Arabic support</li>
                     </ul>
                 </div>
             </div>
             
             <div class="border-t border-gray-800 pt-8 text-center text-sm">
                 <p>&copy; 2025 FeedbackNFC. All rights reserved.</p>
-                <p class="mt-2 text-gray-500">Built for India's warranty regulations and QR-first customer journeys.</p>
+                <p class="mt-2 text-gray-500">Built for Saudi warranty workflows and bilingual customer experiences.</p>
             </div>
         </div>
     </footer>

@@ -1,21 +1,25 @@
 import Script from "next/script";
 
+import WarrantyChat from "@/components/WarrantyChat";
 import {
   loadLandingPageContent,
   type LandingLanguage,
+  type LandingRegion,
 } from "@/lib/landing-page";
 
 interface MarketingPageProps {
-  searchParams?: Promise<{ lang?: string }>;
+  searchParams?: Promise<{ lang?: string; region?: string }>;
 }
 
 export default async function MarketingPage({
   searchParams,
 }: MarketingPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const region: LandingRegion =
+    resolvedSearchParams?.region === "sa" ? "sa" : "in";
   const lang: LandingLanguage =
-    resolvedSearchParams?.lang === "ar" ? "ar" : "en";
-  const pageContent = await loadLandingPageContent(lang);
+    region === "sa" && resolvedSearchParams?.lang === "ar" ? "ar" : "en";
+  const pageContent = await loadLandingPageContent(region, lang);
 
   return (
     <>
@@ -42,6 +46,8 @@ export default async function MarketingPage({
           dangerouslySetInnerHTML={{ __html: pageContent.scriptJs }}
         />
       ) : null}
+
+      <WarrantyChat />
     </>
   );
 }

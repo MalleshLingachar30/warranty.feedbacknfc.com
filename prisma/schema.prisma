@@ -170,6 +170,21 @@ model User {
   @@map("users")
 }
 
+model ChatLead {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId String   @unique @default(dbgenerated("gen_random_uuid()")) @map("session_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  email     String   @db.VarChar(255)
+  phone     String   @db.VarChar(32)
+  company   String   @db.VarChar(255)
+  country   String   @db.VarChar(100)
+  language  String   @db.VarChar(100)
+  userType  String   @map("user_type") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("chat_leads")
+}
+
 model ProductModel {
   id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId            String   @map("organization_id") @db.Uuid
