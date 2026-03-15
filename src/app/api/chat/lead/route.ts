@@ -22,6 +22,7 @@ const ALLOWED_USER_TYPES = [
 
 const ALLOWED_LANGUAGES = [
   "English",
+  "Arabic (العربية)",
   "Hindi (हिन्दी)",
   "Kannada (ಕನ್ನಡ)",
   "Tamil (தமிழ்)",

@@ -74,6 +74,7 @@ const USER_TYPES = [
 
 const LANGUAGES = [
   "English",
+  "Arabic (العربية)",
   "Hindi (हिन्दी)",
   "Kannada (ಕನ್ನಡ)",
   "Tamil (தமிழ்)",
