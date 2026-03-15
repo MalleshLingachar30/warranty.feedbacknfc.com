@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 const ALLOWED_COUNTRIES = [
   "India",
   "UAE",
-  "Saudi Arabia",
+  "MENA Region",
   "USA",
   "UK",
   "Singapore",

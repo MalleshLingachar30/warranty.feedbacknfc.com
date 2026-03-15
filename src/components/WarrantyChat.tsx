@@ -57,7 +57,7 @@ const QUICK_LINKS = [
 const COUNTRIES = [
   "India",
   "UAE",
-  "Saudi Arabia",
+  "MENA Region",
   "USA",
   "UK",
   "Singapore",
