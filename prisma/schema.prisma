@@ -316,6 +316,7 @@ model ServiceCenter {
   technicians     Technician[]
   assignedTickets Ticket[]     @relation("AssignedServiceCenterTickets")
 
+  @@index([organizationId], map: "idx_service_centers_organization")
   @@index([location], type: Gist, map: "idx_service_centers_location")
   @@map("service_centers")
 }
@@ -341,6 +342,7 @@ model Technician {
   serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
   assignedTickets Ticket[]      @relation("AssignedTechnicianTickets")
 
+  @@index([serviceCenterId], map: "idx_technicians_service_center")
   @@map("technicians")
 }
 
@@ -395,6 +397,7 @@ model Ticket {
   @@index([status], map: "idx_tickets_status")
   @@index([productId], map: "idx_tickets_product")
   @@index([assignedTechnicianId], map: "idx_tickets_technician")
+  @@index([assignedServiceCenterId], map: "idx_tickets_service_center")
   @@map("tickets")
 }
 
@@ -431,6 +434,7 @@ model WarrantyClaim {
   serviceCenterOrg Organization @relation("ServiceCenterOrganizationClaims", fields: [serviceCenterOrgId], references: [id])
   approvedBy       User?        @relation("ClaimApprover", fields: [approvedById], references: [id])
 
+  @@index([serviceCenterOrgId], map: "idx_warranty_claims_service_center_org")
   @@map("warranty_claims")
 }
 
