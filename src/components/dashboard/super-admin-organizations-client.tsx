@@ -712,6 +712,7 @@ export function SuperAdminOrganizationsClient({
         </div>
       ) : null}
 
+      {!selectedOrganization ? (
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="border-slate-200">
           <CardHeader>
@@ -1052,6 +1053,7 @@ export function SuperAdminOrganizationsClient({
           </CardContent>
         </Card>
       </div>
+      ) : null}
 
       {actionError ? (
         <p className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
