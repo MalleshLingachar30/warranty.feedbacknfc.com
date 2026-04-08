@@ -20,6 +20,7 @@ export default async function DashboardPage() {
     sessionClaims,
   });
   const navItems = NAVIGATION_BY_ROLE[role] ?? [];
+  const workspaceItems = navItems.filter((item) => item.href !== "/dashboard");
 
   if (role === "manufacturer_admin") {
     redirect("/dashboard/manufacturer");
@@ -51,7 +52,7 @@ export default async function DashboardPage() {
           <CardTitle>Workspace</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
-          {navItems.map((item) => {
+          {workspaceItems.map((item) => {
             const Icon = item.icon;
 
             return (
