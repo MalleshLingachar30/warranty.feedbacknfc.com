@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 
 import { assignTechnician } from "@/lib/ai-assignment";
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db as prisma } from "@/lib/db";
-import { authorizeOwnerAccess } from "@/lib/otp-session";
+import { authorizeOwnerAccess, normalizePhone } from "@/lib/otp-session";
 import { writeScanLog } from "@/lib/scan-log";
 import { computeSlaDeadlines, runSlaSweep } from "@/lib/sla-engine";
 import {
@@ -26,9 +27,7 @@ interface CreateTicketRequest {
   customerPhone?: string;
 }
 
-function normalizePhone(phone: string): string {
-  return phone.replace(/[^\d+]/g, "");
-}
+const MAX_TICKET_NUMBER_ATTEMPTS = 5;
 
 function normalizeSeverity(value: string | undefined) {
   if (
@@ -67,20 +66,59 @@ function syntheticCustomerClerkId(phone: string): string {
 async function generateTicketNumber(): Promise<string> {
   const now = new Date();
   const year = now.getFullYear();
+  const ticketNumberPrefix = `WRT-${year}-`;
 
-  const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
-  const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-
-  const count = await prisma.ticket.count({
+  const latestTicketForYear = await prisma.ticket.findFirst({
     where: {
-      createdAt: {
-        gte: yearStart,
-        lt: yearEnd,
+      ticketNumber: {
+        startsWith: ticketNumberPrefix,
       },
     },
+    orderBy: {
+      ticketNumber: "desc",
+    },
+    select: {
+      ticketNumber: true,
+    },
   });
+  const latestSequence = latestTicketForYear?.ticketNumber.match(
+    new RegExp(`^WRT-${year}-(\\d+)$`),
+  );
+  const nextSequence =
+    latestSequence && latestSequence[1]
+      ? Number.parseInt(latestSequence[1], 10) + 1
+      : 1;
 
-  return `WRT-${year}-${String(count + 1).padStart(6, "0")}`;
+  return `WRT-${year}-${String(nextSequence).padStart(6, "0")}`;
+}
+
+function isTicketNumberUniqueCollision(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  if (typeof target === "string") {
+    return (
+      target.includes("ticketNumber") ||
+      target.includes("ticket_number") ||
+      target.includes("tickets_ticket_number_key")
+    );
+  }
+
+  if (Array.isArray(target)) {
+    return target.some(
+      (entry) =>
+        typeof entry === "string" &&
+        (entry.includes("ticketNumber") || entry.includes("ticket_number")),
+    );
+  }
+
+  return false;
 }
 
 export async function POST(request: Request) {
@@ -220,46 +258,90 @@ export async function POST(request: Request) {
         },
       }));
 
-    const ticketNumber = await generateTicketNumber();
-    const ticketId = crypto.randomUUID();
     const reportedAt = new Date();
     const deadlines = computeSlaDeadlines({
       reportedAt,
       issueSeverity,
       organizationSettings: product.organization.settings,
     });
+    let ticket:
+      | {
+          id: string;
+          ticketNumber: string;
+        }
+      | null = null;
 
-    const [ticket] = await prisma.$transaction([
-      prisma.ticket.create({
-        data: {
-          id: ticketId,
-          ticketNumber,
-          productId: product.id,
-          stickerId: product.stickerId,
-          reportedByUserId: customerUser.id,
-          reportedByName: reportedByName ?? customerUser.name ?? "Customer",
-          reportedByPhone: normalizedPhone,
-          issueCategory: body.issueCategory ?? null,
-          issueDescription: body.issueDescription,
-          issuePhotos,
-          issueSeverity,
-          status: "reported",
-          reportedAt,
-          slaResponseDeadline: deadlines.responseDeadline,
-          slaResolutionDeadline: deadlines.resolutionDeadline,
-        },
-      }),
-      prisma.ticketTimeline.create({
-        data: {
-          ticketId,
-          eventType: "created",
-          eventDescription: "Service request created by customer.",
-          actorUserId: ownerAccess.userId ?? customerUser.id,
-          actorRole: "customer",
-          actorName: reportedByName ?? customerUser.name ?? "Customer",
-        },
-      }),
-    ]);
+    for (let attempt = 0; attempt < MAX_TICKET_NUMBER_ATTEMPTS; attempt += 1) {
+      const ticketNumber = await generateTicketNumber();
+      const ticketId = crypto.randomUUID();
+
+      try {
+        const [createdTicket] = await prisma.$transaction([
+          prisma.ticket.create({
+            data: {
+              id: ticketId,
+              ticketNumber,
+              productId: product.id,
+              stickerId: product.stickerId,
+              reportedByUserId: customerUser.id,
+              reportedByName: reportedByName ?? customerUser.name ?? "Customer",
+              reportedByPhone: normalizedPhone,
+              issueCategory: body.issueCategory ?? null,
+              issueDescription: body.issueDescription,
+              issuePhotos,
+              issueSeverity,
+              status: "reported",
+              reportedAt,
+              slaResponseDeadline: deadlines.responseDeadline,
+              slaResolutionDeadline: deadlines.resolutionDeadline,
+            },
+            select: {
+              id: true,
+              ticketNumber: true,
+            },
+          }),
+          prisma.ticketTimeline.create({
+            data: {
+              ticketId,
+              eventType: "created",
+              eventDescription: "Service request created by customer.",
+              actorUserId: ownerAccess.userId ?? customerUser.id,
+              actorRole: "customer",
+              actorName: reportedByName ?? customerUser.name ?? "Customer",
+            },
+          }),
+        ]);
+
+        ticket = createdTicket;
+        break;
+      } catch (error) {
+        if (
+          isTicketNumberUniqueCollision(error) &&
+          attempt < MAX_TICKET_NUMBER_ATTEMPTS - 1
+        ) {
+          continue;
+        }
+
+        if (isTicketNumberUniqueCollision(error)) {
+          return NextResponse.json(
+            {
+              error:
+                "Ticket number allocation conflicted. Please retry ticket creation.",
+            },
+            { status: 503 },
+          );
+        }
+
+        throw error;
+      }
+    }
+
+    if (!ticket) {
+      return NextResponse.json(
+        { error: "Unable to allocate a ticket number. Please retry." },
+        { status: 503 },
+      );
+    }
 
     let assignment:
       | {

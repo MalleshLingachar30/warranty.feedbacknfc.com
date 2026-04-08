@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { type Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db as prisma } from "@/lib/db";
@@ -32,6 +32,14 @@ async function resolveParams(context: RouteContext): Promise<{ id: string }> {
 }
 
 const DEFAULT_LABOR_RATE_PER_HOUR = 550;
+const MAX_CLAIM_NUMBER_ATTEMPTS = 5;
+
+class ClaimNumberCollisionError extends Error {
+  constructor() {
+    super("Unable to allocate a unique claim number.");
+    this.name = "ClaimNumberCollisionError";
+  }
+}
 
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -169,19 +177,59 @@ async function generateClaimNumber(
 ): Promise<string> {
   const now = new Date();
   const year = now.getUTCFullYear();
-  const yearStart = new Date(Date.UTC(year, 0, 1));
-  const yearEnd = new Date(Date.UTC(year + 1, 0, 1));
+  const claimNumberPrefix = `CLM-${year}-`;
 
-  const count = await tx.warrantyClaim.count({
+  const latestClaimForYear = await tx.warrantyClaim.findFirst({
     where: {
-      createdAt: {
-        gte: yearStart,
-        lt: yearEnd,
+      claimNumber: {
+        startsWith: claimNumberPrefix,
       },
     },
+    orderBy: {
+      claimNumber: "desc",
+    },
+    select: {
+      claimNumber: true,
+    },
   });
+  const latestSequence = latestClaimForYear?.claimNumber.match(
+    new RegExp(`^CLM-${year}-(\\d+)$`),
+  );
+  const nextSequence =
+    latestSequence && latestSequence[1]
+      ? Number.parseInt(latestSequence[1], 10) + 1
+      : 1;
 
-  return `CLM-${year}-${String(count + 1).padStart(6, "0")}`;
+  return `CLM-${year}-${String(nextSequence).padStart(6, "0")}`;
+}
+
+function isClaimNumberUniqueCollision(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  if (typeof target === "string") {
+    return (
+      target.includes("claimNumber") ||
+      target.includes("claim_number") ||
+      target.includes("warranty_claims_claim_number_key")
+    );
+  }
+
+  if (Array.isArray(target)) {
+    return target.some(
+      (entry) =>
+        typeof entry === "string" &&
+        (entry.includes("claimNumber") || entry.includes("claim_number")),
+    );
+  }
+
+  return false;
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -406,8 +454,6 @@ export async function POST(request: Request, context: RouteContext) {
           const hasGpsLocation =
             Number.isFinite(gpsLocation.latitude) &&
             Number.isFinite(gpsLocation.longitude);
-
-          const claimNumber = await generateClaimNumber(tx);
           const claimId = crypto.randomUUID();
           const reportPath = `/api/claim/${claimId}/report?download=1`;
           const reportUrl = buildAbsoluteWarrantyUrl(reportPath);
@@ -458,136 +504,164 @@ export async function POST(request: Request, context: RouteContext) {
             (photo) => typeof photo === "string" && photo.trim().length > 0,
           );
 
-          const documentationPayload: Prisma.InputJsonValue = {
-            claimNumber,
-            generatedAt: now.toISOString(),
-            generatedAtLabel: formatDateLabel(now),
-            ticket: {
-              ticketId: ticket.id,
-              ticketNumber: ticket.ticketNumber,
-              issueCategory: ticket.issueCategory ?? "General issue",
-              issueDescription: ticket.issueDescription,
-              issueSeverity: ticket.issueSeverity,
-              reportedByName: ticket.reportedByName,
-              reportedByPhone: ticket.reportedByPhone,
-            },
-            manufacturer: {
-              organizationId: ticket.product.organizationId,
-              name: ticket.product.organization.name,
-              logoUrl: ticket.product.organization.logoUrl,
-            },
-            serviceCenter: {
-              organizationId: serviceCenterOrgId,
-              name: ticket.assignedServiceCenter?.name ?? "Service Center",
-            },
-            product: {
-              productId: ticket.productId,
-              name: ticket.product.productModel.name,
-              modelNumber: ticket.product.productModel.modelNumber,
-              serialNumber: ticket.product.serialNumber,
-              warrantyStartDate: ticket.product.warrantyStartDate?.toISOString() ?? null,
-              warrantyEndDate: ticket.product.warrantyEndDate?.toISOString() ?? null,
-              stickerNumber: ticket.product.sticker.stickerNumber,
-            },
-            customer: {
-              name: ticket.product.customerName ?? ticket.reportedByName ?? "Customer",
-              phone: ticket.product.customerPhone ?? ticket.reportedByPhone,
-              email: ticket.product.customerEmail,
-              address: ticket.product.customerAddress,
-              city: ticket.product.customerCity,
-              state: ticket.product.customerState,
-              pincode: ticket.product.customerPincode,
-            },
-            technician: {
-              name: ticket.assignedTechnician?.name ?? null,
-              phone: ticket.assignedTechnician?.phone ?? null,
-            },
-            notes: {
-              technicianResolution: ticket.resolutionNotes ?? "",
-              customerConfirmation: body.comment ?? "Customer confirmed service resolution.",
-            },
-            photos: {
-              issue: issuePhotos,
-              before: completionPhotos.beforePhotos,
-              after: completionPhotos.afterPhotos,
-              resolution: resolutionPhotos,
-              all: [
-                ...issuePhotos,
-                ...completionPhotos.beforePhotos,
-                ...completionPhotos.afterPhotos,
-                ...resolutionPhotos,
-              ].filter((photo, index, all) => all.indexOf(photo) === index),
-            },
-            partsUsed: partsDetailed,
-            labor: {
-              hours: Number(laborHours.toFixed(2)),
-              ratePerHour: DEFAULT_LABOR_RATE_PER_HOUR,
-              cost: Number(laborCost.toFixed(2)),
-            },
-            claimAmount: {
-              partsCost: Number(partsCost.toFixed(2)),
-              laborCost: Number(laborCost.toFixed(2)),
-              total: totalClaimAmount,
-              currency: "INR",
-            },
-            timeline: {
-              workflow: workflowTimestamps,
-              events: timelineEvents,
-            },
-            links: {
-              claimReportPath: reportPath,
-              claimReportUrl: reportUrl,
-              nfcPath,
-              nfcUrl,
-            },
-            gpsLocation: hasGpsLocation
-              ? {
-                  latitude: Number(gpsLocation.latitude.toFixed(6)),
-                  longitude: Number(gpsLocation.longitude.toFixed(6)),
-                }
-              : null,
-          };
+          for (let attempt = 0; attempt < MAX_CLAIM_NUMBER_ATTEMPTS; attempt += 1) {
+            const claimNumber = await generateClaimNumber(tx);
 
-          const createdClaim = await tx.warrantyClaim.create({
-            data: {
-              id: claimId,
+            const documentationPayload: Prisma.InputJsonValue = {
               claimNumber,
-              ticketId: ticket.id,
-              productId: ticket.productId,
-              manufacturerOrgId: ticket.product.organizationId,
-              serviceCenterOrgId,
-              claimType: "warranty_repair",
-              partsCost: Number(partsCost.toFixed(2)),
-              laborCost: Number(laborCost.toFixed(2)),
-              totalClaimAmount,
-              documentation: documentationPayload,
-              documentationPdfUrl: reportPath,
-              status: "auto_generated",
-            },
-            select: {
-              id: true,
-              claimNumber: true,
-            },
-          });
+              generatedAt: now.toISOString(),
+              generatedAtLabel: formatDateLabel(now),
+              ticket: {
+                ticketId: ticket.id,
+                ticketNumber: ticket.ticketNumber,
+                issueCategory: ticket.issueCategory ?? "General issue",
+                issueDescription: ticket.issueDescription,
+                issueSeverity: ticket.issueSeverity,
+                reportedByName: ticket.reportedByName,
+                reportedByPhone: ticket.reportedByPhone,
+              },
+              manufacturer: {
+                organizationId: ticket.product.organizationId,
+                name: ticket.product.organization.name,
+                logoUrl: ticket.product.organization.logoUrl,
+              },
+              serviceCenter: {
+                organizationId: serviceCenterOrgId,
+                name: ticket.assignedServiceCenter?.name ?? "Service Center",
+              },
+              product: {
+                productId: ticket.productId,
+                name: ticket.product.productModel.name,
+                modelNumber: ticket.product.productModel.modelNumber,
+                serialNumber: ticket.product.serialNumber,
+                warrantyStartDate:
+                  ticket.product.warrantyStartDate?.toISOString() ?? null,
+                warrantyEndDate:
+                  ticket.product.warrantyEndDate?.toISOString() ?? null,
+                stickerNumber: ticket.product.sticker.stickerNumber,
+              },
+              customer: {
+                name: ticket.product.customerName ?? ticket.reportedByName ?? "Customer",
+                phone: ticket.product.customerPhone ?? ticket.reportedByPhone,
+                email: ticket.product.customerEmail,
+                address: ticket.product.customerAddress,
+                city: ticket.product.customerCity,
+                state: ticket.product.customerState,
+                pincode: ticket.product.customerPincode,
+              },
+              technician: {
+                name: ticket.assignedTechnician?.name ?? null,
+                phone: ticket.assignedTechnician?.phone ?? null,
+              },
+              notes: {
+                technicianResolution: ticket.resolutionNotes ?? "",
+                customerConfirmation:
+                  body.comment ?? "Customer confirmed service resolution.",
+              },
+              photos: {
+                issue: issuePhotos,
+                before: completionPhotos.beforePhotos,
+                after: completionPhotos.afterPhotos,
+                resolution: resolutionPhotos,
+                all: [
+                  ...issuePhotos,
+                  ...completionPhotos.beforePhotos,
+                  ...completionPhotos.afterPhotos,
+                  ...resolutionPhotos,
+                ].filter((photo, index, all) => all.indexOf(photo) === index),
+              },
+              partsUsed: partsDetailed,
+              labor: {
+                hours: Number(laborHours.toFixed(2)),
+                ratePerHour: DEFAULT_LABOR_RATE_PER_HOUR,
+                cost: Number(laborCost.toFixed(2)),
+              },
+              claimAmount: {
+                partsCost: Number(partsCost.toFixed(2)),
+                laborCost: Number(laborCost.toFixed(2)),
+                total: totalClaimAmount,
+                currency: "INR",
+              },
+              timeline: {
+                workflow: workflowTimestamps,
+                events: timelineEvents,
+              },
+              links: {
+                claimReportPath: reportPath,
+                claimReportUrl: reportUrl,
+                nfcPath,
+                nfcUrl,
+              },
+              gpsLocation: hasGpsLocation
+                ? {
+                    latitude: Number(gpsLocation.latitude.toFixed(6)),
+                    longitude: Number(gpsLocation.longitude.toFixed(6)),
+                  }
+                : null,
+            };
 
-          generatedClaim = createdClaim;
+            try {
+              const createdClaim = await tx.warrantyClaim.create({
+                data: {
+                  id: claimId,
+                  claimNumber,
+                  ticketId: ticket.id,
+                  productId: ticket.productId,
+                  manufacturerOrgId: ticket.product.organizationId,
+                  serviceCenterOrgId,
+                  claimType: "warranty_repair",
+                  partsCost: Number(partsCost.toFixed(2)),
+                  laborCost: Number(laborCost.toFixed(2)),
+                  totalClaimAmount,
+                  documentation: documentationPayload,
+                  documentationPdfUrl: reportPath,
+                  status: "auto_generated",
+                },
+                select: {
+                  id: true,
+                  claimNumber: true,
+                },
+              });
 
-          await tx.ticket.update({
-            where: { id: ticket.id },
-            data: {
-              claimId: createdClaim.id,
-            },
-          });
+              generatedClaim = createdClaim;
 
-          await tx.ticketTimeline.create({
-            data: {
-              ticketId: ticket.id,
-              eventType: "claim_auto_generated",
-              eventDescription: `Warranty claim ${createdClaim.claimNumber} auto-generated after customer confirmation.`,
-              actorRole: "system",
-              actorName: "Warranty Engine",
-            },
-          });
+              await tx.ticket.update({
+                where: { id: ticket.id },
+                data: {
+                  claimId: createdClaim.id,
+                },
+              });
+
+              await tx.ticketTimeline.create({
+                data: {
+                  ticketId: ticket.id,
+                  eventType: "claim_auto_generated",
+                  eventDescription: `Warranty claim ${createdClaim.claimNumber} auto-generated after customer confirmation.`,
+                  actorRole: "system",
+                  actorName: "Warranty Engine",
+                },
+              });
+
+              break;
+            } catch (error) {
+              if (
+                isClaimNumberUniqueCollision(error) &&
+                attempt < MAX_CLAIM_NUMBER_ATTEMPTS - 1
+              ) {
+                continue;
+              }
+
+              if (isClaimNumberUniqueCollision(error)) {
+                throw new ClaimNumberCollisionError();
+              }
+
+              throw error;
+            }
+          }
+
+          if (!generatedClaim) {
+            throw new ClaimNumberCollisionError();
+          }
         }
 
         return {
@@ -667,6 +741,16 @@ export async function POST(request: Request, context: RouteContext) {
       ticket: reopenedTicket,
     });
   } catch (error) {
+    if (error instanceof ClaimNumberCollisionError) {
+      return NextResponse.json(
+        {
+          error:
+            "Claim number allocation conflicted. Please retry confirmation.",
+        },
+        { status: 503 },
+      );
+    }
+
     console.error("Ticket confirmation failed", error);
     return NextResponse.json(
       { error: "Unable to update ticket status." },
