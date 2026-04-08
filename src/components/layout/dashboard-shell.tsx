@@ -23,6 +23,7 @@ import { NAVIGATION_BY_ROLE, type AppRole, getRoleLabel } from "@/lib/roles";
 interface DashboardShellProps {
   role: AppRole;
   organizationName?: string | null;
+  userDisplayName?: string | null;
   children: React.ReactNode;
 }
 
@@ -66,9 +67,12 @@ function SidebarNav({
 export function DashboardShell({
   role,
   organizationName,
+  userDisplayName,
   children,
 }: DashboardShellProps) {
   const roleLabel = getRoleLabel(role);
+  const secondaryLabel =
+    role === "technician" && userDisplayName ? userDisplayName : roleLabel;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -84,7 +88,7 @@ export function DashboardShell({
                 {organizationName}
               </p>
             ) : null}
-            <p className="text-xs text-slate-500">{roleLabel}</p>
+            <p className="text-xs text-slate-500">{secondaryLabel}</p>
           </div>
           <Separator className="mb-4" />
           <SidebarNav role={role} />
@@ -111,10 +115,10 @@ export function DashboardShell({
                             <span className="text-sm font-medium text-slate-700">
                               {organizationName}
                             </span>
-                            <span>{roleLabel}</span>
+                            <span>{secondaryLabel}</span>
                           </span>
                         ) : (
-                          roleLabel
+                          secondaryLabel
                         )}
                       </SheetDescription>
                     </SheetHeader>

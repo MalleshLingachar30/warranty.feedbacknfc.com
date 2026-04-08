@@ -35,7 +35,11 @@ export default async function DashboardLayout({
     : null;
 
   return (
-    <DashboardShell role={role} organizationName={organizationName}>
+    <DashboardShell
+      role={role}
+      organizationName={organizationName}
+      userDisplayName={dbUser.name}
+    >
       {children}
     </DashboardShell>
   );
