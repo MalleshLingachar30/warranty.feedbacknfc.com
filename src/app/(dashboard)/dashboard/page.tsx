@@ -29,6 +29,10 @@ export default async function DashboardPage() {
     redirect("/dashboard/customer");
   }
 
+  if (role === "super_admin") {
+    redirect("/dashboard/settings");
+  }
+
   const showDevRoleSwitcher = process.env.NODE_ENV === "development";
 
   return (
