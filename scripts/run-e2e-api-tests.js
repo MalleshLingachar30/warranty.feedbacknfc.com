@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { execSync } = require("node:child_process");
 const { PrismaClient } = require("@prisma/client");
+const { assertSafeE2EDatabase } = require("./lib/e2e-db-guard");
 
 const baseUrl = process.env.E2E_BASE_URL || "http://localhost:3000";
 const WARRANTY_SESSION_COOKIE_NAME = "warranty_session";
@@ -104,6 +105,8 @@ async function issueVerifiedOwnerSession(prisma, productId, phone) {
 }
 
 async function main() {
+  assertSafeE2EDatabase({ scope: "run-e2e-api-tests.js" });
+
   console.log("Using base URL:", baseUrl);
 
   if (process.env.E2E_SKIP_DB_PUSH === "1") {
