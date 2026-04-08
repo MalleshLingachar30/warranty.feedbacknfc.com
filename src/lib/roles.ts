@@ -35,7 +35,6 @@ export interface NavigationItem {
 
 export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
   super_admin: [
-    { label: "Dashboard", href: "/dashboard", icon: Gauge },
     { label: "Organizations", href: "/dashboard/settings", icon: ShieldCheck },
   ],
   manufacturer_admin: [
