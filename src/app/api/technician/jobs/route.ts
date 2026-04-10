@@ -423,6 +423,21 @@ export async function GET() {
     const completedTickets = tickets.filter((ticket) =>
       COMPLETED_STATUSES.includes(ticket.status),
     );
+    const ratedCompletedTickets = completedTickets.filter((ticket) =>
+      Number.isInteger(ticket.customerServiceRating),
+    );
+    const ratedJobsCount = ratedCompletedTickets.length;
+    const customerRating =
+      ratedJobsCount > 0
+        ? Number(
+            (
+              ratedCompletedTickets.reduce(
+                (sum, ticket) => sum + (ticket.customerServiceRating ?? 0),
+                0,
+              ) / ratedJobsCount
+            ).toFixed(1),
+          )
+        : 0;
 
     const jobsCompletedThisWeek = completedTickets.filter((ticket) => {
       return Boolean(
@@ -456,7 +471,8 @@ export async function GET() {
         jobsCompletedThisWeek,
         jobsCompletedThisMonth,
         averageResolutionTimeHours: averageResolutionHours(tickets),
-        customerRating: Number(toNumber(technician.rating, 0).toFixed(1)),
+        customerRating,
+        ratedJobsCount,
         totalClaimsValueGenerated: Number(totalClaimsValueGenerated.toFixed(2)),
       },
       generatedAt: new Date().toISOString(),

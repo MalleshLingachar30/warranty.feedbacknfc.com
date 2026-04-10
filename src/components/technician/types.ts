@@ -68,6 +68,7 @@ export interface TechnicianPerformance {
   jobsCompletedThisMonth: number;
   averageResolutionTimeHours: number;
   customerRating: number;
+  ratedJobsCount: number;
   totalClaimsValueGenerated: number;
 }
 

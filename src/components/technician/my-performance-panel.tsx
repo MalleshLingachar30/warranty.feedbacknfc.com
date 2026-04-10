@@ -166,14 +166,20 @@ export function MyPerformancePanel() {
 
         <Card className="border-slate-200">
           <CardHeader className="pb-2">
-            <CardDescription>Customer Rating</CardDescription>
+            <CardDescription>Customer Service Rating</CardDescription>
             <CardTitle className="text-3xl">
-              {performance.customerRating.toFixed(1)}
+              {performance.ratedJobsCount > 0
+                ? performance.customerRating.toFixed(1)
+                : "-"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-slate-600">
             <StarRating value={performance.customerRating} />
-            <p>Based on technician profile and confirmed service outcomes.</p>
+            <p>
+              {performance.ratedJobsCount > 0
+                ? `Based on ${performance.ratedJobsCount.toLocaleString()} customer-confirmed service rating${performance.ratedJobsCount === 1 ? "" : "s"}.`
+                : "No customer-confirmed service ratings yet."}
+            </p>
           </CardContent>
         </Card>
 

@@ -37,6 +37,12 @@ type TechnicianResolutionRow = {
   avgResolutionHours: number | null;
 };
 
+type TechnicianServiceRatingRow = {
+  technicianId: string;
+  avgCustomerServiceRating: number | null;
+  ratedJobsCount: number;
+};
+
 export default async function ServiceCenterTechniciansPage() {
   const { organizationId } = await resolveServiceCenterPageContext();
 
@@ -48,33 +54,33 @@ export default async function ServiceCenterTechniciansPage() {
     );
   }
 
-  const [technicians, resolutionRows, serviceCenters] = await Promise.all([
-    db.technician.findMany({
-      where: {
-        serviceCenter: {
-          organizationId,
-        },
-      },
-      orderBy: [{ isAvailable: "desc" }, { name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        skills: true,
-        isAvailable: true,
-        activeJobCount: true,
-        maxConcurrentJobs: true,
-        totalJobsCompleted: true,
-        rating: true,
-        serviceCenter: {
-          select: {
-            name: true,
-            city: true,
+  const [technicians, resolutionRows, serviceRatingRows, serviceCenters] =
+    await Promise.all([
+      db.technician.findMany({
+        where: {
+          serviceCenter: {
+            organizationId,
           },
         },
-      },
-    }),
-    db.$queryRaw<TechnicianResolutionRow[]>(Prisma.sql`
+        orderBy: [{ isAvailable: "desc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          skills: true,
+          isAvailable: true,
+          activeJobCount: true,
+          maxConcurrentJobs: true,
+          totalJobsCompleted: true,
+          serviceCenter: {
+            select: {
+              name: true,
+              city: true,
+            },
+          },
+        },
+      }),
+      db.$queryRaw<TechnicianResolutionRow[]>(Prisma.sql`
       SELECT
         t.assigned_technician_id AS "technicianId",
         AVG(
@@ -90,20 +96,33 @@ export default async function ServiceCenterTechniciansPage() {
         AND t.technician_completed_at >= t.technician_started_at
       GROUP BY t.assigned_technician_id
     `),
-    db.serviceCenter.findMany({
-      where: {
-        organizationId,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-      select: {
-        id: true,
-        name: true,
-        city: true,
-      },
-    }),
-  ]);
+      db.$queryRaw<TechnicianServiceRatingRow[]>(Prisma.sql`
+      SELECT
+        t.assigned_technician_id AS "technicianId",
+        AVG(t.customer_service_rating)::double precision AS "avgCustomerServiceRating",
+        COUNT(*)::int AS "ratedJobsCount"
+      FROM tickets t
+      INNER JOIN technicians tech ON tech.id = t.assigned_technician_id
+      INNER JOIN service_centers sc ON sc.id = tech.service_center_id
+      WHERE sc.organization_id = ${organizationId}::uuid
+        AND t.customer_service_rating IS NOT NULL
+        AND t.status IN ('resolved', 'closed')
+      GROUP BY t.assigned_technician_id
+    `),
+      db.serviceCenter.findMany({
+        where: {
+          organizationId,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+        },
+      }),
+    ]);
 
   const totalTechnicians = technicians.length;
   const availableTechnicians = technicians.filter(
@@ -113,13 +132,6 @@ export default async function ServiceCenterTechniciansPage() {
     (sum, technician) => sum + technician.activeJobCount,
     0,
   );
-  const avgRating =
-    totalTechnicians > 0
-      ? technicians.reduce(
-          (sum, technician) => sum + decimalToNumber(technician.rating),
-          0,
-        ) / totalTechnicians
-      : 0;
 
   const avgHoursByTechnician = new Map(
     resolutionRows.map((row) => [
@@ -127,6 +139,28 @@ export default async function ServiceCenterTechniciansPage() {
       decimalToNumber(row.avgResolutionHours),
     ]),
   );
+  const serviceRatingByTechnician = new Map(
+    serviceRatingRows.map((row) => [
+      row.technicianId,
+      {
+        average: decimalToNumber(row.avgCustomerServiceRating),
+        ratedJobsCount: row.ratedJobsCount,
+      },
+    ]),
+  );
+  const totalRatedJobs = serviceRatingRows.reduce(
+    (sum, row) => sum + row.ratedJobsCount,
+    0,
+  );
+  const weightedServiceRatingAverage =
+    totalRatedJobs > 0
+      ? serviceRatingRows.reduce(
+          (sum, row) =>
+            sum +
+            decimalToNumber(row.avgCustomerServiceRating) * row.ratedJobsCount,
+          0,
+        ) / totalRatedJobs
+      : 0;
 
   return (
     <div>
@@ -160,9 +194,17 @@ export default async function ServiceCenterTechniciansPage() {
           icon={Gauge}
         />
         <MetricCard
-          title="Average Rating"
-          value={avgRating.toFixed(2)}
-          description="Combined field rating across technicians"
+          title="Service Rating"
+          value={
+            totalRatedJobs > 0
+              ? `${weightedServiceRatingAverage.toFixed(1)}/5`
+              : "-"
+          }
+          description={
+            totalRatedJobs > 0
+              ? `${totalRatedJobs.toLocaleString()} rated completed job${totalRatedJobs === 1 ? "" : "s"}`
+              : "No customer-rated completed jobs yet"
+          }
           icon={Star}
         />
       </div>
@@ -185,7 +227,7 @@ export default async function ServiceCenterTechniciansPage() {
                 <TableHead>Load</TableHead>
                 <TableHead>Completed Jobs</TableHead>
                 <TableHead>Avg Resolution</TableHead>
-                <TableHead>Rating</TableHead>
+                <TableHead>Service Rating</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -201,6 +243,8 @@ export default async function ServiceCenterTechniciansPage() {
                 technicians.map((technician) => {
                   const avgResolutionHours =
                     avgHoursByTechnician.get(technician.id) ?? 0;
+                  const technicianServiceRating =
+                    serviceRatingByTechnician.get(technician.id) ?? null;
 
                   return (
                     <TableRow key={technician.id}>
@@ -266,7 +310,24 @@ export default async function ServiceCenterTechniciansPage() {
                       </TableCell>
                       <TableCell>{formatHours(avgResolutionHours)}</TableCell>
                       <TableCell>
-                        {decimalToNumber(technician.rating).toFixed(2)}
+                        {technicianServiceRating ? (
+                          <div className="space-y-0.5">
+                            <p>
+                              {technicianServiceRating.average.toFixed(1)}/5
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {technicianServiceRating.ratedJobsCount.toLocaleString()}{" "}
+                              rated job
+                              {technicianServiceRating.ratedJobsCount === 1
+                                ? ""
+                                : "s"}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            -
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <SendInstallInviteButton
