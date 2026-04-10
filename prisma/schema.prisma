@@ -367,6 +367,7 @@ model Ticket {
   technicianStartedAt     DateTime?        @map("technician_started_at")
   technicianCompletedAt   DateTime?        @map("technician_completed_at")
   customerConfirmedAt     DateTime?        @map("customer_confirmed_at")
+  customerServiceRating   Int?             @map("customer_service_rating")
   closedAt                DateTime?        @map("closed_at")
   status                  TicketStatus     @default(reported)
   resolutionNotes         String?          @map("resolution_notes")

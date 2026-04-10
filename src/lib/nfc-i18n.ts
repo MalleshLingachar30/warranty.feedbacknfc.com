@@ -142,6 +142,9 @@ type NfcCopy = {
     noPhotos: string;
     partsUsed: string;
     noParts: string;
+    serviceRatingLabel: string;
+    serviceRatingHint: string;
+    ratingRequiredError: string;
     confirmResolution: string;
     issueNotResolved: string;
     unresolvedHint: string;
@@ -317,6 +320,10 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       noPhotos: "No photos uploaded.",
       partsUsed: "Parts Used",
       noParts: "No parts listed.",
+      serviceRatingLabel: "Rate Technician Service",
+      serviceRatingHint: "Select a rating from 1 to 5 before confirming.",
+      ratingRequiredError:
+        "Please rate technician service from 1 to 5 before confirming.",
       confirmResolution: "Confirm Resolution",
       issueNotResolved: "Issue Not Resolved",
       unresolvedHint: "If unresolved, the ticket will be reopened for further action.",
@@ -489,6 +496,10 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       noPhotos: "कोई फोटो अपलोड नहीं की गई।",
       partsUsed: "उपयोग किए गए पार्ट्स",
       noParts: "कोई पार्ट सूचीबद्ध नहीं है।",
+      serviceRatingLabel: "तकनीशियन सेवा को रेट करें",
+      serviceRatingHint: "पुष्टि करने से पहले 1 से 5 तक रेटिंग चुनें।",
+      ratingRequiredError:
+        "पुष्टि करने से पहले कृपया तकनीशियन सेवा को 1 से 5 के बीच रेट करें।",
       confirmResolution: "समाधान की पुष्टि करें",
       issueNotResolved: "समस्या हल नहीं हुई",
       unresolvedHint: "समस्या हल न होने पर टिकट फिर से खोला जाएगा।",

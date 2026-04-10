@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useState } from "react";
-import { CheckCircle2, Loader2, RefreshCcw, ShieldAlert } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCcw, ShieldAlert, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,10 +23,17 @@ export function CustomerConfirmResolution({
 }: CustomerConfirmResolutionProps) {
   const copy = getNfcCopy(language);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serviceRating, setServiceRating] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submitAction = async (action: "confirm" | "reopen") => {
+    if (action === "confirm" && serviceRating === null) {
+      setError(copy.customerConfirmResolution.ratingRequiredError);
+      setMessage(null);
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     setMessage(null);
@@ -37,7 +44,10 @@ export function CustomerConfirmResolution({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({
+          action,
+          ...(action === "confirm" ? { rating: serviceRating } : {}),
+        }),
       });
 
       const payload = (await response.json()) as {
@@ -140,6 +150,50 @@ export function CustomerConfirmResolution({
                 ))}
               </ul>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200">
+        <CardHeader>
+          <CardTitle className="text-base">
+            {copy.customerConfirmResolution.serviceRatingLabel}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-700">
+            {copy.customerConfirmResolution.serviceRatingHint}
+          </p>
+          <div className="grid grid-cols-5 gap-2">
+            {Array.from({ length: 5 }).map((_, index) => {
+              const value = index + 1;
+              const isSelected = serviceRating === value;
+
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  className={`flex h-11 items-center justify-center gap-1 rounded-md border text-sm font-medium transition-colors ${
+                    isSelected
+                      ? "border-amber-500 bg-amber-50 text-amber-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                  }`}
+                  onClick={() => {
+                    setServiceRating(value);
+                    setError(null);
+                  }}
+                  disabled={isSubmitting}
+                  aria-label={`${value} star${value === 1 ? "" : "s"}`}
+                >
+                  <Star
+                    className={`h-4 w-4 ${
+                      isSelected ? "fill-amber-400 text-amber-500" : "text-slate-400"
+                    }`}
+                  />
+                  <span>{value}</span>
+                </button>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

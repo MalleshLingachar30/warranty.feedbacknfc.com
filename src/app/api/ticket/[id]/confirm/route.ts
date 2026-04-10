@@ -15,6 +15,7 @@ import {
 interface TicketConfirmationRequest {
   action?: "confirm" | "reopen";
   comment?: string;
+  rating?: number;
 }
 
 interface RouteContext {
@@ -73,6 +74,21 @@ function asString(value: unknown): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function asRating(value: unknown): number | null {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : Number.NaN;
+
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -237,6 +253,8 @@ export async function POST(request: Request, context: RouteContext) {
     const { id } = await resolveParams(context);
     const body = (await request.json()) as TicketConfirmationRequest;
     const action = body.action ?? "confirm";
+    const comment = asString(body.comment);
+    const rating = action === "confirm" ? asRating(body.rating) : null;
 
     if (!id) {
       return NextResponse.json({ error: "Ticket id is required." }, { status: 400 });
@@ -245,6 +263,13 @@ export async function POST(request: Request, context: RouteContext) {
     if (action !== "confirm" && action !== "reopen") {
       return NextResponse.json(
         { error: "Action must be either 'confirm' or 'reopen'." },
+        { status: 400 },
+      );
+    }
+
+    if (action === "confirm" && rating === null) {
+      return NextResponse.json(
+        { error: "Service rating must be an integer between 1 and 5." },
         { status: 400 },
       );
     }
@@ -361,6 +386,8 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     if (action === "confirm") {
+      const serviceRating = rating as number;
+
       if (
         ticket.status !== "pending_confirmation" &&
         ticket.status !== "resolved"
@@ -383,6 +410,7 @@ export async function POST(request: Request, context: RouteContext) {
           data: {
             status: "resolved",
             customerConfirmedAt: now,
+            customerServiceRating: serviceRating,
             closedAt: now,
           },
         });
@@ -392,10 +420,14 @@ export async function POST(request: Request, context: RouteContext) {
             ticketId: id,
             eventType: "confirmed",
             eventDescription:
-              body.comment ?? "Customer confirmed service resolution.",
+              comment ??
+              `Customer confirmed service resolution and rated service ${serviceRating}/5.`,
             actorUserId: ownerAccess.userId,
             actorRole: "customer",
             actorName: "Customer",
+            metadata: {
+              rating: serviceRating,
+            },
           },
         });
 
@@ -556,7 +588,8 @@ export async function POST(request: Request, context: RouteContext) {
               notes: {
                 technicianResolution: ticket.resolutionNotes ?? "",
                 customerConfirmation:
-                  body.comment ?? "Customer confirmed service resolution.",
+                  comment ?? "Customer confirmed service resolution.",
+                customerServiceRating: serviceRating,
               },
               photos: {
                 issue: issuePhotos,
@@ -717,7 +750,7 @@ export async function POST(request: Request, context: RouteContext) {
             increment: 1,
           },
           escalationReason:
-            body.comment ?? "Customer marked issue as unresolved after repair.",
+            comment ?? "Customer marked issue as unresolved after repair.",
         },
       }),
       prisma.ticketTimeline.create({
@@ -725,7 +758,7 @@ export async function POST(request: Request, context: RouteContext) {
           ticketId: id,
           eventType: "reopened",
           eventDescription:
-            body.comment ?? "Customer reported issue not resolved.",
+            comment ?? "Customer reported issue not resolved.",
           actorUserId: ownerAccess.userId,
           actorRole: "customer",
           actorName: "Customer",
