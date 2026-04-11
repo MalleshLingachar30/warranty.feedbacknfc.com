@@ -7,6 +7,7 @@ import { db as prisma } from "@/lib/db";
 import { authorizeOwnerAccess } from "@/lib/otp-session";
 import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
+import { stopTrackingForTicket } from "@/lib/ticket-live-tracking";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
   sendTechnicianResolutionConfirmedNotification,
@@ -703,6 +704,14 @@ export async function POST(request: Request, context: RouteContext) {
         };
       });
 
+      await stopTrackingForTicket({
+        ticketId: ticket.id,
+        reason: "ticket_resolved",
+        actorRole: "customer",
+        ticketMetadata: ticket.metadata,
+        productInstallationLocation: ticket.product.installationLocation,
+      });
+
       if (ticket.assignedTechnician?.phone) {
         void sendTechnicianResolutionConfirmedNotification({
           technicianPhone: ticket.assignedTechnician.phone,
@@ -765,6 +774,14 @@ export async function POST(request: Request, context: RouteContext) {
         },
       }),
     ]);
+
+    await stopTrackingForTicket({
+      ticketId: reopenedTicket.id,
+      reason: "ticket_reopened",
+      actorRole: "customer",
+      ticketMetadata: ticket.metadata,
+      productInstallationLocation: ticket.product.installationLocation,
+    });
 
     await runSlaSweep({ ticketId: reopenedTicket.id });
 

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
+import { syncTrackingOnStart } from "@/lib/ticket-live-tracking";
 import { sendCustomerWorkStartedNotification } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
@@ -55,10 +56,12 @@ export async function POST(
         assignedServiceCenterId: true,
         technicianStartedAt: true,
         productId: true,
+        metadata: true,
         product: {
           select: {
             customerPhone: true,
             customerName: true,
+            installationLocation: true,
             sticker: {
               select: {
                 stickerNumber: true,
@@ -153,6 +156,13 @@ export async function POST(
         },
       }),
     ]);
+
+    await syncTrackingOnStart({
+      ticketId: ticket.id,
+      technicianId: technician.id,
+      ticketMetadata: ticket.metadata,
+      productInstallationLocation: ticket.product.installationLocation,
+    });
 
     await runSlaSweep({ ticketId: ticket.id });
 

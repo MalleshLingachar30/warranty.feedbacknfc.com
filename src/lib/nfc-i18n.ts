@@ -128,6 +128,32 @@ type NfcCopy = {
     systemActor: string;
     trackingSteps: Record<string, string>;
   };
+  customerLiveStatus: {
+    title: string;
+    assigned: string;
+    onTheWay: string;
+    arrived: string;
+    inProgress: string;
+    paused: string;
+    stopped: string;
+    unavailable: string;
+    distanceLabel: string;
+    etaLabel: string;
+    freshnessLabel: string;
+    refreshing: string;
+    stale: string;
+    awaitingAcceptance: string;
+    awaitingLocation: string;
+    permissionDenied: string;
+    offline: string;
+    pausedFallback: string;
+    staleFallback: string;
+    stoppedFallback: string;
+    unavailableFallback: string;
+    justNow: string;
+    minutesAgoSuffix: string;
+    hoursAgoSuffix: string;
+  };
   customerConfirmResolution: {
     title: string;
     description: string;
@@ -304,6 +330,32 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
         resolved: "Resolved",
       },
     },
+    customerLiveStatus: {
+      title: "Live Technician Status",
+      assigned: "Assigned",
+      onTheWay: "Technician is on the way",
+      arrived: "Technician has arrived",
+      inProgress: "Service is in progress",
+      paused: "Live sharing paused",
+      stopped: "Live sharing stopped",
+      unavailable: "Live status unavailable",
+      distanceLabel: "Approx. distance",
+      etaLabel: "Approx. ETA",
+      freshnessLabel: "Last updated",
+      refreshing: "Refreshing live status...",
+      stale: "Updates are stale",
+      awaitingAcceptance: "Live distance appears after the technician accepts the job.",
+      awaitingLocation: "Waiting for location from technician device.",
+      permissionDenied: "Technician has not shared device location yet.",
+      offline: "Technician is offline. Latest status may be delayed.",
+      pausedFallback: "Live location is temporarily paused.",
+      staleFallback: "Latest location is old. We are waiting for a fresh update.",
+      stoppedFallback: "Live location sharing has ended for this ticket.",
+      unavailableFallback: "Only service status is available right now.",
+      justNow: "just now",
+      minutesAgoSuffix: "m ago",
+      hoursAgoSuffix: "h ago",
+    },
     customerConfirmResolution: {
       title: "Confirm Service Resolution",
       description:
@@ -479,6 +531,32 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
         pending_confirmation: "पुष्टि लंबित",
         resolved: "समाधान हो गया",
       },
+    },
+    customerLiveStatus: {
+      title: "लाइव तकनीशियन स्थिति",
+      assigned: "असाइन किया गया",
+      onTheWay: "तकनीशियन रास्ते में है",
+      arrived: "तकनीशियन पहुंच गया है",
+      inProgress: "सेवा कार्य जारी है",
+      paused: "लाइव शेयरिंग रुकी हुई है",
+      stopped: "लाइव शेयरिंग बंद हो गई है",
+      unavailable: "लाइव स्थिति उपलब्ध नहीं",
+      distanceLabel: "अनुमानित दूरी",
+      etaLabel: "अनुमानित ETA",
+      freshnessLabel: "आखिरी अपडेट",
+      refreshing: "लाइव स्थिति अपडेट की जा रही है...",
+      stale: "अपडेट पुरानी है",
+      awaitingAcceptance: "तकनीशियन द्वारा जॉब स्वीकार करने के बाद लाइव दूरी दिखेगी।",
+      awaitingLocation: "तकनीशियन डिवाइस से लोकेशन का इंतजार है।",
+      permissionDenied: "तकनीशियन ने अभी डिवाइस लोकेशन शेयर नहीं की है।",
+      offline: "तकनीशियन ऑफलाइन है। अपडेट में देरी हो सकती है।",
+      pausedFallback: "लाइव लोकेशन अस्थायी रूप से रुकी हुई है।",
+      staleFallback: "लोकेशन अपडेट पुरानी है। नई अपडेट का इंतजार है।",
+      stoppedFallback: "इस टिकट के लिए लाइव लोकेशन शेयरिंग समाप्त हो गई है।",
+      unavailableFallback: "फिलहाल केवल सेवा स्थिति उपलब्ध है।",
+      justNow: "अभी",
+      minutesAgoSuffix: "मि पहले",
+      hoursAgoSuffix: "घं पहले",
     },
     customerConfirmResolution: {
       title: "सेवा समाधान की पुष्टि करें",

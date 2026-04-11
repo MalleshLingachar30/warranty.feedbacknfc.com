@@ -4,6 +4,7 @@ import { type IssueSeverity, type Prisma, type TicketStatus } from "@prisma/clie
 
 import { db } from "@/lib/db";
 import { DEFAULT_SLA_HOURS, type SlaHours, type SeverityHours } from "@/lib/sla-config";
+import { stopTrackingForTicket } from "@/lib/ticket-live-tracking";
 import { sendSlaBreachNotification } from "@/lib/warranty-notifications";
 
 type GenericRecord = Record<string, unknown>;
@@ -280,6 +281,8 @@ export async function runSlaSweep(options?: {
       continue;
     }
 
+    const markedEscalated = data.status === "escalated";
+
     const operations: Prisma.PrismaPromise<unknown>[] = [
       db.ticket.update({
         where: { id: ticket.id },
@@ -303,6 +306,14 @@ export async function runSlaSweep(options?: {
 
     await db.$transaction(operations);
     updatedCount += 1;
+
+    if (markedEscalated) {
+      await stopTrackingForTicket({
+        ticketId: ticket.id,
+        reason: "ticket_escalated",
+        actorRole: "system",
+      });
+    }
 
     if (shouldMarkBreached && !ticket.slaBreached) {
       breachedCount += 1;

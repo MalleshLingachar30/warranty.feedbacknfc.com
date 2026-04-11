@@ -10,6 +10,7 @@ import {
   MapPin,
   Phone,
   Plus,
+  Radio,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -46,6 +47,7 @@ import {
   type QueuedPhotoRecord,
 } from "@/lib/photo-queue";
 import { uploadPhotoFiles } from "@/lib/photo-upload";
+import { useTechnicianLiveTracking } from "@/hooks/use-technician-live-tracking";
 
 interface PartSelection {
   id: string;
@@ -93,6 +95,14 @@ export function JobDetail({
     QueuedPhotoRecord[]
   >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
+  const trackingEnabled =
+    Boolean(technicianId) &&
+    (job.status === "technician_enroute" || job.status === "work_in_progress");
+  const liveTracking = useTechnicianLiveTracking({
+    ticketId: job.id,
+    enabled: trackingEnabled,
+    phase: job.status === "work_in_progress" ? "on_site" : "enroute",
+  });
 
   useEffect(() => {
     let active = true;
@@ -133,6 +143,25 @@ export function JobDetail({
     () => googleMapsUrl(job.customerAddress),
     [job.customerAddress],
   );
+
+  const liveTrackingLabel = useMemo(() => {
+    switch (liveTracking.status) {
+      case "requesting_permission":
+        return "Waiting for location permission";
+      case "active":
+        return "Live location sharing active";
+      case "offline":
+        return "Offline - sharing paused";
+      case "paused":
+        return "Sharing paused";
+      case "permission_denied":
+        return "Location permission denied";
+      case "error":
+        return "Unable to start live location";
+      default:
+        return "Live sharing inactive";
+    }
+  }, [liveTracking.status]);
 
   const runTicketAction = async (
     path: string,
@@ -765,6 +794,13 @@ export function JobDetail({
           <div className="mb-2 flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{actionSuccess}</p>
+          </div>
+        ) : null}
+
+        {trackingEnabled ? (
+          <div className="mb-2 flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+            <Radio className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{liveTrackingLabel}</p>
           </div>
         ) : null}
 

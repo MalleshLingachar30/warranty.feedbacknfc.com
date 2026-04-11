@@ -28,6 +28,11 @@ import { writeScanLog } from "@/lib/scan-log";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 import { parseStickerNumber } from "@/lib/sticker-number";
 import {
+  TICKET_LIVE_STATUS_SELECT,
+  type TicketLiveStatusSnapshot,
+  toCustomerSafeTrackingPayload,
+} from "@/lib/ticket-live-tracking";
+import {
   buildAbsoluteAssetUrl,
   buildAbsoluteWarrantyUrl,
 } from "@/lib/warranty-app-url";
@@ -287,6 +292,7 @@ function mapTicketToView(
       name: string;
       phone: string;
     } | null;
+    liveStatus: TicketLiveStatusSnapshot | null;
   },
   product: WarrantyProduct,
   productModel: WarrantyProductModel,
@@ -330,6 +336,15 @@ function mapTicketToView(
       imageUrl: productModel.imageUrl,
       manufacturerName: product.organizationName,
     },
+    liveTracking: toCustomerSafeTrackingPayload({
+      ticketId: ticket.id,
+      ticketStatus: ticket.status,
+      ticketEtaLabel: readEtaLabel(ticket.metadata),
+      liveStatus: ticket.liveStatus,
+      technicianName: ticket.assignedTechnician?.name ?? null,
+      technicianPhone: ticket.assignedTechnician?.phone ?? null,
+      revealTravelMetrics: false,
+    }),
   };
 }
 
@@ -696,6 +711,9 @@ export default async function NfcStickerPage({
           phone: true,
         },
       },
+      liveStatus: {
+        select: TICKET_LIVE_STATUS_SELECT,
+      },
       timelineEntries: {
         orderBy: {
           createdAt: "asc",
@@ -715,6 +733,24 @@ export default async function NfcStickerPage({
   const ticketView = openTicket
     ? mapTicketToView(openTicket, mappedProduct, productModel)
     : null;
+
+  const ownerTrackerView =
+    openTicket && ticketView
+      ? {
+          ...ticketView,
+          liveTracking: toCustomerSafeTrackingPayload({
+            ticketId: openTicket.id,
+            ticketStatus: openTicket.status,
+            ticketEtaLabel: readEtaLabel(openTicket.metadata),
+            liveStatus: openTicket.liveStatus,
+            technicianName: openTicket.assignedTechnician?.name ?? null,
+            technicianPhone: openTicket.assignedTechnician?.phone ?? null,
+            revealTravelMetrics:
+              openTicket.status === "technician_enroute" ||
+              openTicket.status === "work_in_progress",
+          }),
+        }
+      : null;
 
   const allTicketViews = tickets.map((ticket) =>
     mapTicketToView(ticket, mappedProduct, productModel),
@@ -997,7 +1033,7 @@ export default async function NfcStickerPage({
 
       return (
         <CustomerTicketTracker
-          ticket={ticketView}
+          ticket={ownerTrackerView ?? ticketView}
           language={nfcLanguage}
           languageToggle={languageToggle}
         />

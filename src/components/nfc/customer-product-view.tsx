@@ -90,6 +90,45 @@ function fileToDataUrl(file: File) {
   });
 }
 
+function getCurrentLocationSnapshot() {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    return Promise.resolve<{
+      latitude: number;
+      longitude: number;
+      accuracyMeters: number | null;
+      capturedAt: string;
+    } | null>(null);
+  }
+
+  return new Promise<{
+    latitude: number;
+    longitude: number;
+    accuracyMeters: number | null;
+    capturedAt: string;
+  } | null>((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracyMeters: Number.isFinite(position.coords.accuracy)
+            ? position.coords.accuracy
+            : null,
+          capturedAt: new Date(position.timestamp).toISOString(),
+        });
+      },
+      () => {
+        resolve(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 120000,
+      },
+    );
+  });
+}
+
 export function CustomerProductView({
   stickerNumber,
   product,
@@ -194,6 +233,7 @@ export function CustomerProductView({
       const photoPayload = await Promise.all(
         photoFiles.map((file) => fileToDataUrl(file)),
       );
+      const serviceLocation = await getCurrentLocationSnapshot();
 
       const response = await fetch("/api/ticket/create", {
         method: "POST",
@@ -209,6 +249,7 @@ export function CustomerProductView({
           photos: photoPayload,
           customerPhone: phoneNumber,
           customerName: product.customerName,
+          serviceLocation: serviceLocation ?? undefined,
         }),
       });
 
