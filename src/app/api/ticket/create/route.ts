@@ -8,6 +8,7 @@ import { db as prisma } from "@/lib/db";
 import { authorizeOwnerAccess, normalizePhone } from "@/lib/otp-session";
 import { writeScanLog } from "@/lib/scan-log";
 import { computeSlaDeadlines, runSlaSweep } from "@/lib/sla-engine";
+import { normalizeTrackingLocationSample } from "@/lib/ticket-live-tracking";
 import {
   sendServiceCenterTicketAssignedEmail,
   sendTechnicianAssignmentSms,
@@ -25,6 +26,12 @@ interface CreateTicketRequest {
   customerName?: string | null;
   reportedByPhone?: string;
   customerPhone?: string;
+  serviceLocation?: {
+    latitude?: number;
+    longitude?: number;
+    accuracyMeters?: number;
+    capturedAt?: string;
+  };
 }
 
 const MAX_TICKET_NUMBER_ATTEMPTS = 5;
@@ -128,6 +135,7 @@ export async function POST(request: Request) {
     const reportedByName = body.reportedByName ?? body.customerName ?? null;
     const issuePhotos = sanitizePhotos(body.issuePhotos ?? body.photos ?? []);
     const issueSeverity = normalizeSeverity(body.severity);
+    const serviceLocation = normalizeTrackingLocationSample(body.serviceLocation);
 
     if (!body.productId || !body.issueDescription || !reportedByPhone) {
       return NextResponse.json(
@@ -294,6 +302,20 @@ export async function POST(request: Request) {
               reportedAt,
               slaResponseDeadline: deadlines.responseDeadline,
               slaResolutionDeadline: deadlines.resolutionDeadline,
+              ...(serviceLocation
+                ? {
+                    metadata: {
+                      liveTracking: {
+                        serviceAnchor: {
+                          latitude: serviceLocation.latitude,
+                          longitude: serviceLocation.longitude,
+                          accuracyMeters: serviceLocation.accuracyMeters,
+                          capturedAt: serviceLocation.capturedAt.toISOString(),
+                        },
+                      },
+                    } as Prisma.InputJsonValue,
+                  }
+                : {}),
             },
             select: {
               id: true,

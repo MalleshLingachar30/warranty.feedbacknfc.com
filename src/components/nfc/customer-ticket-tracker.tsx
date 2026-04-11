@@ -3,6 +3,7 @@ import { Check, Circle, Clock3, PhoneCall, Ticket } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CustomerLiveStatusCard } from "@/components/nfc/customer-live-status-card";
 import { NfcPublicShell } from "@/components/nfc/public-shell";
 import type { TicketView } from "@/components/nfc/types";
 import type { NfcLanguage } from "@/lib/nfc-i18n";
@@ -50,6 +51,10 @@ function translateTimelineEventType(eventType: string, language: NfcLanguage) {
     resolved: "समाधान हो गया",
     reopened: "फिर से खोला गया",
     claim_auto_generated: "क्लेम स्वतः बना",
+    technician_arrived_live: "तकनीशियन पहुंच गया",
+    tracking_paused: "लाइव ट्रैकिंग रुकी",
+    tracking_resumed: "लाइव ट्रैकिंग फिर शुरू हुई",
+    tracking_stopped: "लाइव ट्रैकिंग बंद हुई",
   };
 
   return mapped[eventType] ?? eventType.replace(/_/g, " ");
@@ -175,6 +180,13 @@ export function CustomerTicketTracker({
           })}
         </CardContent>
       </Card>
+
+      <CustomerLiveStatusCard
+        ticketId={ticket.id}
+        ticketStatus={ticket.status}
+        initialTracking={ticket.liveTracking}
+        language={language}
+      />
 
       <Card className="border-slate-200">
         <CardHeader>

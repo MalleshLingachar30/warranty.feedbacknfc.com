@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
+import { stopTrackingForTicket } from "@/lib/ticket-live-tracking";
 import { sendCustomerCompletionPrompt } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
@@ -178,6 +179,7 @@ export async function POST(
                 languagePreference: true,
               },
             },
+            installationLocation: true,
             sticker: {
               select: {
                 stickerNumber: true,
@@ -307,6 +309,14 @@ export async function POST(
         },
       }),
     ]);
+
+    await stopTrackingForTicket({
+      ticketId: ticket.id,
+      reason: "ticket_pending_confirmation",
+      actorRole: "technician",
+      ticketMetadata: ticket.metadata,
+      productInstallationLocation: ticket.product.installationLocation,
+    });
 
     await runSlaSweep({ ticketId: ticket.id });
 

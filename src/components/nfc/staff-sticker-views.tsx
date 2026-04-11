@@ -15,6 +15,7 @@ import {
   Loader2,
   Plus,
   PlayCircle,
+  Radio,
   Route,
   ScanSearch,
   Trash2,
@@ -38,6 +39,7 @@ import {
 } from "@/lib/photo-queue";
 import { uploadPhotoFiles } from "@/lib/photo-upload";
 import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
+import { useTechnicianLiveTracking } from "@/hooks/use-technician-live-tracking";
 
 function statusLabel(status: string) {
   return status.replace(/_/g, " ");
@@ -138,8 +140,45 @@ export function TechnicianStartWork({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trackingEnabled, setTrackingEnabled] = useState(
+    ticket.status === "technician_enroute" || ticket.status === "work_in_progress",
+  );
+  const [trackingPhase, setTrackingPhase] = useState<"enroute" | "on_site">(
+    ticket.status === "work_in_progress" ? "on_site" : "enroute",
+  );
 
   const canStart = Boolean(technicianId);
+  const liveTracking = useTechnicianLiveTracking({
+    ticketId: ticket.id,
+    enabled: Boolean(technicianId) && trackingEnabled,
+    phase: trackingPhase,
+  });
+
+  const liveTrackingLabel = useMemo(() => {
+    switch (liveTracking.status) {
+      case "requesting_permission":
+        return "Waiting for location permission";
+      case "active":
+        return "Live location sharing active";
+      case "offline":
+        return "Offline - sharing paused";
+      case "paused":
+        return "Sharing paused";
+      case "permission_denied":
+        return "Location permission denied";
+      case "error":
+        return "Unable to start live location";
+      default:
+        return "Live sharing inactive";
+    }
+  }, [liveTracking.status]);
+
+  useEffect(() => {
+    setTrackingEnabled(
+      ticket.status === "technician_enroute" || ticket.status === "work_in_progress",
+    );
+    setTrackingPhase(ticket.status === "work_in_progress" ? "on_site" : "enroute");
+  }, [ticket.id, ticket.status]);
 
   const postAction = async (endpoint: "enroute" | "start") => {
     if (!technicianId) {
@@ -169,8 +208,12 @@ export function TechnicianStartWork({
       }
 
       if (endpoint === "enroute") {
+        setTrackingEnabled(true);
+        setTrackingPhase("enroute");
         setMessage("Marked en route successfully. Customer has been notified.");
       } else {
+        setTrackingEnabled(true);
+        setTrackingPhase("on_site");
         setMessage("Work started successfully.");
       }
     } catch {
@@ -206,6 +249,13 @@ export function TechnicianStartWork({
       {error ? (
         <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
           {error}
+        </p>
+      ) : null}
+
+      {trackingEnabled ? (
+        <p className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          <Radio className="h-3.5 w-3.5" />
+          {liveTrackingLabel}
         </p>
       ) : null}
 
@@ -267,6 +317,29 @@ export function TechnicianCompleteWork({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const liveTracking = useTechnicianLiveTracking({
+    ticketId: ticket.id,
+    enabled: Boolean(technicianId) && ticket.status === "work_in_progress",
+    phase: "on_site",
+  });
+  const liveTrackingLabel = useMemo(() => {
+    switch (liveTracking.status) {
+      case "requesting_permission":
+        return "Waiting for location permission";
+      case "active":
+        return "Live location sharing active";
+      case "offline":
+        return "Offline - sharing paused";
+      case "paused":
+        return "Sharing paused";
+      case "permission_denied":
+        return "Location permission denied";
+      case "error":
+        return "Unable to start live location";
+      default:
+        return "Live sharing inactive";
+    }
+  }, [liveTracking.status]);
 
   useEffect(() => {
     let active = true;
@@ -573,6 +646,11 @@ export function TechnicianCompleteWork({
           <p>Reported: {formatDate(ticket.reportedAt)}</p>
         </CardContent>
       </Card>
+
+      <p className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <Radio className="h-3.5 w-3.5" />
+        {liveTrackingLabel}
+      </p>
 
       <form className="space-y-3" onSubmit={onSubmit}>
         <div className="space-y-2">

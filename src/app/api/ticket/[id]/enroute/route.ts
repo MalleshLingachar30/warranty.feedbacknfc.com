@@ -4,6 +4,7 @@ import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import { runSlaSweep } from "@/lib/sla-engine";
+import { syncTrackingOnEnroute } from "@/lib/ticket-live-tracking";
 import { sendCustomerEnRouteNotification } from "@/lib/warranty-notifications";
 
 export const runtime = "nodejs";
@@ -80,6 +81,7 @@ export async function POST(
           select: {
             customerPhone: true,
             customerName: true,
+            installationLocation: true,
             customer: {
               select: {
                 languagePreference: true,
@@ -180,6 +182,17 @@ export async function POST(
         },
       }),
     ]);
+
+    await syncTrackingOnEnroute({
+      ticketId: ticket.id,
+      technicianId: technician.id,
+      ticketMetadata: {
+        ...metadata,
+        etaLabel,
+      },
+      productInstallationLocation: ticket.product.installationLocation,
+      etaMinutesHint: etaMinutes,
+    });
 
     await runSlaSweep({ ticketId: ticket.id });
 

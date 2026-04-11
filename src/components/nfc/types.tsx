@@ -59,6 +59,46 @@ export interface TicketTimelineView {
   createdAt: Date | string;
 }
 
+export interface TicketLiveTrackingView {
+  ticketId: string;
+  ticketStatus: string;
+  trackingState:
+    | "inactive"
+    | "waiting_for_location"
+    | "enroute"
+    | "on_site"
+    | "paused"
+    | "stopped";
+  customerState:
+    | "assigned"
+    | "technician_on_the_way"
+    | "technician_arrived"
+    | "service_in_progress"
+    | "paused"
+    | "stopped"
+    | "unavailable";
+  distanceKm: number | null;
+  distanceBand: string | null;
+  etaMinutes: number | null;
+  freshnessSeconds: number | null;
+  isStale: boolean;
+  lastUpdatedAt: string | null;
+  fallbackReason:
+    | "awaiting_acceptance"
+    | "awaiting_location"
+    | "location_permission_denied"
+    | "offline"
+    | "paused"
+    | "stale_updates"
+    | "tracking_stopped"
+    | "live_location_unavailable"
+    | null;
+  technician: {
+    name: string | null;
+    phone: string | null;
+  };
+}
+
 export interface TicketView {
   id: string;
   ticketNumber: string;
@@ -91,6 +131,7 @@ export interface TicketView {
     imageUrl: string | null;
     manufacturerName: string | null;
   };
+  liveTracking: TicketLiveTrackingView | null;
 }
 
 export function toDate(value: Date | string | null | undefined): Date | null {

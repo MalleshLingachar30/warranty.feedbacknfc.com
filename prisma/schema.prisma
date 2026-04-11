@@ -83,6 +83,15 @@ enum TicketStatus {
   closed
 }
 
+enum TicketLiveTrackingState {
+  inactive
+  waiting_for_location
+  enroute
+  on_site
+  paused
+  stopped
+}
+
 enum ClaimType {
   warranty_repair
   warranty_replacement
@@ -341,6 +350,7 @@ model Technician {
   user            User          @relation(fields: [userId], references: [id])
   serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
   assignedTickets Ticket[]      @relation("AssignedTechnicianTickets")
+  liveStatuses    TicketLiveStatus[]
 
   @@index([serviceCenterId], map: "idx_technicians_service_center")
   @@map("technicians")
@@ -391,6 +401,7 @@ model Ticket {
   reportedByUser        User?            @relation("ReportedTickets", fields: [reportedByUserId], references: [id])
   assignedServiceCenter ServiceCenter?   @relation("AssignedServiceCenterTickets", fields: [assignedServiceCenterId], references: [id])
   assignedTechnician    Technician?      @relation("AssignedTechnicianTickets", fields: [assignedTechnicianId], references: [id])
+  liveStatus            TicketLiveStatus?
   timelineEntries       TicketTimeline[]
   claimById             WarrantyClaim?   @relation("TicketClaimPointer", fields: [claimId], references: [id])
   claim                 WarrantyClaim?   @relation("TicketToWarrantyClaim")
@@ -400,6 +411,35 @@ model Ticket {
   @@index([assignedTechnicianId], map: "idx_tickets_technician")
   @@index([assignedServiceCenterId], map: "idx_tickets_service_center")
   @@map("tickets")
+}
+
+model TicketLiveStatus {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId                String                  @unique @map("ticket_id") @db.Uuid
+  technicianId            String?                 @map("technician_id") @db.Uuid
+  state                   TicketLiveTrackingState @default(inactive)
+  serviceAnchorLatitude   Decimal?                @map("service_anchor_latitude") @db.Decimal(9, 6)
+  serviceAnchorLongitude  Decimal?                @map("service_anchor_longitude") @db.Decimal(9, 6)
+  technicianLatitude      Decimal?                @map("technician_latitude") @db.Decimal(9, 6)
+  technicianLongitude     Decimal?                @map("technician_longitude") @db.Decimal(9, 6)
+  technicianAccuracyM     Decimal?                @map("technician_accuracy_m") @db.Decimal(8, 2)
+  distanceKm              Decimal?                @map("distance_km") @db.Decimal(6, 2)
+  etaMinutes              Int?                    @map("eta_minutes")
+  lastUpdatedAt           DateTime?               @map("last_updated_at")
+  startedAt               DateTime?               @map("started_at")
+  arrivedAt               DateTime?               @map("arrived_at")
+  pausedAt                DateTime?               @map("paused_at")
+  stoppedAt               DateTime?               @map("stopped_at")
+  metadata                Json                    @default(dbgenerated("'{}'::jsonb"))
+  createdAt               DateTime                @default(now()) @map("created_at")
+  updatedAt               DateTime                @updatedAt @map("updated_at")
+
+  ticket                  Ticket                  @relation(fields: [ticketId], references: [id])
+  technician              Technician?             @relation(fields: [technicianId], references: [id])
+
+  @@index([state], map: "idx_ticket_live_status_state")
+  @@index([technicianId], map: "idx_ticket_live_status_technician")
+  @@map("ticket_live_status")
 }
 
 model WarrantyClaim {
