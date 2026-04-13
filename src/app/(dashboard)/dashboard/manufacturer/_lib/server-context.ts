@@ -78,11 +78,3 @@ export function decimalToNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
-
-export function buildAllocationDisplayId(id: string, allocatedAt: Date) {
-  const y = allocatedAt.getFullYear().toString();
-  const m = String(allocatedAt.getMonth() + 1).padStart(2, "0");
-  const d = String(allocatedAt.getDate()).padStart(2, "0");
-
-  return `ALLOC-${y}${m}${d}-${id.slice(0, 8).toUpperCase()}`;
-}
