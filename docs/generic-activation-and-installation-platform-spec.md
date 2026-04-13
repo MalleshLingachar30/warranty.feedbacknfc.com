@@ -415,6 +415,91 @@ Constraints:
 - one of `installationJobId` or `ticketId` must be present
 - installation-driven products require part usage capture where model policy demands it
 
+## 9.8 `IntegrationConnector`
+
+Use one connector definition model for every ERP family and file-based source.
+
+Required fields:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID PK | |
+| `organizationId` | UUID | manufacturer tenant |
+| `connectorType` | enum | `sap`, `oracle`, `dynamics`, `csv_sftp`, `custom_api` |
+| `name` | string | user-facing connector name |
+| `status` | enum | `draft`, `active`, `paused`, `error`, `archived` |
+| `transportMode` | enum | `api_pull`, `file_push`, `scheduled_file_pull`, `manual_upload` |
+| `authConfig` | `Json` | encrypted secrets and auth metadata |
+| `endpointConfig` | `Json` | URLs, folders, object names, feed identifiers |
+| `scheduleConfig` | `Json` | cron or cadence metadata |
+| `lastSuccessfulRunAt` | datetime nullable | |
+| `createdAt` | datetime | |
+| `updatedAt` | datetime | |
+
+## 9.9 `IntegrationMappingProfile`
+
+Use mapping profiles to avoid hardcoding ERP field names into business logic.
+
+Required fields:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID PK | |
+| `connectorId` | UUID | |
+| `sourceEntity` | enum | `item_master`, `spare_master`, `dealer_master`, `technician_master`, `warehouse_master`, `sales_line` |
+| `version` | int | increment on mapping changes |
+| `fieldMappings` | `Json` | source-field to canonical-field map |
+| `transformRules` | `Json` | trimming, normalization, date parsing, enum translation |
+| `identityRules` | `Json` | source keys used for idempotency and upsert |
+| `classificationRules` | `Json` | how to detect `main_product`, `spare_part`, `small_part`, `kit`, `pack` |
+| `status` | enum | `draft`, `active`, `archived` |
+| `createdAt` | datetime | |
+| `updatedAt` | datetime | |
+
+## 9.10 `IntegrationRun`
+
+Track each import or sync execution as a first-class runtime object.
+
+Required fields:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID PK | |
+| `connectorId` | UUID | |
+| `runType` | enum | `scheduled`, `manual`, `webhook`, `backfill` |
+| `status` | enum | `queued`, `running`, `succeeded`, `partially_failed`, `failed`, `cancelled` |
+| `startedAt` | datetime | |
+| `completedAt` | datetime nullable | |
+| `sourceWindowStart` | datetime nullable | incremental window start |
+| `sourceWindowEnd` | datetime nullable | incremental window end |
+| `totals` | `Json` | received, staged, accepted, rejected, quarantined counts |
+| `errorSummary` | `Json` nullable | high-level run failure summary |
+| `createdAt` | datetime | |
+| `updatedAt` | datetime | |
+
+## 9.11 `IntegrationStagingRecord`
+
+Every inbound record should land in staging first. Do not write ERP payloads directly into core domain tables.
+
+Required fields:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID PK | |
+| `runId` | UUID | |
+| `connectorId` | UUID | |
+| `sourceEntity` | enum | same as mapping profile source entities |
+| `sourceRecordKey` | string | natural key from source system |
+| `sourceSequence` | string nullable | line/order sequencing where relevant |
+| `rawPayload` | `Json` | unmodified inbound payload |
+| `normalizedPayload` | `Json` nullable | canonical after mapping |
+| `processingStatus` | enum | `received`, `mapped`, `validated`, `accepted`, `rejected`, `quarantined` |
+| `errorCode` | string nullable | |
+| `errorMessage` | string nullable | |
+| `resolvedAt` | datetime nullable | |
+| `createdAt` | datetime | |
+| `updatedAt` | datetime | |
+
 ## 10. ERP Inbound Scope
 
 ERP integration is not optional for installation-driven phase 1. It is inbound-first.
@@ -441,7 +526,7 @@ Phase 1:
 
 Do not make the platform depend on outbound ERP integration before shipping the core workflow.
 
-## 10.3 ERP Objects To Model
+## 10.3 Canonical ERP Objects To Model
 
 Recommended inbound entities:
 
@@ -464,6 +549,258 @@ Minimal fields for serialized sales lines:
 - warehouse or dispatch location
 - transaction date
 - spare/main-product classification
+
+## 10.4 Connector Architecture
+
+ERP integration should be implemented as a generic connector framework with three layers:
+
+1. source adapter layer
+2. canonical mapping and validation layer
+3. staging-to-domain application layer
+
+The core platform must consume only canonical objects, never ERP-specific payload shapes.
+
+### Layer 1: Source Adapter
+
+Responsibilities:
+
+- authenticate to source system
+- fetch or receive source records
+- checkpoint incremental progress
+- write raw records into `IntegrationStagingRecord`
+
+This layer does not perform domain writes.
+
+### Layer 2: Mapping And Validation
+
+Responsibilities:
+
+- apply `IntegrationMappingProfile`
+- normalize source values into canonical payloads
+- validate required fields
+- classify records into item or sales-line types
+- reject or quarantine invalid data before domain upsert
+
+### Layer 3: Domain Application
+
+Responsibilities:
+
+- upsert master snapshots
+- create or update asset seeds for serialized main products and tagged spares
+- create or update sale-registration seeds from serialized sales lines
+- maintain idempotent references back to source records
+
+## 10.5 Staging Table Strategy
+
+Every connector run must use staging tables.
+
+Required staging behavior:
+
+- persist raw inbound payloads for audit
+- persist mapped canonical payloads separately
+- never mutate raw payload after ingest
+- allow replay of `received`, `rejected`, or `quarantined` records after mapping fixes
+- preserve source record keys for idempotency
+
+Recommended supporting snapshot tables:
+
+- `ErpItemMasterSnapshot`
+- `ErpSpareMasterSnapshot`
+- `ErpDealerSnapshot`
+- `ErpTechnicianSnapshot`
+- `ErpWarehouseSnapshot`
+- `ErpSalesLineSnapshot`
+
+These snapshot tables should represent the latest accepted view from ERP, while staging preserves the import evidence and failure handling workflow.
+
+## 10.6 Mapping Rules
+
+Mapping rules must be configurable per connector and per source entity.
+
+Minimum mapping capabilities:
+
+- source field to canonical field mapping
+- string trimming and null normalization
+- date and timestamp parsing
+- code and enum translation
+- dealer/distributor code remapping
+- warehouse code remapping
+- product class classification
+- serialized vs batch vs quantity-only differentiation
+- boolean coercion
+- fallback defaults for optional fields only
+
+### Mapping Rule Examples
+
+- ERP item category codes can map to `main_product`, `spare_part`, `small_part`, `kit`, or `pack`
+- ERP technician employee codes can map to internal technician user or placeholder import identities
+- ERP sales-line serial lists can expand into one canonical serialized record per unit when needed
+- spare sales lines without serials can map into pack-level or quantity-tracked records where the product model policy allows it
+
+## 10.7 Idempotency And Upsert Rules
+
+Every inbound entity type needs a stable identity rule.
+
+Recommended identities:
+
+- item master: source item code
+- spare master: source spare code
+- dealer master: source dealer code
+- technician master: source employee or technician code
+- warehouse master: source warehouse code
+- sales line: source document number + line number + serial number when serialized
+
+Rules:
+
+- repeated imports of the same source key must update, not duplicate
+- imported records must store source connector and source key lineage
+- serial collisions across different source records must be quarantined unless explicitly resolved
+
+## 10.8 Sync Modes
+
+The framework should support all of these modes, even if phase 1 uses only a subset per connector:
+
+- `manual_upload`
+- `scheduled_file_pull`
+- `file_push`
+- `api_pull`
+- `webhook_triggered`
+
+### Phase 1 Recommended Modes
+
+- SAP: `api_pull` or `scheduled_file_pull`
+- Oracle: `api_pull` or `scheduled_file_pull`
+- Dynamics: `api_pull`
+- universal fallback: `csv_sftp` via `scheduled_file_pull` or `manual_upload`
+
+## 10.9 Error Handling And Recovery
+
+Error handling must be record-aware, not only run-aware.
+
+### Run-Level Failures
+
+Examples:
+
+- authentication failure
+- endpoint unavailable
+- malformed file
+- connector timeout
+
+Required behavior:
+
+- mark `IntegrationRun` as `failed`
+- preserve no-domain-write guarantee for records not yet staged
+- keep prior accepted domain state intact
+- surface connector-level error summary in admin UI
+
+### Record-Level Failures
+
+Examples:
+
+- missing required item code
+- unknown dealer code
+- invalid serial format
+- duplicate serial collision
+- unsupported product classification
+
+Required behavior:
+
+- mark staging record as `rejected` or `quarantined`
+- continue processing unrelated valid records in the same run
+- include actionable error codes and messages
+- allow replay after mapping or source correction
+
+### Quarantine Rules
+
+Quarantine, do not silently drop, for:
+
+- serial collisions
+- ambiguous dealer or warehouse mapping
+- unrecognized item class
+- invalid model references needed for downstream activation flow
+
+## 10.10 SAP / Oracle / Dynamics Adapter Strategy
+
+The platform should provide connector families, not one-off customer integrations.
+
+### SAP Adapter
+
+Support these ingress patterns:
+
+- OData or REST API pull
+- scheduled flat-file or CSV export
+- custom integration endpoint if customer middleware is already in place
+
+Do not assume a single SAP implementation shape. SAP customers may expose:
+
+- OData services
+- custom APIs
+- IDoc-derived exports
+- middleware-generated files
+
+So the SAP adapter should share the canonical mapping engine and vary only in transport and source schema mapping.
+
+### Oracle Adapter
+
+Support:
+
+- REST API pull
+- scheduled file export
+- middleware push into the platform ingestion endpoint
+
+Treat Oracle similarly to SAP: transport and field names vary, but canonical normalization remains shared.
+
+### Dynamics Adapter
+
+Support:
+
+- OData or API pull
+- incremental fetch windows
+- scheduled sync jobs
+
+Dynamics implementations are often more API-friendly, but still require configurable field mappings and code translation.
+
+### Universal CSV/SFTP Adapter
+
+This is the lowest-friction fallback and should ship early.
+
+Support:
+
+- CSV upload
+- SFTP drop folder ingestion
+- manual backfill upload
+
+This connector is critical because it de-risks ERP integration even when direct API access is delayed.
+
+## 10.11 Admin And Support Surfaces
+
+Manufacturer admin should have connector management pages for:
+
+- connector list and status
+- mapping profile management
+- sync run history
+- failed and quarantined records
+- replay or reprocess actions
+
+Support operations should be able to answer:
+
+- which source system sent this record
+- when it arrived
+- how it mapped
+- why it failed
+- whether it was applied to domain tables
+
+## 10.12 Security And Secrets
+
+Connector credentials must not be stored in plain text in business tables.
+
+Requirements:
+
+- encrypted secret storage
+- least-privilege connector credentials
+- audit trail for connector config changes
+- redaction of secrets in logs and run error payloads
+- tenant isolation on every connector and staging record
 
 ## 11. Workflow Design
 
@@ -609,14 +946,33 @@ to support the generic configuration model.
 
 ## 16.2 ERP Inbound APIs Or Jobs
 
-Add inbound processing for:
+Add integration runtime support for:
 
+- connector create, update, pause, resume
+- mapping profile create, update, activate
+- manual connector run trigger
+- run history and run detail retrieval
+- quarantined record list and replay
 - item master imports
 - spare master imports
 - dealer and distributor imports
 - technician imports
 - warehouse imports
 - serialized sales-line imports
+- spare sales-line imports
+
+Recommended endpoints or jobs:
+
+- `POST /api/integrations/connectors`
+- `GET /api/integrations/connectors`
+- `GET /api/integrations/connectors/[id]`
+- `PUT /api/integrations/connectors/[id]`
+- `POST /api/integrations/connectors/[id]/run`
+- `GET /api/integrations/runs`
+- `GET /api/integrations/runs/[id]`
+- `GET /api/integrations/runs/[id]/records`
+- `POST /api/integrations/records/[id]/replay`
+- scheduled integration workers per active connector
 
 ## 16.3 Asset And Tag Generation
 
@@ -661,6 +1017,9 @@ Completion rules:
 - duplicate sales-line imports must be idempotent
 - serial number collisions must be rejected or quarantined
 - imported spare lines must preserve main/spare classification
+- connector runs must preserve raw payload auditability
+- invalid records must fail independently without discarding valid records in the same run
+- replay must be possible after mapping or source correction
 
 ### Part Usage
 
@@ -690,6 +1049,7 @@ Completion rules:
 - channel master imports
 - technician imports
 - serialized sales-line imports
+- connector runtime, mapping profiles, and staging/replay support
 
 ## Phase D: Installation Workflow
 
