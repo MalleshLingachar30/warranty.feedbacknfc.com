@@ -121,6 +121,39 @@ enum StickerScanSource {
   unknown
 }
 
+enum ActivationMode {
+  plug_and_play
+  installation_driven
+}
+
+enum InstallationOwnershipMode {
+  manufacturer_only
+  dealer_allowed
+}
+
+enum ActivationTrigger {
+  self_activation
+  installation_report_submission
+}
+
+enum CustomerCreationMode {
+  on_activation
+  on_installation
+}
+
+enum PartTraceabilityMode {
+  none
+  pack_or_kit
+  unit_scan_mandatory
+}
+
+enum SmallPartTrackingMode {
+  individual
+  pack_level
+  kit_level
+  pack_or_kit
+}
+
 model Organization {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                  String           @db.VarChar(255)
@@ -227,6 +260,22 @@ model ProductModel {
   commonIssues              Json     @default(dbgenerated("'[]'::jsonb")) @map("common_issues")
   requiredSkills            String[] @default([]) @map("required_skills")
   partsCatalog              Json     @default(dbgenerated("'[]'::jsonb")) @map("parts_catalog")
+  activationMode            ActivationMode            @default(plug_and_play) @map("activation_mode")
+  installationOwnershipMode InstallationOwnershipMode @default(manufacturer_only) @map("installation_ownership_mode")
+  installationRequired      Boolean                   @default(false) @map("installation_required")
+  activationTrigger         ActivationTrigger         @default(self_activation) @map("activation_trigger")
+  customerCreationMode      CustomerCreationMode      @default(on_activation) @map("customer_creation_mode")
+  allowCartonSaleRegistration Boolean                 @default(true) @map("allow_carton_sale_registration")
+  allowUnitSelfActivation   Boolean                   @default(true) @map("allow_unit_self_activation")
+  partTraceabilityMode      PartTraceabilityMode      @default(none) @map("part_traceability_mode")
+  smallPartTrackingMode     SmallPartTrackingMode     @default(individual) @map("small_part_tracking_mode")
+  customerAcknowledgementRequired Boolean             @default(false) @map("customer_acknowledgement_required")
+  installationChecklistTemplate Json                  @default(dbgenerated("'[]'::jsonb")) @map("installation_checklist_template")
+  commissioningTemplate     Json                      @default(dbgenerated("'[]'::jsonb")) @map("commissioning_template")
+  requiredPhotoPolicy       Json                      @default(dbgenerated("'{}'::jsonb")) @map("required_photo_policy")
+  requiredGeoCapture        Boolean                   @default(false) @map("required_geo_capture")
+  defaultInstallerSkillTags String[]                 @default([]) @map("default_installer_skill_tags")
+  includedKitDefinition     Json                      @default(dbgenerated("'{}'::jsonb")) @map("included_kit_definition")
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 

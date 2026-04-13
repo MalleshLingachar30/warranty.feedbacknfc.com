@@ -45,6 +45,22 @@ export type ManufacturerProductModel = {
   totalUnits: number;
   commonIssues: string[];
   requiredSkills: string[];
+  activationMode?: ActivationMode;
+  installationOwnershipMode?: InstallationOwnershipMode;
+  installationRequired?: boolean;
+  activationTrigger?: ActivationTrigger;
+  customerCreationMode?: CustomerCreationMode;
+  allowCartonSaleRegistration?: boolean;
+  allowUnitSelfActivation?: boolean;
+  partTraceabilityMode?: PartTraceabilityMode;
+  smallPartTrackingMode?: SmallPartTrackingMode;
+  customerAcknowledgementRequired?: boolean;
+  installationChecklistTemplate?: string[];
+  commissioningTemplate?: string[];
+  requiredPhotoPolicy?: RequiredPhotoPolicy;
+  requiredGeoCapture?: boolean;
+  defaultInstallerSkillTags?: string[];
+  includedKitDefinition?: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -164,3 +180,12 @@ export type ClaimQueueRow = {
   rejectionReason: string | null;
   isDemo?: boolean;
 };
+import type {
+  ActivationMode,
+  ActivationTrigger,
+  CustomerCreationMode,
+  InstallationOwnershipMode,
+  PartTraceabilityMode,
+  RequiredPhotoPolicy,
+  SmallPartTrackingMode,
+} from "@/lib/manufacturer-policy";

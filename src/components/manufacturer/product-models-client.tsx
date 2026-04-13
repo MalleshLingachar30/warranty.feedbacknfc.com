@@ -2,6 +2,16 @@
 
 import { useMemo, useState } from "react";
 import {
+  ACTIVATION_MODES,
+  ACTIVATION_TRIGGERS,
+  CUSTOMER_CREATION_MODES,
+  INSTALLATION_OWNERSHIP_MODES,
+  PART_TRACEABILITY_MODES,
+  SMALL_PART_TRACKING_MODES,
+  type ManufacturerPolicyDefaults,
+  type RequiredPhotoPolicy,
+} from "@/lib/manufacturer-policy";
+import {
   Loader2Icon,
   PencilIcon,
   PlusIcon,
@@ -62,13 +72,46 @@ type ProductFormValues = {
   warrantyDurationMonths: string;
   commonIssues: string[];
   requiredSkills: string[];
+  activationMode: NonNullable<ManufacturerProductModel["activationMode"]>;
+  installationOwnershipMode: NonNullable<
+    ManufacturerProductModel["installationOwnershipMode"]
+  >;
+  activationTrigger: NonNullable<ManufacturerProductModel["activationTrigger"]>;
+  customerCreationMode: NonNullable<
+    ManufacturerProductModel["customerCreationMode"]
+  >;
+  allowCartonSaleRegistration: boolean;
+  allowUnitSelfActivation: boolean;
+  partTraceabilityMode: NonNullable<
+    ManufacturerProductModel["partTraceabilityMode"]
+  >;
+  smallPartTrackingMode: NonNullable<
+    ManufacturerProductModel["smallPartTrackingMode"]
+  >;
+  customerAcknowledgementRequired: boolean;
+  requiredGeoCapture: boolean;
+  installationChecklistTemplate: string[];
+  commissioningTemplate: string[];
+  defaultInstallerSkillTags: string[];
+  requiredPhotoPolicy: RequiredPhotoPolicy;
+  includedKitDefinition: string;
 };
 
 type ProductModelsClientProps = {
   initialModels: ManufacturerProductModel[];
+  initialPolicyDefaults: ManufacturerPolicyDefaults;
 };
 
-function toFormValues(model?: ManufacturerProductModel): ProductFormValues {
+function toFormValues(
+  policyDefaults: ManufacturerPolicyDefaults,
+  model?: ManufacturerProductModel,
+): ProductFormValues {
+  const includedKitDefinitionText =
+    model?.includedKitDefinition &&
+    Object.keys(model.includedKitDefinition).length > 0
+      ? JSON.stringify(model.includedKitDefinition, null, 2)
+      : "";
+
   return {
     name: model?.name ?? "",
     category: model?.category ?? categoryOptions[0],
@@ -79,6 +122,43 @@ function toFormValues(model?: ManufacturerProductModel): ProductFormValues {
     warrantyDurationMonths: model?.warrantyDurationMonths.toString() ?? "12",
     commonIssues: model?.commonIssues ?? [],
     requiredSkills: model?.requiredSkills ?? [],
+    activationMode:
+      model?.activationMode ?? policyDefaults.defaultActivationMode,
+    installationOwnershipMode:
+      model?.installationOwnershipMode ??
+      policyDefaults.defaultInstallationOwnershipMode,
+    activationTrigger:
+      model?.activationTrigger ?? policyDefaults.defaultActivationTrigger,
+    customerCreationMode:
+      model?.customerCreationMode ?? policyDefaults.defaultCustomerCreationMode,
+    allowCartonSaleRegistration:
+      model?.allowCartonSaleRegistration ??
+      policyDefaults.defaultAllowCartonSaleRegistration,
+    allowUnitSelfActivation:
+      model?.allowUnitSelfActivation ??
+      policyDefaults.defaultAllowUnitSelfActivation,
+    partTraceabilityMode:
+      model?.partTraceabilityMode ?? policyDefaults.defaultPartTraceabilityMode,
+    smallPartTrackingMode:
+      model?.smallPartTrackingMode ??
+      policyDefaults.defaultSmallPartTrackingMode,
+    customerAcknowledgementRequired:
+      model?.customerAcknowledgementRequired ??
+      policyDefaults.defaultAcknowledgementRequired,
+    requiredGeoCapture:
+      model?.requiredGeoCapture ?? policyDefaults.defaultRequiredGeoCapture,
+    installationChecklistTemplate:
+      model?.installationChecklistTemplate ??
+      policyDefaults.defaultChecklistTemplate,
+    commissioningTemplate:
+      model?.commissioningTemplate ??
+      policyDefaults.defaultCommissioningTemplate,
+    defaultInstallerSkillTags:
+      model?.defaultInstallerSkillTags ??
+      policyDefaults.defaultInstallerSkillTags,
+    requiredPhotoPolicy:
+      model?.requiredPhotoPolicy ?? policyDefaults.defaultRequiredPhotoPolicy,
+    includedKitDefinition: includedKitDefinitionText,
   };
 }
 
@@ -89,15 +169,23 @@ function formatCategory(category: string) {
     .join(" ");
 }
 
+function formatPolicyOption(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function ProductModelsClient({
   initialModels,
+  initialPolicyDefaults,
 }: ProductModelsClientProps) {
   const [models, setModels] =
     useState<ManufacturerProductModel[]>(initialModels);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [formValues, setFormValues] =
-    useState<ProductFormValues>(toFormValues());
+    useState<ProductFormValues>(toFormValues(initialPolicyDefaults));
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
@@ -110,7 +198,7 @@ export function ProductModelsClient({
 
   const resetForm = () => {
     setEditingModelId(null);
-    setFormValues(toFormValues());
+    setFormValues(toFormValues(initialPolicyDefaults));
     setFormError(null);
   };
 
@@ -121,7 +209,7 @@ export function ProductModelsClient({
 
   const openEditDialog = (model: ManufacturerProductModel) => {
     setEditingModelId(model.id);
-    setFormValues(toFormValues(model));
+    setFormValues(toFormValues(initialPolicyDefaults, model));
     setFormError(null);
     setDialogOpen(true);
   };
@@ -162,6 +250,28 @@ export function ProductModelsClient({
   };
 
   const saveModel = async () => {
+    let includedKitDefinitionPayload: Record<string, unknown> = {};
+
+    if (formValues.includedKitDefinition.trim()) {
+      try {
+        const parsed = JSON.parse(formValues.includedKitDefinition) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error(
+            "Included kit definition must be a JSON object when provided.",
+          );
+        }
+
+        includedKitDefinitionPayload = parsed as Record<string, unknown>;
+      } catch (error) {
+        setFormError(
+          error instanceof Error
+            ? error.message
+            : "Included kit definition JSON is invalid.",
+        );
+        return;
+      }
+    }
+
     const payload = {
       name: formValues.name.trim(),
       category: formValues.category,
@@ -172,6 +282,22 @@ export function ProductModelsClient({
       warrantyDurationMonths: Number(formValues.warrantyDurationMonths),
       commonIssues: formValues.commonIssues,
       requiredSkills: formValues.requiredSkills,
+      activationMode: formValues.activationMode,
+      installationOwnershipMode: formValues.installationOwnershipMode,
+      activationTrigger: formValues.activationTrigger,
+      customerCreationMode: formValues.customerCreationMode,
+      allowCartonSaleRegistration: formValues.allowCartonSaleRegistration,
+      allowUnitSelfActivation: formValues.allowUnitSelfActivation,
+      partTraceabilityMode: formValues.partTraceabilityMode,
+      smallPartTrackingMode: formValues.smallPartTrackingMode,
+      customerAcknowledgementRequired:
+        formValues.customerAcknowledgementRequired,
+      installationChecklistTemplate: formValues.installationChecklistTemplate,
+      commissioningTemplate: formValues.commissioningTemplate,
+      requiredPhotoPolicy: formValues.requiredPhotoPolicy,
+      requiredGeoCapture: formValues.requiredGeoCapture,
+      defaultInstallerSkillTags: formValues.defaultInstallerSkillTags,
+      includedKitDefinition: includedKitDefinitionPayload,
     };
 
     if (!payload.name || !payload.category || !payload.modelNumber) {
@@ -184,6 +310,38 @@ export function ProductModelsClient({
       payload.warrantyDurationMonths < 1
     ) {
       setFormError("Warranty duration must be a positive whole number.");
+      return;
+    }
+
+    if (
+      payload.activationMode === "installation_driven" &&
+      payload.installationChecklistTemplate.length === 0
+    ) {
+      setFormError(
+        "Installation-driven models must include at least one checklist step.",
+      );
+      return;
+    }
+
+    if (
+      payload.activationMode === "installation_driven" &&
+      payload.partTraceabilityMode === "none"
+    ) {
+      setFormError(
+        "Installation-driven models cannot use 'None' part traceability.",
+      );
+      return;
+    }
+
+    if (
+      payload.activationMode === "installation_driven" &&
+      (!payload.requiredPhotoPolicy.requireBeforePhoto ||
+        !payload.requiredPhotoPolicy.requireAfterPhoto ||
+        payload.requiredPhotoPolicy.minimumPhotoCount < 2)
+    ) {
+      setFormError(
+        "Installation-driven models must require before/after photos and at least 2 photos.",
+      );
       return;
     }
 
@@ -491,6 +649,354 @@ export function ProductModelsClient({
                     }))
                   }
                 />
+
+                <div className="space-y-3 rounded-md border p-3 md:col-span-2">
+                  <p className="text-sm font-semibold">Activation Policy</p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="space-y-1 text-sm">
+                      <span>Activation Mode</span>
+                      <select
+                        value={formValues.activationMode}
+                        onChange={(event) =>
+                          setFormValues((current) => {
+                            const nextMode = event.target
+                              .value as ProductFormValues["activationMode"];
+
+                            if (nextMode !== "installation_driven") {
+                              return {
+                                ...current,
+                                activationMode: nextMode,
+                              };
+                            }
+
+                            return {
+                              ...current,
+                              activationMode: "installation_driven",
+                              activationTrigger:
+                                "installation_report_submission",
+                              customerCreationMode: "on_installation",
+                              allowUnitSelfActivation: false,
+                              customerAcknowledgementRequired: true,
+                              partTraceabilityMode:
+                                current.partTraceabilityMode === "none"
+                                  ? "pack_or_kit"
+                                  : current.partTraceabilityMode,
+                              requiredPhotoPolicy: {
+                                ...current.requiredPhotoPolicy,
+                                requireBeforePhoto: true,
+                                requireAfterPhoto: true,
+                                minimumPhotoCount: Math.max(
+                                  2,
+                                  current.requiredPhotoPolicy.minimumPhotoCount,
+                                ),
+                              },
+                            };
+                          })
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {ACTIVATION_MODES.map((option) => (
+                          <option key={option} value={option}>
+                            {formatPolicyOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Installer Authority</span>
+                      <select
+                        value={formValues.installationOwnershipMode}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            installationOwnershipMode: event.target
+                              .value as ProductFormValues["installationOwnershipMode"],
+                          }))
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {INSTALLATION_OWNERSHIP_MODES.map((option) => (
+                          <option key={option} value={option}>
+                            {formatPolicyOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Activation Trigger</span>
+                      <select
+                        value={formValues.activationTrigger}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            activationTrigger: event.target
+                              .value as ProductFormValues["activationTrigger"],
+                          }))
+                        }
+                        disabled={
+                          formValues.activationMode === "installation_driven"
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {ACTIVATION_TRIGGERS.map((option) => (
+                          <option key={option} value={option}>
+                            {formatPolicyOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Customer Creation Mode</span>
+                      <select
+                        value={formValues.customerCreationMode}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            customerCreationMode: event.target
+                              .value as ProductFormValues["customerCreationMode"],
+                          }))
+                        }
+                        disabled={
+                          formValues.activationMode === "installation_driven"
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {CUSTOMER_CREATION_MODES.map((option) => (
+                          <option key={option} value={option}>
+                            {formatPolicyOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Part Traceability Mode</span>
+                      <select
+                        value={formValues.partTraceabilityMode}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            partTraceabilityMode: event.target
+                              .value as ProductFormValues["partTraceabilityMode"],
+                          }))
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {PART_TRACEABILITY_MODES.map((option) => (
+                          <option key={option} value={option}>
+                            {formatPolicyOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Small Part Tracking Mode</span>
+                      <select
+                        value={formValues.smallPartTrackingMode}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            smallPartTrackingMode: event.target
+                              .value as ProductFormValues["smallPartTrackingMode"],
+                          }))
+                        }
+                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      >
+                        {SMALL_PART_TRACKING_MODES.map((option) => (
+                          <option key={option} value={option}>
+                            {formatPolicyOption(option)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                      <span>Allow Carton Sale Registration</span>
+                      <input
+                        type="checkbox"
+                        checked={formValues.allowCartonSaleRegistration}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            allowCartonSaleRegistration: event.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                      <span>Allow Unit Self-Activation</span>
+                      <input
+                        type="checkbox"
+                        checked={formValues.allowUnitSelfActivation}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            allowUnitSelfActivation: event.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                      <span>Require Customer Acknowledgement</span>
+                      <input
+                        type="checkbox"
+                        checked={formValues.customerAcknowledgementRequired}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            customerAcknowledgementRequired:
+                              event.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                      <span>Require Geo Capture</span>
+                      <input
+                        type="checkbox"
+                        checked={formValues.requiredGeoCapture}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            requiredGeoCapture: event.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </label>
+                  </div>
+
+                  <TagInput
+                    label="Installation Checklist Template"
+                    placeholder="Press Enter to add checklist item"
+                    value={formValues.installationChecklistTemplate}
+                    onChange={(next) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        installationChecklistTemplate: next,
+                      }))
+                    }
+                  />
+
+                  <TagInput
+                    label="Commissioning Template"
+                    placeholder="Press Enter to add commissioning field"
+                    value={formValues.commissioningTemplate}
+                    onChange={(next) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        commissioningTemplate: next,
+                      }))
+                    }
+                  />
+
+                  <TagInput
+                    label="Default Installer Skill Tags"
+                    placeholder="Press Enter to add installer skill tag"
+                    value={formValues.defaultInstallerSkillTags}
+                    onChange={(next) =>
+                      setFormValues((current) => ({
+                        ...current,
+                        defaultInstallerSkillTags: next,
+                      }))
+                    }
+                  />
+
+                  <div className="grid gap-3 rounded-md border p-3 md:grid-cols-3">
+                    <label className="flex items-center justify-between gap-3 text-sm">
+                      <span>Require Before Photo</span>
+                      <input
+                        type="checkbox"
+                        checked={formValues.requiredPhotoPolicy.requireBeforePhoto}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            requiredPhotoPolicy: {
+                              ...current.requiredPhotoPolicy,
+                              requireBeforePhoto: event.target.checked,
+                            },
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-3 text-sm">
+                      <span>Require After Photo</span>
+                      <input
+                        type="checkbox"
+                        checked={formValues.requiredPhotoPolicy.requireAfterPhoto}
+                        onChange={(event) =>
+                          setFormValues((current) => ({
+                            ...current,
+                            requiredPhotoPolicy: {
+                              ...current.requiredPhotoPolicy,
+                              requireAfterPhoto: event.target.checked,
+                            },
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                    </label>
+
+                    <label className="space-y-1 text-sm">
+                      <span>Minimum Photo Count</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={20}
+                        value={formValues.requiredPhotoPolicy.minimumPhotoCount}
+                        onChange={(event) => {
+                          const parsed = Number.parseInt(
+                            event.target.value || "0",
+                            10,
+                          );
+                          const safeValue = Number.isFinite(parsed)
+                            ? parsed
+                            : 0;
+
+                          setFormValues((current) => ({
+                            ...current,
+                            requiredPhotoPolicy: {
+                              ...current.requiredPhotoPolicy,
+                              minimumPhotoCount: Math.min(
+                                20,
+                                Math.max(0, safeValue),
+                              ),
+                            },
+                          }));
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="space-y-1 text-sm">
+                    <span>Included Kit Definition (JSON, optional)</span>
+                    <Textarea
+                      value={formValues.includedKitDefinition}
+                      onChange={(event) =>
+                        setFormValues((current) => ({
+                          ...current,
+                          includedKitDefinition: event.target.value,
+                        }))
+                      }
+                      placeholder='{"kitCode":"INSTALL-KIT-01","parts":[{"partCode":"P-1001","quantity":2}]}'
+                      className="min-h-28 font-mono text-xs"
+                    />
+                  </label>
+                </div>
               </div>
 
               {formError ? (
@@ -540,6 +1046,7 @@ export function ProductModelsClient({
                 <TableHead>Name</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Model Number</TableHead>
+                <TableHead>Activation</TableHead>
                 <TableHead>Warranty</TableHead>
                 <TableHead className="text-right">Total Units</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -548,7 +1055,7 @@ export function ProductModelsClient({
             <TableBody>
               {models.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground">
+                  <TableCell colSpan={7} className="text-muted-foreground">
                     No product models found. Add your first model to begin
                     allocations.
                   </TableCell>
@@ -561,6 +1068,9 @@ export function ProductModelsClient({
                     </TableCell>
                     <TableCell>{formatCategory(model.category)}</TableCell>
                     <TableCell>{model.modelNumber || "-"}</TableCell>
+                    <TableCell>
+                      {formatPolicyOption(model.activationMode ?? "plug_and_play")}
+                    </TableCell>
                     <TableCell>{model.warrantyDurationMonths} months</TableCell>
                     <TableCell className="text-right">
                       {model.totalUnits.toLocaleString()}

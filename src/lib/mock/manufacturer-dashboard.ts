@@ -22,6 +22,30 @@ export type ProductModel = {
   totalUnits: number;
   commonIssues: string[];
   requiredSkills: string[];
+  activationMode: "plug_and_play" | "installation_driven";
+  installationOwnershipMode: "manufacturer_only" | "dealer_allowed";
+  installationRequired: boolean;
+  activationTrigger: "self_activation" | "installation_report_submission";
+  customerCreationMode: "on_activation" | "on_installation";
+  allowCartonSaleRegistration: boolean;
+  allowUnitSelfActivation: boolean;
+  partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+  smallPartTrackingMode:
+    | "individual"
+    | "pack_level"
+    | "kit_level"
+    | "pack_or_kit";
+  customerAcknowledgementRequired: boolean;
+  installationChecklistTemplate: string[];
+  commissioningTemplate: string[];
+  requiredPhotoPolicy: {
+    requireBeforePhoto: boolean;
+    requireAfterPhoto: boolean;
+    minimumPhotoCount: number;
+  };
+  requiredGeoCapture: boolean;
+  defaultInstallerSkillTags: string[];
+  includedKitDefinition: Record<string, unknown>;
 };
 
 export type AllocationHistoryItem = {
@@ -90,6 +114,26 @@ export const productCatalogSeed: ProductModel[] = [
     totalUnits: 9240,
     commonIssues: ["Gas leakage", "PCB failure", "Sensor drift"],
     requiredSkills: ["HVAC", "PCB Repair", "Refrigerant Handling"],
+    activationMode: "plug_and_play",
+    installationOwnershipMode: "manufacturer_only",
+    installationRequired: false,
+    activationTrigger: "self_activation",
+    customerCreationMode: "on_activation",
+    allowCartonSaleRegistration: true,
+    allowUnitSelfActivation: true,
+    partTraceabilityMode: "none",
+    smallPartTrackingMode: "individual",
+    customerAcknowledgementRequired: false,
+    installationChecklistTemplate: [],
+    commissioningTemplate: [],
+    requiredPhotoPolicy: {
+      requireBeforePhoto: false,
+      requireAfterPhoto: false,
+      minimumPhotoCount: 0,
+    },
+    requiredGeoCapture: false,
+    defaultInstallerSkillTags: [],
+    includedKitDefinition: {},
   },
   {
     id: "pm-102",
@@ -104,6 +148,26 @@ export const productCatalogSeed: ProductModel[] = [
     totalUnits: 7325,
     commonIssues: ["Drain pump block", "Door lock fault"],
     requiredSkills: ["Mechanical Repair", "Motor Diagnostics"],
+    activationMode: "plug_and_play",
+    installationOwnershipMode: "manufacturer_only",
+    installationRequired: false,
+    activationTrigger: "self_activation",
+    customerCreationMode: "on_activation",
+    allowCartonSaleRegistration: true,
+    allowUnitSelfActivation: true,
+    partTraceabilityMode: "none",
+    smallPartTrackingMode: "individual",
+    customerAcknowledgementRequired: false,
+    installationChecklistTemplate: [],
+    commissioningTemplate: [],
+    requiredPhotoPolicy: {
+      requireBeforePhoto: false,
+      requireAfterPhoto: false,
+      minimumPhotoCount: 0,
+    },
+    requiredGeoCapture: false,
+    defaultInstallerSkillTags: [],
+    includedKitDefinition: {},
   },
   {
     id: "pm-103",
@@ -118,6 +182,26 @@ export const productCatalogSeed: ProductModel[] = [
     totalUnits: 11080,
     commonIssues: ["Compressor trip", "Thermostat drift"],
     requiredSkills: ["Cooling Systems", "Compressor Service"],
+    activationMode: "plug_and_play",
+    installationOwnershipMode: "manufacturer_only",
+    installationRequired: false,
+    activationTrigger: "self_activation",
+    customerCreationMode: "on_activation",
+    allowCartonSaleRegistration: true,
+    allowUnitSelfActivation: true,
+    partTraceabilityMode: "none",
+    smallPartTrackingMode: "individual",
+    customerAcknowledgementRequired: false,
+    installationChecklistTemplate: [],
+    commissioningTemplate: [],
+    requiredPhotoPolicy: {
+      requireBeforePhoto: false,
+      requireAfterPhoto: false,
+      minimumPhotoCount: 0,
+    },
+    requiredGeoCapture: false,
+    defaultInstallerSkillTags: [],
+    includedKitDefinition: {},
   },
   {
     id: "pm-104",
@@ -132,6 +216,26 @@ export const productCatalogSeed: ProductModel[] = [
     totalUnits: 4180,
     commonIssues: ["Touch panel unresponsive", "Coil overheating"],
     requiredSkills: ["Electrical Diagnostics", "Component Swap"],
+    activationMode: "plug_and_play",
+    installationOwnershipMode: "manufacturer_only",
+    installationRequired: false,
+    activationTrigger: "self_activation",
+    customerCreationMode: "on_activation",
+    allowCartonSaleRegistration: true,
+    allowUnitSelfActivation: true,
+    partTraceabilityMode: "none",
+    smallPartTrackingMode: "individual",
+    customerAcknowledgementRequired: false,
+    installationChecklistTemplate: [],
+    commissioningTemplate: [],
+    requiredPhotoPolicy: {
+      requireBeforePhoto: false,
+      requireAfterPhoto: false,
+      minimumPhotoCount: 0,
+    },
+    requiredGeoCapture: false,
+    defaultInstallerSkillTags: [],
+    includedKitDefinition: {},
   },
   {
     id: "pm-105",
@@ -145,6 +249,26 @@ export const productCatalogSeed: ProductModel[] = [
     totalUnits: 6750,
     commonIssues: ["RO membrane clog", "Flow sensor failure"],
     requiredSkills: ["Filter Replacement", "IoT Diagnostics"],
+    activationMode: "plug_and_play",
+    installationOwnershipMode: "manufacturer_only",
+    installationRequired: false,
+    activationTrigger: "self_activation",
+    customerCreationMode: "on_activation",
+    allowCartonSaleRegistration: true,
+    allowUnitSelfActivation: true,
+    partTraceabilityMode: "none",
+    smallPartTrackingMode: "individual",
+    customerAcknowledgementRequired: false,
+    installationChecklistTemplate: [],
+    commissioningTemplate: [],
+    requiredPhotoPolicy: {
+      requireBeforePhoto: false,
+      requireAfterPhoto: false,
+      minimumPhotoCount: 0,
+    },
+    requiredGeoCapture: false,
+    defaultInstallerSkillTags: [],
+    includedKitDefinition: {},
   },
 ];
 

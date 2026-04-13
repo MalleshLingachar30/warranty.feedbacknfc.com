@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { type Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import {
+  manufacturerPolicyDefaultsToSettingsPatch,
+  normalizeManufacturerPolicyDefaults,
+} from "@/lib/manufacturer-policy";
 import { DEFAULT_SLA_HOURS } from "@/lib/sla-config";
 import {
   STICKER_MODES,
@@ -25,6 +29,7 @@ type SettingsPayload = {
   notifications?: unknown;
   integrations?: unknown;
   stickers?: unknown;
+  policyDefaults?: unknown;
 };
 
 type GenericRecord = Record<string, unknown>;
@@ -161,6 +166,9 @@ function normalizeSettings(settings: Prisma.JsonValue) {
     notifications: normalizeNotifications(source.notifications),
     integrations: normalizeIntegrations(source.integrations),
     stickers: normalizeManufacturerStickerConfig(source),
+    policyDefaults: normalizeManufacturerPolicyDefaults(
+      isRecord(source.policyDefaults) ? source.policyDefaults : undefined,
+    ),
   };
 }
 
@@ -227,6 +235,9 @@ export async function PUT(request: Request) {
       ? body.integrations
       : {};
     const stickersPatch = isRecord(body.stickers) ? body.stickers : {};
+    const policyDefaultsPatch = isRecord(body.policyDefaults)
+      ? body.policyDefaults
+      : {};
     const brandingPatch = isRecord(stickersPatch.branding)
       ? stickersPatch.branding
       : {};
@@ -332,6 +343,12 @@ export async function PUT(request: Request) {
 
     const stickerSettingsPatch =
       stickerConfigToOrganizationSettingsPatch(nextStickerConfig);
+    const nextPolicyDefaults = normalizeManufacturerPolicyDefaults({
+      ...existingSettings.policyDefaults,
+      ...policyDefaultsPatch,
+    });
+    const policyDefaultsSettingsPatch =
+      manufacturerPolicyDefaultsToSettingsPatch(nextPolicyDefaults);
 
     const nextSettings = {
       sla: {
@@ -353,6 +370,7 @@ export async function PUT(request: Request) {
         ...integrationsPatch,
       }),
       ...stickerSettingsPatch,
+      ...policyDefaultsSettingsPatch,
     };
 
     const updated = await db.organization.update({

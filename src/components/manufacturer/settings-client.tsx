@@ -4,10 +4,20 @@ import { useState } from "react";
 import { Loader2, Save, UserPlus } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
+import { TagInput } from "@/components/dashboard/tag-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  ACTIVATION_MODES,
+  ACTIVATION_TRIGGERS,
+  CUSTOMER_CREATION_MODES,
+  INSTALLATION_OWNERSHIP_MODES,
+  PART_TRACEABILITY_MODES,
+  SMALL_PART_TRACKING_MODES,
+  type ManufacturerPolicyDefaults,
+} from "@/lib/manufacturer-policy";
 import { type ManufacturerStickerConfig } from "@/lib/sticker-config";
 
 type SeverityHours = {
@@ -46,6 +56,7 @@ type SettingsPayload = {
     erpApiKeyMasked: string;
   };
   stickers: ManufacturerStickerConfig;
+  policyDefaults: ManufacturerPolicyDefaults;
 };
 
 type OrganizationPayload = {
@@ -93,6 +104,13 @@ function sanitizePercent(value: string, fallback: number): number {
   }
 
   return Math.min(30, Math.max(10, parsed));
+}
+
+function formatPolicyOption(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function SeverityHoursEditor({
@@ -232,6 +250,7 @@ export function ManufacturerSettingsClient({
           notifications: settings.notifications,
           integrations: settings.integrations,
           stickers: settings.stickers,
+          policyDefaults: settings.policyDefaults,
         }),
       });
 
@@ -839,6 +858,405 @@ export function ManufacturerSettingsClient({
                   />
                 </label>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Activation Policy Defaults</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span>Default Activation Mode</span>
+                <select
+                  value={settings.policyDefaults.defaultActivationMode}
+                  onChange={(event) =>
+                    setSettings((current) => {
+                      const nextMode = event.target
+                        .value as ManufacturerPolicyDefaults["defaultActivationMode"];
+
+                      if (nextMode !== "installation_driven") {
+                        return {
+                          ...current,
+                          policyDefaults: {
+                            ...current.policyDefaults,
+                            defaultActivationMode: nextMode,
+                          },
+                        };
+                      }
+
+                      return {
+                        ...current,
+                        policyDefaults: {
+                          ...current.policyDefaults,
+                          defaultActivationMode: "installation_driven",
+                          defaultActivationTrigger:
+                            "installation_report_submission",
+                          defaultCustomerCreationMode: "on_installation",
+                          defaultAllowUnitSelfActivation: false,
+                          defaultAcknowledgementRequired: true,
+                          defaultPartTraceabilityMode:
+                            current.policyDefaults.defaultPartTraceabilityMode ===
+                            "none"
+                              ? "pack_or_kit"
+                              : current.policyDefaults.defaultPartTraceabilityMode,
+                          defaultRequiredPhotoPolicy: {
+                            ...current.policyDefaults.defaultRequiredPhotoPolicy,
+                            requireBeforePhoto: true,
+                            requireAfterPhoto: true,
+                            minimumPhotoCount: Math.max(
+                              2,
+                              current.policyDefaults.defaultRequiredPhotoPolicy
+                                .minimumPhotoCount,
+                            ),
+                          },
+                        },
+                      };
+                    })
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {ACTIVATION_MODES.map((option) => (
+                    <option key={option} value={option}>
+                      {formatPolicyOption(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Default Installer Authority</span>
+                <select
+                  value={settings.policyDefaults.defaultInstallationOwnershipMode}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultInstallationOwnershipMode: event.target
+                          .value as ManufacturerPolicyDefaults["defaultInstallationOwnershipMode"],
+                      },
+                    }))
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {INSTALLATION_OWNERSHIP_MODES.map((option) => (
+                    <option key={option} value={option}>
+                      {formatPolicyOption(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Default Activation Trigger</span>
+                <select
+                  value={settings.policyDefaults.defaultActivationTrigger}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultActivationTrigger: event.target
+                          .value as ManufacturerPolicyDefaults["defaultActivationTrigger"],
+                      },
+                    }))
+                  }
+                  disabled={
+                    settings.policyDefaults.defaultActivationMode ===
+                    "installation_driven"
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {ACTIVATION_TRIGGERS.map((option) => (
+                    <option key={option} value={option}>
+                      {formatPolicyOption(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Default Customer Creation Mode</span>
+                <select
+                  value={settings.policyDefaults.defaultCustomerCreationMode}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultCustomerCreationMode: event.target
+                          .value as ManufacturerPolicyDefaults["defaultCustomerCreationMode"],
+                      },
+                    }))
+                  }
+                  disabled={
+                    settings.policyDefaults.defaultActivationMode ===
+                    "installation_driven"
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {CUSTOMER_CREATION_MODES.map((option) => (
+                    <option key={option} value={option}>
+                      {formatPolicyOption(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Default Part Traceability Mode</span>
+                <select
+                  value={settings.policyDefaults.defaultPartTraceabilityMode}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultPartTraceabilityMode: event.target
+                          .value as ManufacturerPolicyDefaults["defaultPartTraceabilityMode"],
+                      },
+                    }))
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {PART_TRACEABILITY_MODES.map((option) => (
+                    <option key={option} value={option}>
+                      {formatPolicyOption(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span>Default Small-Part Tracking Mode</span>
+                <select
+                  value={settings.policyDefaults.defaultSmallPartTrackingMode}
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultSmallPartTrackingMode: event.target
+                          .value as ManufacturerPolicyDefaults["defaultSmallPartTrackingMode"],
+                      },
+                    }))
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {SMALL_PART_TRACKING_MODES.map((option) => (
+                    <option key={option} value={option}>
+                      {formatPolicyOption(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ToggleRow
+                label="Allow Carton Sale Registration by Default"
+                checked={settings.policyDefaults.defaultAllowCartonSaleRegistration}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    policyDefaults: {
+                      ...current.policyDefaults,
+                      defaultAllowCartonSaleRegistration: checked,
+                    },
+                  }))
+                }
+              />
+              <ToggleRow
+                label="Allow Unit Self-Activation by Default"
+                checked={settings.policyDefaults.defaultAllowUnitSelfActivation}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    policyDefaults: {
+                      ...current.policyDefaults,
+                      defaultAllowUnitSelfActivation: checked,
+                    },
+                  }))
+                }
+              />
+              <ToggleRow
+                label="Require Customer Acknowledgement by Default"
+                checked={settings.policyDefaults.defaultAcknowledgementRequired}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    policyDefaults: {
+                      ...current.policyDefaults,
+                      defaultAcknowledgementRequired: checked,
+                    },
+                  }))
+                }
+              />
+              <ToggleRow
+                label="Require Geo Capture by Default"
+                checked={settings.policyDefaults.defaultRequiredGeoCapture}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    policyDefaults: {
+                      ...current.policyDefaults,
+                      defaultRequiredGeoCapture: checked,
+                    },
+                  }))
+                }
+              />
+              <ToggleRow
+                label="ERP Inbound Enabled"
+                checked={settings.policyDefaults.erpInboundEnabled}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    policyDefaults: {
+                      ...current.policyDefaults,
+                      erpInboundEnabled: checked,
+                    },
+                  }))
+                }
+              />
+              <ToggleRow
+                label="ERP Outbound Enabled"
+                checked={settings.policyDefaults.erpOutboundEnabled}
+                onChange={(checked) =>
+                  setSettings((current) => ({
+                    ...current,
+                    policyDefaults: {
+                      ...current.policyDefaults,
+                      erpOutboundEnabled: checked,
+                    },
+                  }))
+                }
+              />
+            </div>
+
+            <TagInput
+              label="Default Installation Checklist Template"
+              placeholder="Press Enter to add checklist step"
+              value={settings.policyDefaults.defaultChecklistTemplate}
+              onChange={(next: string[]) =>
+                setSettings((current) => ({
+                  ...current,
+                  policyDefaults: {
+                    ...current.policyDefaults,
+                    defaultChecklistTemplate: next,
+                  },
+                }))
+              }
+            />
+
+            <TagInput
+              label="Default Commissioning Template"
+              placeholder="Press Enter to add commissioning field"
+              value={settings.policyDefaults.defaultCommissioningTemplate}
+              onChange={(next: string[]) =>
+                setSettings((current) => ({
+                  ...current,
+                  policyDefaults: {
+                    ...current.policyDefaults,
+                    defaultCommissioningTemplate: next,
+                  },
+                }))
+              }
+            />
+
+            <TagInput
+              label="Default Installer Skill Tags"
+              placeholder="Press Enter to add installer skill tag"
+              value={settings.policyDefaults.defaultInstallerSkillTags}
+              onChange={(next: string[]) =>
+                setSettings((current) => ({
+                  ...current,
+                  policyDefaults: {
+                    ...current.policyDefaults,
+                    defaultInstallerSkillTags: next,
+                  },
+                }))
+              }
+            />
+
+            <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-3">
+              <label className="flex items-center justify-between gap-3 text-sm sm:col-span-1">
+                <span>Require Before Photo</span>
+                <input
+                  type="checkbox"
+                  checked={
+                    settings.policyDefaults.defaultRequiredPhotoPolicy
+                      .requireBeforePhoto
+                  }
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultRequiredPhotoPolicy: {
+                          ...current.policyDefaults.defaultRequiredPhotoPolicy,
+                          requireBeforePhoto: event.target.checked,
+                        },
+                      },
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-input"
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-3 text-sm sm:col-span-1">
+                <span>Require After Photo</span>
+                <input
+                  type="checkbox"
+                  checked={
+                    settings.policyDefaults.defaultRequiredPhotoPolicy
+                      .requireAfterPhoto
+                  }
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultRequiredPhotoPolicy: {
+                          ...current.policyDefaults.defaultRequiredPhotoPolicy,
+                          requireAfterPhoto: event.target.checked,
+                        },
+                      },
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-input"
+                />
+              </label>
+
+              <label className="space-y-1 text-sm sm:col-span-1">
+                <span>Minimum Photo Count</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={
+                    settings.policyDefaults.defaultRequiredPhotoPolicy
+                      .minimumPhotoCount
+                  }
+                  onChange={(event) =>
+                    setSettings((current) => ({
+                      ...current,
+                      policyDefaults: {
+                        ...current.policyDefaults,
+                        defaultRequiredPhotoPolicy: {
+                          ...current.policyDefaults.defaultRequiredPhotoPolicy,
+                          minimumPhotoCount: Math.min(
+                            20,
+                            sanitizeHours(event.target.value),
+                          ),
+                        },
+                      },
+                    }))
+                  }
+                />
+              </label>
             </div>
           </CardContent>
         </Card>

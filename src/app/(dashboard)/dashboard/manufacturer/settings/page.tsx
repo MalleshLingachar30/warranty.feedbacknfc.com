@@ -2,6 +2,7 @@ import dynamic from "next/dynamic";
 
 import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { db } from "@/lib/db";
+import { normalizeManufacturerPolicyDefaults } from "@/lib/manufacturer-policy";
 import { DEFAULT_SLA_HOURS } from "@/lib/sla-config";
 import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
 
@@ -129,6 +130,9 @@ function normalizeSettings(value: unknown) {
       erpApiKeyMasked: asString(integrations.erpApiKeyMasked, ""),
     },
     stickers: normalizeManufacturerStickerConfig(source),
+    policyDefaults: normalizeManufacturerPolicyDefaults(
+      isRecord(source.policyDefaults) ? source.policyDefaults : undefined,
+    ),
   };
 }
 
