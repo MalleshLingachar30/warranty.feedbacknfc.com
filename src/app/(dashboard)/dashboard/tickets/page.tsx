@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
+import { formatWorkflowLabel } from "@/lib/installation-workflow";
 import { getSlaIndicator, type SlaIndicatorState } from "@/lib/sla-config";
 
 import { resolveServiceCenterPageContext } from "../_lib/service-center-context";
@@ -60,7 +61,11 @@ function statusClass(status: TicketStatus) {
   }
 }
 
-function formatDateTime(date: Date) {
+function formatDateTime(date: Date | null) {
+  if (!date) {
+    return "-";
+  }
+
   return date.toLocaleString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -100,6 +105,27 @@ function slaIndicatorLabel(state: SlaIndicatorState) {
   }
 }
 
+function installationStatusClass(status: string) {
+  switch (status) {
+    case "pending_assignment":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "assigned":
+    case "scheduled":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "technician_enroute":
+    case "on_site":
+    case "commissioning":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    case "completed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "cancelled":
+    case "failed":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+}
+
 type TicketMetricRow = {
   avgAssignmentLatencyHours: number | null;
   avgResolutionHours: number | null;
@@ -120,7 +146,7 @@ export default async function ServiceCenterTicketsPage() {
     );
   }
 
-  const [tickets, aggregate, metricRows] = await Promise.all([
+  const [tickets, aggregate, metricRows, installationJobs] = await Promise.all([
     db.ticket.findMany({
       where: {
         OR: [
@@ -233,6 +259,52 @@ export default async function ServiceCenterTicketsPage() {
         )::double precision AS "avgResolutionHours"
       FROM latest_tickets
     `),
+    db.installationJob.findMany({
+      where: {
+        assignedServiceCenter: {
+          organizationId,
+        },
+      },
+      orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
+      take: 100,
+      select: {
+        id: true,
+        jobNumber: true,
+        status: true,
+        scheduledFor: true,
+        createdAt: true,
+        assignedTechnician: {
+          select: {
+            name: true,
+          },
+        },
+        manufacturerOrg: {
+          select: {
+            name: true,
+          },
+        },
+        saleRegistration: {
+          select: {
+            registeredAt: true,
+            dealerName: true,
+            distributorName: true,
+          },
+        },
+        asset: {
+          select: {
+            publicCode: true,
+            serialNumber: true,
+            lifecycleState: true,
+            productModel: {
+              select: {
+                name: true,
+                modelNumber: true,
+              },
+            },
+          },
+        },
+      },
+    }),
   ]);
 
   const openCount = aggregate
@@ -400,6 +472,99 @@ export default async function ServiceCenterTicketsPage() {
           <p className="mt-3 text-xs text-muted-foreground">
             SLA breached in queue: {breachedCount.toLocaleString()}
           </p>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Installation Queue</CardTitle>
+          <CardDescription>
+            Installation-driven jobs assigned to this service-center
+            organization.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Job</TableHead>
+                <TableHead>Asset</TableHead>
+                <TableHead>Manufacturer</TableHead>
+                <TableHead>Commercial Handoff</TableHead>
+                <TableHead>Scheduled</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Technician</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {installationJobs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-muted-foreground">
+                    No installation jobs are assigned to this service-center
+                    organization yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                installationJobs.map((job) => (
+                  <TableRow key={job.id}>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <p className="font-medium">{job.jobNumber}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Created {formatDateTime(job.createdAt)}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <p>{job.asset.productModel.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {job.asset.productModel.modelNumber
+                            ? `${job.asset.productModel.modelNumber} • `
+                            : ""}
+                          {job.asset.serialNumber ?? "Serial unavailable"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {job.asset.publicCode} •{" "}
+                          {formatWorkflowLabel(job.asset.lifecycleState)}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{job.manufacturerOrg.name}</TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <p>
+                          Registered{" "}
+                          {job.saleRegistration
+                            ? formatDateTime(job.saleRegistration.registeredAt)
+                            : "-"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Dealer {job.saleRegistration?.dealerName ?? "-"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Distributor{" "}
+                          {job.saleRegistration?.distributorName ?? "-"}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{formatDateTime(job.scheduledFor)}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={installationStatusClass(job.status)}
+                      >
+                        {formatWorkflowLabel(job.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {job.assignedTechnician?.name ?? "Pending"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>

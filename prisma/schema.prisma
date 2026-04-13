@@ -204,6 +204,31 @@ enum TagViewerPolicy {
   warehouse_admin
 }
 
+enum SaleRegistrationChannel {
+  carton_scan
+  manual_admin
+  erp_seeded
+  salesman_assisted
+}
+
+enum SaleRegistrationStatus {
+  registered
+  job_created
+  cancelled
+}
+
+enum InstallationJobStatus {
+  pending_assignment
+  assigned
+  scheduled
+  technician_enroute
+  on_site
+  commissioning
+  completed
+  cancelled
+  failed
+}
+
 model Organization {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                  String           @db.VarChar(255)
@@ -226,14 +251,17 @@ model Organization {
 
   users                User[]
   productModels        ProductModel[]
-  allocatedStickers    Sticker[]            @relation("AllocatedOrganization")
+  allocatedStickers    Sticker[]             @relation("AllocatedOrganization")
   products             Product[]
   serviceCenters       ServiceCenter[]
-  manufacturerClaims   WarrantyClaim[]      @relation("ManufacturerOrganizationClaims")
-  serviceCenterClaims  WarrantyClaim[]      @relation("ServiceCenterOrganizationClaims")
+  manufacturerClaims   WarrantyClaim[]       @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims  WarrantyClaim[]       @relation("ServiceCenterOrganizationClaims")
   stickerAllocations   StickerAllocation[]
   assetIdentities      AssetIdentity[]
+  serializedSalesLines SerializedSalesLine[]
+  saleRegistrations    SaleRegistration[]
   tagGenerationBatches TagGenerationBatch[]
+  installationJobs     InstallationJob[]     @relation("ManufacturerInstallationJobs")
 
   @@map("organizations")
 }
@@ -387,13 +415,16 @@ model AssetIdentity {
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
 
-  organization    Organization        @relation(fields: [organizationId], references: [id])
-  productModel    ProductModel        @relation(fields: [productModelId], references: [id])
-  customer        User?               @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
-  rootMainAsset   AssetIdentity?      @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
-  childAssets     AssetIdentity[]     @relation("AssetRootLineage")
-  generationBatch TagGenerationBatch? @relation(fields: [generationBatchId], references: [id])
-  tags            AssetTag[]
+  organization        Organization         @relation(fields: [organizationId], references: [id])
+  productModel        ProductModel         @relation(fields: [productModelId], references: [id])
+  customer            User?                @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
+  rootMainAsset       AssetIdentity?       @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
+  childAssets         AssetIdentity[]      @relation("AssetRootLineage")
+  generationBatch     TagGenerationBatch?  @relation(fields: [generationBatchId], references: [id])
+  serializedSalesLine SerializedSalesLine?
+  saleRegistration    SaleRegistration?
+  installationJobs    InstallationJob[]
+  tags                AssetTag[]
 
   @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
   @@index([organizationId, productModelId], map: "idx_asset_identities_org_model")
@@ -424,6 +455,92 @@ model AssetTag {
   @@index([generationBatchId], map: "idx_asset_tags_batch")
   @@index([symbology, status], map: "idx_asset_tags_symbology_status")
   @@map("asset_tags")
+}
+
+model SerializedSalesLine {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String    @map("organization_id") @db.Uuid
+  assetId              String    @unique @map("asset_id") @db.Uuid
+  sourceDocumentNumber String?   @map("source_document_number") @db.VarChar(120)
+  sourceLineNumber     String?   @map("source_line_number") @db.VarChar(80)
+  sourceRecordKey      String?   @map("source_record_key") @db.VarChar(180)
+  itemCode             String?   @map("item_code") @db.VarChar(120)
+  itemDescription      String?   @map("item_description")
+  serialNumber         String    @map("serial_number") @db.VarChar(255)
+  quantity             Decimal   @default(1.00) @db.Decimal(10, 2)
+  channelCode          String?   @map("channel_code") @db.VarChar(120)
+  dealerName           String?   @map("dealer_name") @db.VarChar(255)
+  distributorName      String?   @map("distributor_name") @db.VarChar(255)
+  warehouseCode        String?   @map("warehouse_code") @db.VarChar(120)
+  transactionDate      DateTime? @map("transaction_date")
+  sourceSystem         String?   @map("source_system") @db.VarChar(80)
+  metadata             Json      @default(dbgenerated("'{}'::jsonb"))
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  asset            AssetIdentity     @relation(fields: [assetId], references: [id])
+  saleRegistration SaleRegistration?
+
+  @@unique([organizationId, sourceRecordKey], map: "serialized_sales_lines_org_source_record_key_key")
+  @@index([organizationId, transactionDate], map: "idx_serialized_sales_lines_org_date")
+  @@index([organizationId, serialNumber], map: "idx_serialized_sales_lines_org_serial")
+  @@map("serialized_sales_lines")
+}
+
+model SaleRegistration {
+  id              String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assetId         String                  @unique @map("asset_id") @db.Uuid
+  organizationId  String                  @map("organization_id") @db.Uuid
+  salesLineId     String?                 @unique @map("sales_line_id") @db.Uuid
+  channel         SaleRegistrationChannel
+  dealerName      String?                 @map("dealer_name") @db.VarChar(255)
+  distributorName String?                 @map("distributor_name") @db.VarChar(255)
+  purchaseDate    DateTime?               @map("purchase_date")
+  registeredAt    DateTime                @default(now()) @map("registered_at")
+  status          SaleRegistrationStatus  @default(registered)
+  metadata        Json                    @default(dbgenerated("'{}'::jsonb"))
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  asset           AssetIdentity        @relation(fields: [assetId], references: [id])
+  organization    Organization         @relation(fields: [organizationId], references: [id])
+  salesLine       SerializedSalesLine? @relation(fields: [salesLineId], references: [id])
+  installationJob InstallationJob?
+
+  @@index([organizationId, status, registeredAt], map: "idx_sale_registrations_org_status_registered")
+  @@map("sale_registrations")
+}
+
+model InstallationJob {
+  id                            String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobNumber                     String                @unique @map("job_number") @db.VarChar(30)
+  assetId                       String                @map("asset_id") @db.Uuid
+  saleRegistrationId            String?               @unique @map("sale_registration_id") @db.Uuid
+  manufacturerOrgId             String                @map("manufacturer_org_id") @db.Uuid
+  assignedServiceCenterId       String?               @map("assigned_service_center_id") @db.Uuid
+  assignedTechnicianId          String?               @map("assigned_technician_id") @db.Uuid
+  status                        InstallationJobStatus @default(pending_assignment)
+  scheduledFor                  DateTime?             @map("scheduled_for")
+  technicianStartedAt           DateTime?             @map("technician_started_at")
+  technicianCompletedAt         DateTime?             @map("technician_completed_at")
+  activationTriggeredAt         DateTime?             @map("activation_triggered_at")
+  checklistTemplateSnapshot     Json                  @default(dbgenerated("'[]'::jsonb")) @map("checklist_template_snapshot")
+  commissioningTemplateSnapshot Json                  @default(dbgenerated("'[]'::jsonb")) @map("commissioning_template_snapshot")
+  metadata                      Json                  @default(dbgenerated("'{}'::jsonb"))
+  createdAt                     DateTime              @default(now()) @map("created_at")
+  updatedAt                     DateTime              @updatedAt @map("updated_at")
+
+  asset                 AssetIdentity     @relation(fields: [assetId], references: [id])
+  saleRegistration      SaleRegistration? @relation(fields: [saleRegistrationId], references: [id])
+  manufacturerOrg       Organization      @relation("ManufacturerInstallationJobs", fields: [manufacturerOrgId], references: [id])
+  assignedServiceCenter ServiceCenter?    @relation("AssignedServiceCenterInstallationJobs", fields: [assignedServiceCenterId], references: [id])
+  assignedTechnician    Technician?       @relation("AssignedTechnicianInstallationJobs", fields: [assignedTechnicianId], references: [id])
+
+  @@index([manufacturerOrgId, status], map: "idx_installation_jobs_manufacturer_status")
+  @@index([assignedServiceCenterId, status], map: "idx_installation_jobs_service_center_status")
+  @@index([assetId], map: "idx_installation_jobs_asset")
+  @@map("installation_jobs")
 }
 
 model Sticker {
@@ -510,9 +627,10 @@ model ServiceCenter {
   createdAt                  DateTime              @default(now()) @map("created_at")
   updatedAt                  DateTime              @updatedAt @map("updated_at")
 
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  technicians     Technician[]
-  assignedTickets Ticket[]     @relation("AssignedServiceCenterTickets")
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  technicians      Technician[]
+  assignedTickets  Ticket[]          @relation("AssignedServiceCenterTickets")
+  installationJobs InstallationJob[] @relation("AssignedServiceCenterInstallationJobs")
 
   @@index([organizationId], map: "idx_service_centers_organization")
   @@index([location], type: Gist, map: "idx_service_centers_location")
@@ -536,10 +654,11 @@ model Technician {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
 
-  user            User               @relation(fields: [userId], references: [id])
-  serviceCenter   ServiceCenter      @relation(fields: [serviceCenterId], references: [id])
-  assignedTickets Ticket[]           @relation("AssignedTechnicianTickets")
-  liveStatuses    TicketLiveStatus[]
+  user             User               @relation(fields: [userId], references: [id])
+  serviceCenter    ServiceCenter      @relation(fields: [serviceCenterId], references: [id])
+  assignedTickets  Ticket[]           @relation("AssignedTechnicianTickets")
+  installationJobs InstallationJob[]  @relation("AssignedTechnicianInstallationJobs")
+  liveStatuses     TicketLiveStatus[]
 
   @@index([serviceCenterId], map: "idx_technicians_service_center")
   @@map("technicians")

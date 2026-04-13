@@ -1,3 +1,10 @@
+import type {
+  AssetLifecycleState,
+  InstallationJobStatus,
+  SaleRegistrationChannel,
+  SaleRegistrationStatus,
+} from "@prisma/client";
+
 import type { AssetProductClass, TagSymbology } from "@/lib/asset-generation";
 import type {
   ActivationMode,
@@ -125,6 +132,75 @@ export type ServiceCenterRow = {
     claimAccuracy: number;
     customerSatisfaction: number;
   };
+};
+
+export type ServiceCenterOption = {
+  id: string;
+  name: string;
+  city: string;
+};
+
+export type SaleRegistrationRow = {
+  id: string;
+  assetId: string;
+  assetCode: string;
+  serialNumber: string;
+  assetLifecycleState: AssetLifecycleState;
+  productModel: {
+    name: string;
+    modelNumber: string;
+    activationMode: ActivationMode;
+  };
+  channel: SaleRegistrationChannel;
+  status: SaleRegistrationStatus;
+  purchaseDate: string | null;
+  registeredAt: string;
+  dealerName: string | null;
+  distributorName: string | null;
+  salesLine: {
+    id: string | null;
+    sourceDocumentNumber: string | null;
+    sourceLineNumber: string | null;
+    sourceRecordKey: string | null;
+    itemCode: string | null;
+    transactionDate: string | null;
+    warehouseCode: string | null;
+  } | null;
+  tags: {
+    unitTagCode: string | null;
+    cartonTagCode: string | null;
+  };
+  installationJob: {
+    id: string;
+    jobNumber: string;
+    status: InstallationJobStatus;
+    scheduledFor: string | null;
+    assignedServiceCenterName: string | null;
+  } | null;
+};
+
+export type InstallationJobRow = {
+  id: string;
+  jobNumber: string;
+  status: InstallationJobStatus;
+  scheduledFor: string | null;
+  createdAt: string;
+  assetId: string;
+  assetCode: string;
+  serialNumber: string;
+  assetLifecycleState: AssetLifecycleState;
+  saleRegistrationId: string | null;
+  saleRegisteredAt: string | null;
+  productModel: {
+    name: string;
+    modelNumber: string;
+  };
+  assignedServiceCenter: {
+    id: string;
+    name: string;
+    city: string;
+  } | null;
+  assignedTechnicianName: string | null;
 };
 
 export type ClaimStatusType =
