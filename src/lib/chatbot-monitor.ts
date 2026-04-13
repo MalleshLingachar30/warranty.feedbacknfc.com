@@ -4,11 +4,10 @@ import { db } from "@/lib/db";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import { sendChatbotMonitorAlert } from "@/lib/warranty-notifications";
 
-const CHECK_NAMES = ["chat_reply", "chat_lead"] as const;
 const ALERT_COOLDOWN_MS = 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 20 * 1000;
 
-type CheckName = (typeof CHECK_NAMES)[number];
+type CheckName = "chat_reply" | "chat_lead";
 
 type MonitorCheckResult = {
   name: CheckName;

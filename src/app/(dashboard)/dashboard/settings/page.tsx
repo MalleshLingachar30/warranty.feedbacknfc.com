@@ -11,14 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { getCachedAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
