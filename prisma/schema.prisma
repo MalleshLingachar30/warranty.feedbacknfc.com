@@ -229,6 +229,18 @@ enum InstallationJobStatus {
   failed
 }
 
+enum InstallationReportSubmitterRole {
+  manufacturer_engineer
+  dealer_engineer
+  dealer_technician
+}
+
+enum CustomerAcknowledgementType {
+  otp
+  signature
+  digital_acceptance
+}
+
 model Organization {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                  String           @db.VarChar(255)
@@ -290,6 +302,7 @@ model User {
   customerAssetIdentities     AssetIdentity[]      @relation("AssetIdentityCustomer")
   customerProducts            Product[]            @relation("CustomerProducts")
   scanLogs                    ScanLog[]            @relation("ScanLogActor")
+  submittedInstallationReports InstallationReport[]
 
   @@map("users")
 }
@@ -424,6 +437,7 @@ model AssetIdentity {
   serializedSalesLine SerializedSalesLine?
   saleRegistration    SaleRegistration?
   installationJobs    InstallationJob[]
+  installationReports InstallationReport[]
   tags                AssetTag[]
 
   @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
@@ -536,11 +550,48 @@ model InstallationJob {
   manufacturerOrg       Organization      @relation("ManufacturerInstallationJobs", fields: [manufacturerOrgId], references: [id])
   assignedServiceCenter ServiceCenter?    @relation("AssignedServiceCenterInstallationJobs", fields: [assignedServiceCenterId], references: [id])
   assignedTechnician    Technician?       @relation("AssignedTechnicianInstallationJobs", fields: [assignedTechnicianId], references: [id])
+  installationReport    InstallationReport?
 
   @@index([manufacturerOrgId, status], map: "idx_installation_jobs_manufacturer_status")
   @@index([assignedServiceCenterId, status], map: "idx_installation_jobs_service_center_status")
   @@index([assetId], map: "idx_installation_jobs_asset")
   @@map("installation_jobs")
+}
+
+model InstallationReport {
+  id                             String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationJobId              String                           @unique @map("installation_job_id") @db.Uuid
+  assetId                        String                           @map("asset_id") @db.Uuid
+  submittedByUserId              String                           @map("submitted_by_user_id") @db.Uuid
+  submittedByRole                InstallationReportSubmitterRole  @map("submitted_by_role")
+  customerName                   String                           @map("customer_name") @db.VarChar(255)
+  customerPhone                  String                           @map("customer_phone") @db.VarChar(20)
+  customerEmail                  String?                          @map("customer_email") @db.VarChar(255)
+  installAddress                 String                           @map("install_address")
+  installCity                    String                           @map("install_city") @db.VarChar(100)
+  installState                   String                           @map("install_state") @db.VarChar(100)
+  installPincode                 String                           @map("install_pincode") @db.VarChar(10)
+  installationDate               DateTime                         @map("installation_date")
+  installerName                  String                           @map("installer_name") @db.VarChar(255)
+  unitSerialNumber               String                           @map("unit_serial_number") @db.VarChar(255)
+  geoLocation                    Json                             @map("geo_location")
+  customerAcknowledgementType    CustomerAcknowledgementType      @map("customer_acknowledgement_type")
+  customerAcknowledgementPayload Json                             @map("customer_acknowledgement_payload")
+  photoUrls                      String[]                         @default([]) @map("photo_urls")
+  checklistResponses             Json                             @map("checklist_responses")
+  commissioningData              Json                             @map("commissioning_data")
+  submittedAt                    DateTime                         @default(now()) @map("submitted_at")
+  createdAt                      DateTime                         @default(now()) @map("created_at")
+  updatedAt                      DateTime                         @updatedAt @map("updated_at")
+
+  installationJob InstallationJob @relation(fields: [installationJobId], references: [id])
+  asset           AssetIdentity    @relation(fields: [assetId], references: [id])
+  submittedByUser User             @relation(fields: [submittedByUserId], references: [id])
+
+  @@index([assetId], map: "idx_installation_reports_asset")
+  @@index([submittedByUserId], map: "idx_installation_reports_submitted_by")
+  @@index([submittedAt], map: "idx_installation_reports_submitted_at")
+  @@map("installation_reports")
 }
 
 model Sticker {

@@ -4,6 +4,7 @@ import type {
   InstallationJobRow,
   SaleRegistrationRow,
   ServiceCenterOption,
+  TechnicianOption,
 } from "@/components/manufacturer/types";
 
 const SALE_REGISTRATION_TAG_CLASSES: TagClass[] = [
@@ -83,6 +84,7 @@ export const installationJobSelect =
     status: true,
     scheduledFor: true,
     createdAt: true,
+    activationTriggeredAt: true,
     assetId: true,
     asset: {
       select: {
@@ -112,7 +114,16 @@ export const installationJobSelect =
     },
     assignedTechnician: {
       select: {
+        id: true,
         name: true,
+      },
+    },
+    installationReport: {
+      select: {
+        id: true,
+        submittedAt: true,
+        submittedByRole: true,
+        customerName: true,
       },
     },
   });
@@ -130,6 +141,20 @@ export function serializeServiceCenterOption(input: {
     id: input.id,
     name: input.name,
     city: input.city ?? "-",
+  };
+}
+
+export function serializeTechnicianOption(input: {
+  id: string;
+  name: string;
+  serviceCenterId: string;
+  serviceCenterName: string;
+}): TechnicianOption {
+  return {
+    id: input.id,
+    name: input.name,
+    serviceCenterId: input.serviceCenterId,
+    serviceCenterName: input.serviceCenterName,
   };
 }
 
@@ -200,6 +225,7 @@ export function serializeInstallationJobRow(
     status: job.status,
     scheduledFor: job.scheduledFor?.toISOString() ?? null,
     createdAt: job.createdAt.toISOString(),
+    activationTriggeredAt: job.activationTriggeredAt?.toISOString() ?? null,
     assetId: job.assetId,
     assetCode: job.asset.publicCode,
     serialNumber: job.asset.serialNumber ?? "Unassigned",
@@ -217,6 +243,15 @@ export function serializeInstallationJobRow(
           city: job.assignedServiceCenter.city ?? "-",
         }
       : null,
+    assignedTechnicianId: job.assignedTechnician?.id ?? null,
     assignedTechnicianName: job.assignedTechnician?.name ?? null,
+    installationReport: job.installationReport
+      ? {
+          id: job.installationReport.id,
+          submittedAt: job.installationReport.submittedAt.toISOString(),
+          submittedByRole: job.installationReport.submittedByRole,
+          customerName: job.installationReport.customerName,
+        }
+      : null,
   };
 }

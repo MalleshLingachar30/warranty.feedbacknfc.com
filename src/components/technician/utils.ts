@@ -1,4 +1,5 @@
 import type {
+  TechnicianInstallationJobStatus,
   TechnicianIssueSeverity,
   TechnicianJob,
   TechnicianTicketStatus,
@@ -141,4 +142,32 @@ export function selectJobsByTab(
 
 export function googleMapsUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
+export function workflowLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+export function installationStatusBadgeClass(
+  status: TechnicianInstallationJobStatus,
+): string {
+  switch (status) {
+    case "pending_assignment":
+      return "border-amber-300 bg-amber-100 text-amber-900";
+    case "assigned":
+    case "scheduled":
+      return "border-blue-300 bg-blue-100 text-blue-800";
+    case "technician_enroute":
+      return "border-cyan-300 bg-cyan-100 text-cyan-800";
+    case "on_site":
+    case "commissioning":
+      return "border-violet-300 bg-violet-100 text-violet-800";
+    case "completed":
+      return "border-emerald-300 bg-emerald-100 text-emerald-800";
+    case "cancelled":
+    case "failed":
+      return "border-rose-300 bg-rose-100 text-rose-800";
+    default:
+      return "border-slate-300 bg-slate-100 text-slate-700";
+  }
 }

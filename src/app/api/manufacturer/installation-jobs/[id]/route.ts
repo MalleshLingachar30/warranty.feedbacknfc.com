@@ -20,6 +20,7 @@ import {
 
 type UpdateInstallationJobPayload = {
   assignedServiceCenterId?: unknown;
+  assignedTechnicianId?: unknown;
   scheduledFor?: unknown;
   status?: unknown;
 };
@@ -56,6 +57,7 @@ export async function PATCH(
       select: {
         id: true,
         assetId: true,
+        status: true,
       },
     });
 
@@ -66,13 +68,56 @@ export async function PATCH(
     const assignedServiceCenterId = parseOptionalString(
       body.assignedServiceCenterId,
     );
+    const assignedTechnicianId = parseOptionalString(body.assignedTechnicianId);
     const scheduledFor = parseOptionalDate(body.scheduledFor);
     const explicitStatus = parseStatus(body.status);
 
-    if (assignedServiceCenterId) {
+    const technician = assignedTechnicianId
+      ? await db.technician.findFirst({
+          where: {
+            id: assignedTechnicianId,
+            serviceCenter: {
+              OR: [
+                {
+                  manufacturerAuthorizations: {
+                    has: organizationId,
+                  },
+                },
+                {
+                  organizationId,
+                },
+              ],
+            },
+          },
+          select: {
+            id: true,
+            serviceCenterId: true,
+          },
+        })
+      : null;
+
+    if (assignedTechnicianId && !technician) {
+      throw new ApiError("Assigned technician is not authorized.", 400);
+    }
+
+    const resolvedServiceCenterId =
+      assignedServiceCenterId ?? technician?.serviceCenterId ?? null;
+
+    if (
+      assignedServiceCenterId &&
+      technician &&
+      technician.serviceCenterId !== assignedServiceCenterId
+    ) {
+      throw new ApiError(
+        "Assigned technician does not belong to the selected service center.",
+        400,
+      );
+    }
+
+    if (resolvedServiceCenterId) {
       const center = await db.serviceCenter.findFirst({
         where: {
-          id: assignedServiceCenterId,
+          id: resolvedServiceCenterId,
           OR: [
             {
               manufacturerAuthorizations: {
@@ -96,11 +141,16 @@ export async function PATCH(
 
     const nextStatus =
       explicitStatus ??
-      (scheduledFor
-        ? "scheduled"
-        : assignedServiceCenterId
-          ? "assigned"
-          : "pending_assignment");
+      (job.status === "technician_enroute" ||
+      job.status === "on_site" ||
+      job.status === "commissioning" ||
+      job.status === "completed"
+        ? job.status
+        : scheduledFor
+          ? "scheduled"
+          : resolvedServiceCenterId
+            ? "assigned"
+            : "pending_assignment");
 
     const updated = await db.$transaction(async (tx) => {
       const nextJob = await tx.installationJob.update({
@@ -108,7 +158,8 @@ export async function PATCH(
           id,
         },
         data: {
-          assignedServiceCenterId,
+          assignedServiceCenterId: resolvedServiceCenterId,
+          assignedTechnicianId: technician?.id ?? null,
           scheduledFor,
           status: nextStatus,
         },

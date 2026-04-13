@@ -33,15 +33,21 @@ import {
 } from "@/components/ui/table";
 import { formatWorkflowLabel } from "@/lib/installation-workflow";
 
-import type { InstallationJobRow, ServiceCenterOption } from "./types";
+import type {
+  InstallationJobRow,
+  ServiceCenterOption,
+  TechnicianOption,
+} from "./types";
 
 type InstallationJobsClientProps = {
   initialJobs: InstallationJobRow[];
   serviceCenters: ServiceCenterOption[];
+  technicians: TechnicianOption[];
 };
 
 type JobPlanValues = {
   assignedServiceCenterId: string;
+  assignedTechnicianId: string;
   scheduledFor: string;
   status:
     | "pending_assignment"
@@ -119,6 +125,7 @@ function lifecycleClass(value: InstallationJobRow["assetLifecycleState"]) {
 function toPlanValues(job: InstallationJobRow): JobPlanValues {
   return {
     assignedServiceCenterId: job.assignedServiceCenter?.id ?? "",
+    assignedTechnicianId: job.assignedTechnicianId ?? "",
     scheduledFor: toDateTimeLocalValue(job.scheduledFor),
     status:
       job.status === "pending_assignment" ||
@@ -134,11 +141,13 @@ function toPlanValues(job: InstallationJobRow): JobPlanValues {
 export function InstallationJobsClient({
   initialJobs,
   serviceCenters,
+  technicians,
 }: InstallationJobsClientProps) {
   const [jobs, setJobs] = useState<InstallationJobRow[]>(initialJobs);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<JobPlanValues>({
     assignedServiceCenterId: "",
+    assignedTechnicianId: "",
     scheduledFor: "",
     status: "pending_assignment",
   });
@@ -154,6 +163,9 @@ export function InstallationJobsClient({
   const assignedCenterCount = jobs.filter(
     (job) => job.assignedServiceCenter,
   ).length;
+  const reportsSubmittedCount = jobs.filter(
+    (job) => Boolean(job.installationReport),
+  ).length;
 
   const openPlanner = (job: InstallationJobRow) => {
     setEditingJobId(job.id);
@@ -165,6 +177,14 @@ export function InstallationJobsClient({
     setEditingJobId(null);
     setError(null);
   };
+
+  const availableTechnicians = technicians.filter((technician) => {
+    if (!formValues.assignedServiceCenterId) {
+      return true;
+    }
+
+    return technician.serviceCenterId === formValues.assignedServiceCenterId;
+  });
 
   const saveJobPlan = async () => {
     if (!editingJobId) {
@@ -184,6 +204,7 @@ export function InstallationJobsClient({
           },
           body: JSON.stringify({
             assignedServiceCenterId: formValues.assignedServiceCenterId || null,
+            assignedTechnicianId: formValues.assignedTechnicianId || null,
             scheduledFor: formValues.scheduledFor || null,
             status: formValues.status,
           }),
@@ -221,7 +242,7 @@ export function InstallationJobsClient({
         description="Assign service centers, schedule installation work, and keep the asset lifecycle aligned with queue planning."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           title="Open Jobs"
           value={jobs.length.toLocaleString()}
@@ -244,14 +265,19 @@ export function InstallationJobsClient({
           description="Jobs with a committed install slot"
           icon={CalendarClockIcon}
         />
+        <MetricCard
+          title="Reports Submitted"
+          value={reportsSubmittedCount.toLocaleString()}
+          description="Installations completed with proof"
+        />
       </div>
 
       <Card className="mt-4">
         <CardHeader>
           <CardTitle>Manufacturer Installation Queue</CardTitle>
           <CardDescription>
-            Schedule installation-driven assets without activating warranty
-            early. Installation report completion remains a later phase.
+            Plan assignments, monitor installer execution, and verify
+            report-driven activation for installation-driven assets.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -270,13 +296,15 @@ export function InstallationJobsClient({
                 <TableHead>Scheduled</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Asset Lifecycle</TableHead>
+                <TableHead>Activation</TableHead>
+                <TableHead>Report</TableHead>
                 <TableHead className="text-right">Plan</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {jobs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">
+                  <TableCell colSpan={9} className="text-muted-foreground">
                     No installation jobs have been created yet.
                   </TableCell>
                 </TableRow>
@@ -342,6 +370,26 @@ export function InstallationJobsClient({
                         {formatWorkflowLabel(job.assetLifecycleState)}
                       </Badge>
                     </TableCell>
+                    <TableCell>{formatDateTime(job.activationTriggeredAt)}</TableCell>
+                    <TableCell>
+                      {job.installationReport ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">
+                            {job.installationReport.customerName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatWorkflowLabel(
+                              job.installationReport.submittedByRole,
+                            )}{" "}
+                            • {formatDateTime(job.installationReport.submittedAt)}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Pending
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="outline"
@@ -378,10 +426,25 @@ export function InstallationJobsClient({
               <select
                 value={formValues.assignedServiceCenterId}
                 onChange={(event) =>
-                  setFormValues((current) => ({
-                    ...current,
-                    assignedServiceCenterId: event.target.value,
-                  }))
+                  setFormValues((current) => {
+                    const assignedServiceCenterId = event.target.value;
+                    const currentTechnician = technicians.find(
+                      (technician) =>
+                        technician.id === current.assignedTechnicianId,
+                    );
+
+                    return {
+                      ...current,
+                      assignedServiceCenterId,
+                      assignedTechnicianId:
+                        !assignedServiceCenterId ||
+                        (currentTechnician &&
+                          currentTechnician.serviceCenterId ===
+                            assignedServiceCenterId)
+                          ? current.assignedTechnicianId
+                          : "",
+                    };
+                  })
                 }
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
@@ -389,6 +452,27 @@ export function InstallationJobsClient({
                 {serviceCenters.map((center) => (
                   <option key={center.id} value={center.id}>
                     {center.name} ({center.city})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Technician</label>
+              <select
+                value={formValues.assignedTechnicianId}
+                onChange={(event) =>
+                  setFormValues((current) => ({
+                    ...current,
+                    assignedTechnicianId: event.target.value,
+                  }))
+                }
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Unassigned</option>
+                {availableTechnicians.map((technician) => (
+                  <option key={technician.id} value={technician.id}>
+                    {technician.name} ({technician.serviceCenterName})
                   </option>
                 ))}
               </select>
