@@ -18,11 +18,20 @@ export interface TechnicianPartCatalogItem {
   typicalCost: number;
 }
 
+export type TechnicianPartUsageType =
+  | "installed"
+  | "consumed"
+  | "returned_unused"
+  | "removed";
+
 export interface TechnicianPartUsed {
   partName: string;
   partNumber: string;
   cost: number;
   quantity: number;
+  usageType?: TechnicianPartUsageType;
+  assetCode?: string | null;
+  tagCode?: string | null;
 }
 
 export interface TechnicianServiceHistoryItem {
@@ -49,6 +58,12 @@ export interface TechnicianJob {
   customerPincode: string;
   productName: string;
   productModelNumber: string;
+  partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+  smallPartTrackingMode:
+    | "individual"
+    | "pack_level"
+    | "kit_level"
+    | "pack_or_kit";
   productSerialNumber: string;
   customerPhotos: string[];
   resolutionPhotos: string[];
@@ -123,9 +138,15 @@ export interface TechnicianInstallationJob {
     modelNumber: string;
     installationOwnershipMode: "manufacturer_only" | "dealer_allowed";
     partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+    smallPartTrackingMode:
+      | "individual"
+      | "pack_level"
+      | "kit_level"
+      | "pack_or_kit";
     requiredGeoCapture: boolean;
     customerAcknowledgementRequired: boolean;
     requiredPhotoPolicy: RequiredPhotoPolicy;
+    includedKitDefinition: Record<string, unknown>;
   };
   manufacturerName: string;
   assignedServiceCenterName: string;
@@ -143,6 +164,15 @@ export interface TechnicianInstallationJob {
       | "dealer_engineer"
       | "dealer_technician";
   } | null;
+  partUsages: Array<{
+    id: string;
+    usageType: TechnicianPartUsageType;
+    quantity: number;
+    linkedAt: string;
+    usedAssetCode: string;
+    usedAssetClass: "spare_part" | "small_part" | "kit" | "pack";
+    usedTagCode: string | null;
+  }>;
 }
 
 export interface TechnicianInstallationJobsResponse {

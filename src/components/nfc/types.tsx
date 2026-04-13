@@ -124,6 +124,12 @@ export interface TicketView {
     partNumber: string;
     typicalCost: number;
   }>;
+  partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+  smallPartTrackingMode:
+    | "individual"
+    | "pack_level"
+    | "kit_level"
+    | "pack_or_kit";
   productSummary?: {
     serialNumber: string | null;
     modelName: string | null;

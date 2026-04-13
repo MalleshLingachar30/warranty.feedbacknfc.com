@@ -38,6 +38,9 @@ type PartUsed = {
   partNumber: string;
   cost: number;
   quantity: number;
+  usageType: "installed" | "consumed" | "returned_unused" | "removed";
+  assetCode: string | null;
+  tagCode: string | null;
 };
 
 type JobServiceHistoryItem = {
@@ -104,19 +107,44 @@ function parsePartCatalog(value: Prisma.JsonValue): PartCatalogItem[] {
     .filter((entry): entry is PartCatalogItem => Boolean(entry));
 }
 
-function parsePartsUsed(value: Prisma.JsonValue): PartUsed[] {
-  if (!Array.isArray(value)) {
+function parsePartsUsed(
+  value: Array<{
+    usageType: "installed" | "consumed" | "returned_unused" | "removed";
+    quantity: Prisma.Decimal;
+    metadata: Prisma.JsonValue;
+    usedAsset: {
+      publicCode: string;
+      metadata: Prisma.JsonValue;
+    } | null;
+    usedTag: {
+      publicCode: string;
+    } | null;
+  }>,
+): PartUsed[] {
+  if (!Array.isArray(value) || value.length === 0) {
     return [];
   }
 
   return value
     .map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        return null;
-      }
+      const metadata =
+        entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+          ? (entry.metadata as Record<string, unknown>)
+          : {};
+      const usedAssetMetadata =
+        entry.usedAsset?.metadata &&
+        typeof entry.usedAsset.metadata === "object" &&
+        !Array.isArray(entry.usedAsset.metadata)
+          ? (entry.usedAsset.metadata as Record<string, unknown>)
+          : {};
 
-      const candidate = entry as Record<string, unknown>;
-      const partName = asNonEmptyString(candidate.partName);
+      const partName =
+        asNonEmptyString(metadata.partName) ??
+        asNonEmptyString(metadata.name) ??
+        asNonEmptyString(usedAssetMetadata.partName) ??
+        asNonEmptyString(usedAssetMetadata.name) ??
+        entry.usedAsset?.publicCode ??
+        null;
 
       if (!partName) {
         return null;
@@ -124,9 +152,17 @@ function parsePartsUsed(value: Prisma.JsonValue): PartUsed[] {
 
       return {
         partName,
-        partNumber: asNonEmptyString(candidate.partNumber) ?? "",
-        cost: toNumber(candidate.cost, 0),
-        quantity: Math.max(1, Math.floor(toNumber(candidate.quantity, 1))),
+        partNumber:
+          asNonEmptyString(metadata.partNumber) ??
+          asNonEmptyString(metadata.partCode) ??
+          asNonEmptyString(usedAssetMetadata.partNumber) ??
+          asNonEmptyString(usedAssetMetadata.partCode) ??
+          "",
+        cost: toNumber(metadata.unitCost, toNumber(metadata.cost, 0)),
+        quantity: Math.max(1, toNumber(entry.quantity, 1)),
+        usageType: entry.usageType,
+        assetCode: entry.usedAsset?.publicCode ?? null,
+        tagCode: entry.usedTag?.publicCode ?? null,
       } satisfies PartUsed;
     })
     .filter((entry): entry is PartUsed => Boolean(entry));
@@ -306,6 +342,8 @@ export async function GET() {
                 name: true,
                 modelNumber: true,
                 partsCatalog: true,
+                partTraceabilityMode: true,
+                smallPartTrackingMode: true,
               },
             },
           },
@@ -318,6 +356,27 @@ export async function GET() {
         claimById: {
           select: {
             totalClaimAmount: true,
+          },
+        },
+        partUsages: {
+          orderBy: {
+            linkedAt: "asc",
+          },
+          select: {
+            usageType: true,
+            quantity: true,
+            metadata: true,
+            usedAsset: {
+              select: {
+                publicCode: true,
+                metadata: true,
+              },
+            },
+            usedTag: {
+              select: {
+                publicCode: true,
+              },
+            },
           },
         },
       },
@@ -367,7 +426,7 @@ export async function GET() {
       const partsCatalog = parsePartCatalog(
         ticket.product.productModel.partsCatalog,
       );
-      const partsUsed = parsePartsUsed(ticket.partsUsed);
+      const partsUsed = parsePartsUsed(ticket.partUsages);
       const claimValue = computeClaimValueFromTicket({
         claim: ticket.claim,
         claimById: ticket.claimById,
@@ -392,6 +451,9 @@ export async function GET() {
         customerPincode: ticket.product.customerPincode ?? "",
         productName: ticket.product.productModel.name,
         productModelNumber: ticket.product.productModel.modelNumber ?? "",
+        partTraceabilityMode: ticket.product.productModel.partTraceabilityMode,
+        smallPartTrackingMode:
+          ticket.product.productModel.smallPartTrackingMode,
         productSerialNumber: ticket.product.serialNumber ?? "",
         customerPhotos: sanitizeStringArray(ticket.issuePhotos),
         resolutionPhotos: sanitizeStringArray(ticket.resolutionPhotos),

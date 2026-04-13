@@ -52,6 +52,9 @@ import { useTechnicianLiveTracking } from "@/hooks/use-technician-live-tracking"
 interface PartSelection {
   id: string;
   catalogPartId: string;
+  assetCode: string;
+  tagCode: string;
+  usageType: "installed" | "consumed" | "returned_unused" | "removed";
   cost: string;
   quantity: string;
 }
@@ -69,6 +72,9 @@ function createSelectionFromCatalog(
   return {
     id: crypto.randomUUID(),
     catalogPartId: part?.id ?? "",
+    assetCode: "",
+    tagCode: "",
+    usageType: "consumed",
     cost: String(part?.typicalCost ?? 0),
     quantity: "1",
   };
@@ -382,23 +388,37 @@ export function JobDetail({
         uploadPhotoFiles(afterPhotos),
       ]);
 
-      const partsUsed = parts
+      const partUsages = parts
         .map((entry) => {
           const catalogPart = job.partsCatalog.find(
             (catalog) => catalog.id === entry.catalogPartId,
           );
 
           return {
+            assetCode: entry.assetCode.trim(),
+            tagCode: entry.tagCode.trim() || null,
+            usageType: entry.usageType,
             partName: catalogPart?.name ?? "",
             partNumber: catalogPart?.partNumber ?? "",
-            cost: Number.parseFloat(entry.cost),
-            quantity: Math.max(
-              1,
-              Math.floor(Number.parseFloat(entry.quantity) || 1),
-            ),
+            unitCost: Number.parseFloat(entry.cost),
+            quantity: Math.max(0.001, Number.parseFloat(entry.quantity) || 1),
           };
         })
-        .filter((part) => part.partName && Number.isFinite(part.cost));
+        .filter(
+          (part) =>
+            part.assetCode.length > 0 &&
+            Number.isFinite(part.unitCost) &&
+            part.unitCost >= 0,
+        );
+
+      if (
+        job.partTraceabilityMode !== "none" &&
+        partUsages.length === 0
+      ) {
+        throw new Error(
+          "This model requires traced part usage. Add at least one linked part/kit/pack code.",
+        );
+      }
 
       const response = await fetch(`/api/ticket/${job.id}/complete`, {
         method: "POST",
@@ -411,7 +431,7 @@ export function JobDetail({
           laborHours: Number.parseFloat(laborHours) || 0,
           beforePhotos: [...queuedBeforeResult.urls, ...beforePhotoUrls],
           afterPhotos: [...queuedAfterResult.urls, ...afterPhotoUrls],
-          partsUsed,
+          partUsages,
         }),
       });
 
@@ -668,9 +688,15 @@ export function JobDetail({
 
               <div className="space-y-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="text-sm font-medium text-slate-800">
-                    Parts used
-                  </label>
+                  <div>
+                    <label className="text-sm font-medium text-slate-800">
+                      Parts used
+                    </label>
+                    <p className="text-xs text-slate-500">
+                      Traceability mode: {job.partTraceabilityMode} • Small-part
+                      mode: {job.smallPartTrackingMode}
+                    </p>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
@@ -682,7 +708,6 @@ export function JobDetail({
                         createSelectionFromCatalog(job.partsCatalog[0]),
                       ])
                     }
-                    disabled={job.partsCatalog.length === 0}
                   >
                     <Plus className="h-4 w-4" />
                     Add Part
@@ -696,60 +721,105 @@ export function JobDetail({
                     {parts.map((part) => (
                       <div
                         key={part.id}
-                        className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_88px_88px_40px]"
+                        className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2"
                       >
-                        <select
-                          value={part.catalogPartId}
-                          className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                          onChange={(event) =>
-                            handlePartChange(part.id, {
-                              catalogPartId: event.target.value,
-                            })
-                          }
-                        >
-                          {job.partsCatalog.map((catalogPart) => (
-                            <option key={catalogPart.id} value={catalogPart.id}>
-                              {catalogPart.name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {job.partsCatalog.length > 0 ? (
+                            <select
+                              value={part.catalogPartId}
+                              className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                              onChange={(event) =>
+                                handlePartChange(part.id, {
+                                  catalogPartId: event.target.value,
+                                })
+                              }
+                            >
+                              {job.partsCatalog.map((catalogPart) => (
+                                <option key={catalogPart.id} value={catalogPart.id}>
+                                  {catalogPart.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <Input
+                              value="No catalog part selected"
+                              readOnly
+                              className="text-slate-500"
+                            />
+                          )}
+                          <Input
+                            placeholder="Part/kit/pack asset code"
+                            value={part.assetCode}
+                            onChange={(event) =>
+                              handlePartChange(part.id, {
+                                assetCode: event.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_88px_88px_40px]">
+                          <select
+                            value={part.usageType}
+                            className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                            onChange={(event) =>
+                              handlePartChange(part.id, {
+                                usageType: event.target
+                                  .value as PartSelection["usageType"],
+                              })
+                            }
+                          >
+                            <option value="consumed">Consumed</option>
+                            <option value="installed">Installed</option>
+                            <option value="returned_unused">Returned Unused</option>
+                            <option value="removed">Removed</option>
+                          </select>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min="0.001"
+                            step="0.001"
+                            value={part.quantity}
+                            onChange={(event) =>
+                              handlePartChange(part.id, {
+                                quantity: event.target.value,
+                              })
+                            }
+                          />
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.01"
+                            value={part.cost}
+                            onChange={(event) =>
+                              handlePartChange(part.id, {
+                                cost: event.target.value,
+                              })
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon-sm"
+                            className="w-full sm:w-auto"
+                            onClick={() =>
+                              setParts((previous) =>
+                                previous.filter((item) => item.id !== part.id),
+                              )
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                         <Input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="1"
-                          value={part.quantity}
+                          placeholder="Tag code (for unit scan mandatory mode)"
+                          value={part.tagCode}
                           onChange={(event) =>
                             handlePartChange(part.id, {
-                              quantity: event.target.value,
+                              tagCode: event.target.value,
                             })
                           }
                         />
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.01"
-                          value={part.cost}
-                          onChange={(event) =>
-                            handlePartChange(part.id, {
-                              cost: event.target.value,
-                            })
-                          }
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon-sm"
-                          className="w-full sm:w-auto"
-                          onClick={() =>
-                            setParts((previous) =>
-                              previous.filter((item) => item.id !== part.id),
-                            )
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     ))}
                   </div>

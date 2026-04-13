@@ -127,6 +127,8 @@ function createSeedStore(): WarrantyStore {
       imageUrl:
         "https://images.unsplash.com/photo-1581093588401-12a4b2e6f6f7?auto=format&fit=crop&w=1200&q=80",
       warrantyDurationMonths: 24,
+      partTraceabilityMode: "pack_or_kit",
+      smallPartTrackingMode: "pack_or_kit",
       commonIssues: [
         "Low water flow",
         "Water leakage",
@@ -165,6 +167,8 @@ function createSeedStore(): WarrantyStore {
       imageUrl:
         "https://images.unsplash.com/photo-1630591240929-1f652f8f16f4?auto=format&fit=crop&w=1200&q=80",
       warrantyDurationMonths: 18,
+      partTraceabilityMode: "none",
+      smallPartTrackingMode: "individual",
       commonIssues: ["Not cooling", "Gas leakage", "Compressor noise", "Remote not working"],
       requiredSkills: ["ac", "electrical"],
       partsCatalog: [

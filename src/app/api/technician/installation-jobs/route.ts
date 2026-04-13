@@ -38,6 +38,25 @@ function parseRequiredPhotoPolicy(value: unknown) {
   };
 }
 
+function parseRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? (value as Record<string, unknown>) : {};
+}
+
+function toQuantityNumber(value: unknown): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : value && typeof value === "object" && "toString" in value
+        ? Number.parseFloat(String(value))
+        : Number.NaN;
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 1;
+  }
+
+  return Number(parsed.toFixed(3));
+}
+
 export async function GET() {
   try {
     const authData = await getOptionalAuth();
@@ -119,9 +138,11 @@ export async function GET() {
                 modelNumber: true,
                 installationOwnershipMode: true,
                 partTraceabilityMode: true,
+                smallPartTrackingMode: true,
                 requiredGeoCapture: true,
                 customerAcknowledgementRequired: true,
                 requiredPhotoPolicy: true,
+                includedKitDefinition: true,
               },
             },
           },
@@ -149,6 +170,28 @@ export async function GET() {
             submittedAt: true,
             customerName: true,
             submittedByRole: true,
+          },
+        },
+        partUsages: {
+          orderBy: {
+            linkedAt: "desc",
+          },
+          select: {
+            id: true,
+            usageType: true,
+            quantity: true,
+            linkedAt: true,
+            usedAsset: {
+              select: {
+                publicCode: true,
+                productClass: true,
+              },
+            },
+            usedTag: {
+              select: {
+                publicCode: true,
+              },
+            },
           },
         },
       },
@@ -186,11 +229,15 @@ export async function GET() {
           installationOwnershipMode:
             job.asset.productModel.installationOwnershipMode,
           partTraceabilityMode: job.asset.productModel.partTraceabilityMode,
+          smallPartTrackingMode: job.asset.productModel.smallPartTrackingMode,
           requiredGeoCapture: job.asset.productModel.requiredGeoCapture,
           customerAcknowledgementRequired:
             job.asset.productModel.customerAcknowledgementRequired,
           requiredPhotoPolicy: parseRequiredPhotoPolicy(
             job.asset.productModel.requiredPhotoPolicy,
+          ),
+          includedKitDefinition: parseRecord(
+            job.asset.productModel.includedKitDefinition,
           ),
         },
         manufacturerName: job.manufacturerOrg.name,
@@ -210,6 +257,30 @@ export async function GET() {
               submittedByRole: job.installationReport.submittedByRole,
             }
           : null,
+        partUsages: job.partUsages
+          .map((usage) => {
+            const assetClass = usage.usedAsset?.productClass;
+            if (
+              !usage.usedAsset ||
+              (assetClass !== "spare_part" &&
+                assetClass !== "small_part" &&
+                assetClass !== "kit" &&
+                assetClass !== "pack")
+            ) {
+              return null;
+            }
+
+            return {
+              id: usage.id,
+              usageType: usage.usageType,
+              quantity: toQuantityNumber(usage.quantity),
+              linkedAt: usage.linkedAt.toISOString(),
+              usedAssetCode: usage.usedAsset.publicCode,
+              usedAssetClass: assetClass,
+              usedTagCode: usage.usedTag?.publicCode ?? null,
+            };
+          })
+          .filter(Boolean),
       })),
       generatedAt: new Date().toISOString(),
     });

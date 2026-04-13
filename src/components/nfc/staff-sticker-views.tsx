@@ -48,6 +48,9 @@ function statusLabel(status: string) {
 interface PartSelection {
   id: string;
   catalogPartId: string;
+  assetCode: string;
+  tagCode: string;
+  usageType: "installed" | "consumed" | "returned_unused" | "removed";
   cost: string;
   quantity: string;
 }
@@ -59,6 +62,9 @@ function createPartSelection(part?: {
   return {
     id: crypto.randomUUID(),
     catalogPartId: part?.id ?? "",
+    assetCode: "",
+    tagCode: "",
+    usageType: "consumed",
     cost: String(part?.typicalCost ?? 0),
     quantity: "1",
   };
@@ -542,23 +548,35 @@ export function TechnicianCompleteWork({
         uploadPhotoFiles(afterPhotos),
       ]);
 
-      const partsUsed = parts
+      const partUsages = parts
         .map((entry) => {
           const catalogPart = ticket.partsCatalog.find(
             (catalog) => catalog.id === entry.catalogPartId,
           );
 
           return {
+            assetCode: entry.assetCode.trim(),
+            tagCode: entry.tagCode.trim() || null,
+            usageType: entry.usageType,
             partName: catalogPart?.name ?? "",
             partNumber: catalogPart?.partNumber ?? "",
-            cost: Number.parseFloat(entry.cost),
-            quantity: Math.max(
-              1,
-              Math.floor(Number.parseFloat(entry.quantity) || 1),
-            ),
+            unitCost: Number.parseFloat(entry.cost),
+            quantity: Math.max(0.001, Number.parseFloat(entry.quantity) || 1),
           };
         })
-        .filter((part) => part.partName && Number.isFinite(part.cost));
+        .filter(
+          (part) =>
+            part.assetCode.length > 0 &&
+            Number.isFinite(part.unitCost) &&
+            part.unitCost >= 0,
+        );
+
+      if (ticket.partTraceabilityMode !== "none" && partUsages.length === 0) {
+        setError(
+          "This model requires traced part usage. Add at least one linked part/kit/pack code.",
+        );
+        return;
+      }
 
       const response = await fetch(`/api/ticket/${ticket.id}/complete`, {
         method: "POST",
@@ -569,7 +587,7 @@ export function TechnicianCompleteWork({
           laborHours: Number.parseFloat(laborHours) || 0,
           beforePhotos: [...queuedBeforeResult.urls, ...beforePhotoUrls],
           afterPhotos: [...queuedAfterResult.urls, ...afterPhotoUrls],
-          partsUsed,
+          partUsages,
         }),
       });
 
@@ -714,30 +732,32 @@ export function TechnicianCompleteWork({
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-slate-800">Parts Used</label>
-            {ticket.partsCatalog.length > 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-8 gap-1 px-2 text-xs"
-                onClick={() =>
-                  setParts((previous) => [
-                    ...previous,
-                    createPartSelection(ticket.partsCatalog[0]),
-                  ])
-                }
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Part
-              </Button>
-            ) : null}
+            <div>
+              <label className="text-sm font-medium text-slate-800">
+                Parts Used
+              </label>
+              <p className="text-xs text-slate-500">
+                Traceability mode: {ticket.partTraceabilityMode} • Small-part mode:{" "}
+                {ticket.smallPartTrackingMode}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 gap-1 px-2 text-xs"
+              onClick={() =>
+                setParts((previous) => [
+                  ...previous,
+                  createPartSelection(ticket.partsCatalog[0]),
+                ])
+              }
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Part
+            </Button>
           </div>
 
-          {ticket.partsCatalog.length === 0 ? (
-            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              No part catalog is configured for this product model.
-            </p>
-          ) : parts.length === 0 ? (
+          {parts.length === 0 ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               No parts selected.
             </p>
@@ -745,21 +765,55 @@ export function TechnicianCompleteWork({
             <div className="space-y-2">
               {parts.map((part) => (
                 <div key={part.id} className="rounded-md border border-slate-200 p-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <select
-                      value={part.catalogPartId}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {ticket.partsCatalog.length > 0 ? (
+                      <select
+                        value={part.catalogPartId}
+                        onChange={(event) =>
+                          handlePartChange(part.id, {
+                            catalogPartId: event.target.value,
+                          })
+                        }
+                        className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                      >
+                        {ticket.partsCatalog.map((catalogPart) => (
+                          <option key={catalogPart.id} value={catalogPart.id}>
+                            {catalogPart.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        value="No catalog part selected"
+                        readOnly
+                        className="text-slate-500"
+                      />
+                    )}
+                    <Input
+                      placeholder="Part/kit/pack asset code"
+                      value={part.assetCode}
                       onChange={(event) =>
                         handlePartChange(part.id, {
-                          catalogPartId: event.target.value,
+                          assetCode: event.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <select
+                      value={part.usageType}
+                      onChange={(event) =>
+                        handlePartChange(part.id, {
+                          usageType: event.target
+                            .value as PartSelection["usageType"],
                         })
                       }
                       className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
                     >
-                      {ticket.partsCatalog.map((catalogPart) => (
-                        <option key={catalogPart.id} value={catalogPart.id}>
-                          {catalogPart.name}
-                        </option>
-                      ))}
+                      <option value="consumed">Consumed</option>
+                      <option value="installed">Installed</option>
+                      <option value="returned_unused">Returned Unused</option>
+                      <option value="removed">Removed</option>
                     </select>
                     <Input
                       type="number"
@@ -772,14 +826,24 @@ export function TechnicianCompleteWork({
                     />
                     <Input
                       type="number"
-                      min="1"
-                      step="1"
+                      min="0.001"
+                      step="0.001"
                       value={part.quantity}
                       onChange={(event) =>
                         handlePartChange(part.id, { quantity: event.target.value })
                       }
                     />
                   </div>
+                  <Input
+                    className="mt-2"
+                    placeholder="Tag code (for unit scan mandatory mode)"
+                    value={part.tagCode}
+                    onChange={(event) =>
+                      handlePartChange(part.id, {
+                        tagCode: event.target.value,
+                      })
+                    }
+                  />
                   <Button
                     type="button"
                     variant="ghost"

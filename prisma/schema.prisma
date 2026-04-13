@@ -241,6 +241,13 @@ enum CustomerAcknowledgementType {
   digital_acceptance
 }
 
+enum PartUsageType {
+  installed
+  consumed
+  returned_unused
+  removed
+}
+
 model Organization {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                  String           @db.VarChar(255)
@@ -303,6 +310,7 @@ model User {
   customerProducts            Product[]            @relation("CustomerProducts")
   scanLogs                    ScanLog[]            @relation("ScanLogActor")
   submittedInstallationReports InstallationReport[]
+  linkedPartUsages            JobPartUsage[]
 
   @@map("users")
 }
@@ -439,6 +447,8 @@ model AssetIdentity {
   installationJobs    InstallationJob[]
   installationReports InstallationReport[]
   tags                AssetTag[]
+  usagesAsMainAsset   JobPartUsage[]      @relation("JobPartUsageMainAsset")
+  usagesAsUsedAsset   JobPartUsage[]      @relation("JobPartUsageUsedAsset")
 
   @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
   @@index([organizationId, productModelId], map: "idx_asset_identities_org_model")
@@ -464,6 +474,7 @@ model AssetTag {
 
   asset           AssetIdentity       @relation(fields: [assetId], references: [id])
   generationBatch TagGenerationBatch? @relation(fields: [generationBatchId], references: [id])
+  partUsages      JobPartUsage[]
 
   @@index([assetId], map: "idx_asset_tags_asset")
   @@index([generationBatchId], map: "idx_asset_tags_batch")
@@ -551,6 +562,7 @@ model InstallationJob {
   assignedServiceCenter ServiceCenter?    @relation("AssignedServiceCenterInstallationJobs", fields: [assignedServiceCenterId], references: [id])
   assignedTechnician    Technician?       @relation("AssignedTechnicianInstallationJobs", fields: [assignedTechnicianId], references: [id])
   installationReport    InstallationReport?
+  partUsages            JobPartUsage[]
 
   @@index([manufacturerOrgId, status], map: "idx_installation_jobs_manufacturer_status")
   @@index([assignedServiceCenterId, status], map: "idx_installation_jobs_service_center_status")
@@ -592,6 +604,36 @@ model InstallationReport {
   @@index([submittedByUserId], map: "idx_installation_reports_submitted_by")
   @@index([submittedAt], map: "idx_installation_reports_submitted_at")
   @@map("installation_reports")
+}
+
+model JobPartUsage {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationJobId String?        @map("installation_job_id") @db.Uuid
+  ticketId          String?        @map("ticket_id") @db.Uuid
+  mainAssetId       String         @map("main_asset_id") @db.Uuid
+  usedAssetId       String?        @map("used_asset_id") @db.Uuid
+  usedTagId         String?        @map("used_tag_id") @db.Uuid
+  usageType         PartUsageType  @map("usage_type")
+  quantity          Decimal        @default(1.000) @db.Decimal(12, 3)
+  linkedByUserId    String         @map("linked_by_user_id") @db.Uuid
+  linkedAt          DateTime       @default(now()) @map("linked_at")
+  metadata          Json           @default(dbgenerated("'{}'::jsonb"))
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  installationJob InstallationJob? @relation(fields: [installationJobId], references: [id])
+  ticket          Ticket?          @relation(fields: [ticketId], references: [id])
+  mainAsset       AssetIdentity    @relation("JobPartUsageMainAsset", fields: [mainAssetId], references: [id])
+  usedAsset       AssetIdentity?   @relation("JobPartUsageUsedAsset", fields: [usedAssetId], references: [id])
+  usedTag         AssetTag?        @relation(fields: [usedTagId], references: [id])
+  linkedByUser    User             @relation(fields: [linkedByUserId], references: [id])
+
+  @@index([installationJobId], map: "idx_job_part_usages_installation_job")
+  @@index([ticketId], map: "idx_job_part_usages_ticket")
+  @@index([mainAssetId], map: "idx_job_part_usages_main_asset")
+  @@index([usedAssetId], map: "idx_job_part_usages_used_asset")
+  @@index([linkedAt], map: "idx_job_part_usages_linked_at")
+  @@map("job_part_usages")
 }
 
 model Sticker {
@@ -764,6 +806,7 @@ model Ticket {
   timelineEntries       TicketTimeline[]
   claimById             WarrantyClaim?    @relation("TicketClaimPointer", fields: [claimId], references: [id])
   claim                 WarrantyClaim?    @relation("TicketToWarrantyClaim")
+  partUsages            JobPartUsage[]
 
   @@index([status], map: "idx_tickets_status")
   @@index([productId], map: "idx_tickets_product")

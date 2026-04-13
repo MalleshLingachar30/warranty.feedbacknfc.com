@@ -14,6 +14,12 @@ import {
   sendCustomerWarrantyActivatedEmail,
   sendWarrantyActivatedNotification,
 } from "@/lib/warranty-notifications";
+import {
+  parsePartUsageInputs,
+  resolvePartUsages,
+  toJobPartUsageCreateManyInput,
+  validatePartUsagePolicy,
+} from "@/lib/job-part-usage";
 
 export const runtime = "nodejs";
 
@@ -37,6 +43,7 @@ type InstallationReportPayload = {
   afterPhotoUrls?: unknown;
   checklistResponses?: unknown;
   commissioningData?: unknown;
+  partUsages?: unknown;
 };
 
 function asString(value: unknown): string | null {
@@ -255,6 +262,10 @@ export async function POST(
     );
     const beforePhotoUrls = parsePhotoUrls(body.beforePhotoUrls);
     const afterPhotoUrls = parsePhotoUrls(body.afterPhotoUrls);
+    const parsedPartUsages = parsePartUsageInputs({
+      value: body.partUsages,
+      defaultUsageType: "installed",
+    });
 
     if (
       !customerName ||
@@ -352,9 +363,12 @@ export async function POST(
                 name: true,
                 warrantyDurationMonths: true,
                 installationOwnershipMode: true,
+                partTraceabilityMode: true,
+                smallPartTrackingMode: true,
                 requiredGeoCapture: true,
                 customerAcknowledgementRequired: true,
                 requiredPhotoPolicy: true,
+                includedKitDefinition: true,
               },
             },
           },
@@ -632,6 +646,24 @@ export async function POST(
         });
       }
 
+      const resolvedPartUsages = await resolvePartUsages(tx, {
+        organizationId: job.manufacturerOrgId,
+        parsedUsages: parsedPartUsages,
+      });
+
+      await validatePartUsagePolicy(tx, {
+        policy: {
+          partTraceabilityMode: job.asset.productModel.partTraceabilityMode,
+          smallPartTrackingMode: job.asset.productModel.smallPartTrackingMode,
+          includedKitDefinition: job.asset.productModel.includedKitDefinition,
+        },
+        mainAssetId: job.assetId,
+        resolvedUsages: resolvedPartUsages,
+        workObjectLabel: `installation job ${job.jobNumber}`,
+        requireCaptureForPolicy:
+          job.asset.productModel.partTraceabilityMode !== "none",
+      });
+
       await tx.installationReport.create({
         data: {
           installationJobId: job.id,
@@ -657,6 +689,17 @@ export async function POST(
           submittedAt: activationAt,
         },
       });
+
+      if (resolvedPartUsages.length > 0) {
+        await tx.jobPartUsage.createMany({
+          data: toJobPartUsageCreateManyInput({
+            mainAssetId: job.assetId,
+            installationJobId: job.id,
+            linkedByUserId: user.id,
+            resolvedUsages: resolvedPartUsages,
+          }),
+        });
+      }
 
       await tx.assetIdentity.update({
         where: {
