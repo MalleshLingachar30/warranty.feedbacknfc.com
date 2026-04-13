@@ -32,6 +32,12 @@ export interface WarrantyProductModel {
   modelNumber: string;
   imageUrl: string | null;
   warrantyDurationMonths: number;
+  partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+  smallPartTrackingMode:
+    | "individual"
+    | "pack_level"
+    | "kit_level"
+    | "pack_or_kit";
   commonIssues: string[];
   requiredSkills: string[];
   partsCatalog: WarrantyPartCatalogItem[];

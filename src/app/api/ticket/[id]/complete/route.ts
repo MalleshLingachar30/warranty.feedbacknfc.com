@@ -3,6 +3,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
+import {
+  parsePartUsageInputs,
+  resolvePartUsages,
+  toJobPartUsageCreateManyInput,
+  toTicketPartsSnapshot,
+  validatePartUsagePolicy,
+} from "@/lib/job-part-usage";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
@@ -14,26 +21,12 @@ export const runtime = "nodejs";
 const MAX_PHOTO_COUNT = 10;
 const DEFAULT_LABOR_RATE_PER_HOUR = 550;
 
-interface CompleteTicketPartInput {
-  partName?: string;
-  partNumber?: string;
-  cost?: number;
-  quantity?: number;
-}
-
 interface CompleteTicketRequest {
   resolutionNotes?: string;
   beforePhotos?: string[];
   afterPhotos?: string[];
-  partsUsed?: CompleteTicketPartInput[];
+  partUsages?: unknown;
   laborHours?: number;
-}
-
-interface NormalizedPartUsed {
-  partName: string;
-  partNumber: string;
-  cost: number;
-  quantity: number;
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -42,15 +35,6 @@ function toNumber(value: unknown, fallback = 0): number {
   }
 
   return fallback;
-}
-
-function asNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 function sanitizePhotoUrls(values: unknown): string[] {
@@ -65,40 +49,39 @@ function sanitizePhotoUrls(values: unknown): string[] {
     .slice(0, MAX_PHOTO_COUNT);
 }
 
-function sanitizeParts(values: unknown): NormalizedPartUsed[] {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-
-  return values
-    .map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        return null;
-      }
-
-      const candidate = entry as CompleteTicketPartInput;
-      const partName = asNonEmptyString(candidate.partName);
-
-      if (!partName) {
-        return null;
-      }
-
-      return {
-        partName,
-        partNumber: asNonEmptyString(candidate.partNumber) ?? "",
-        cost: Math.max(0, toNumber(candidate.cost, 0)),
-        quantity: Math.max(1, Math.floor(toNumber(candidate.quantity, 1))),
-      } satisfies NormalizedPartUsed;
-    })
-    .filter((entry): entry is NormalizedPartUsed => Boolean(entry));
-}
-
 function metadataAsObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
 
   return value as Record<string, unknown>;
+}
+
+async function resolveMainAssetForTicket(
+  tx: Prisma.TransactionClient,
+  input: {
+    organizationId: string;
+    productModelId: string;
+    serialNumber: string | null;
+  },
+) {
+  const serialNumber = input.serialNumber?.trim();
+  if (!serialNumber) {
+    return null;
+  }
+
+  return tx.assetIdentity.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      productModelId: input.productModelId,
+      productClass: "main_product",
+      serialNumber,
+    },
+    select: {
+      id: true,
+      publicCode: true,
+    },
+  });
 }
 
 export async function POST(
@@ -144,6 +127,7 @@ export async function POST(
         { status: 400 },
       );
     }
+    const resolutionNotes = body.resolutionNotes.trim();
 
     const beforePhotos = sanitizePhotoUrls(body.beforePhotos);
     const afterPhotos = sanitizePhotoUrls(body.afterPhotos);
@@ -157,7 +141,10 @@ export async function POST(
       );
     }
 
-    const partsUsed = sanitizeParts(body.partsUsed);
+    const parsedPartUsages = parsePartUsageInputs({
+      value: body.partUsages,
+      defaultUsageType: "consumed",
+    });
     const laborHours = Math.max(0, toNumber(body.laborHours, 0));
 
     const ticket = await db.ticket.findUnique({
@@ -172,6 +159,9 @@ export async function POST(
         productId: true,
         product: {
           select: {
+            organizationId: true,
+            productModelId: true,
+            serialNumber: true,
             customerPhone: true,
             customerName: true,
             customer: {
@@ -180,6 +170,12 @@ export async function POST(
               },
             },
             installationLocation: true,
+            productModel: {
+              select: {
+                partTraceabilityMode: true,
+                smallPartTrackingMode: true,
+              },
+            },
             sticker: {
               select: {
                 stickerNumber: true,
@@ -211,6 +207,7 @@ export async function POST(
       },
       select: {
         id: true,
+        userId: true,
         name: true,
         serviceCenterId: true,
         activeJobCount: true,
@@ -249,22 +246,54 @@ export async function POST(
 
     const completedAt = new Date();
     const existingMetadata = metadataAsObject(ticket.metadata);
+    const traceabilityRequired =
+      ticket.product.productModel.partTraceabilityMode !== "none";
 
-    const partsCost = partsUsed.reduce(
-      (total, part) => total + part.cost * part.quantity,
-      0,
-    );
-    const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
-    const claimValue = Number((partsCost + laborCost).toFixed(2));
+    const completionResult = await db.$transaction(async (tx) => {
+      const mainAsset = await resolveMainAssetForTicket(tx, {
+        organizationId: ticket.product.organizationId,
+        productModelId: ticket.product.productModelId,
+        serialNumber: ticket.product.serialNumber,
+      });
 
-    await db.$transaction([
-      db.ticket.update({
+      const resolvedPartUsages = await resolvePartUsages(tx, {
+        organizationId: ticket.product.organizationId,
+        parsedUsages: parsedPartUsages,
+      });
+
+      if ((traceabilityRequired || resolvedPartUsages.length > 0) && !mainAsset) {
+        throw new Error(
+          "Main product asset could not be resolved for this ticket. Ensure the product is linked to a serialized asset before recording part usage.",
+        );
+      }
+
+      if (mainAsset) {
+        await validatePartUsagePolicy(tx, {
+          policy: {
+            partTraceabilityMode: ticket.product.productModel.partTraceabilityMode,
+            smallPartTrackingMode:
+              ticket.product.productModel.smallPartTrackingMode,
+            includedKitDefinition: {} as Prisma.JsonObject,
+          },
+          mainAssetId: mainAsset.id,
+          resolvedUsages: resolvedPartUsages,
+          workObjectLabel: `ticket ${ticket.ticketNumber}`,
+          requireCaptureForPolicy: traceabilityRequired,
+        });
+      }
+
+      const ticketPartsSnapshot = toTicketPartsSnapshot(resolvedPartUsages);
+      const partsCost = ticketPartsSnapshot.partsCost;
+      const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
+      const claimValue = Number((partsCost + laborCost).toFixed(2));
+
+      await tx.ticket.update({
         where: { id: ticket.id },
         data: {
           status: "pending_confirmation",
-          resolutionNotes: body.resolutionNotes.trim(),
+          resolutionNotes,
           resolutionPhotos: [...beforePhotos, ...afterPhotos],
-          partsUsed: partsUsed as unknown as Prisma.InputJsonValue,
+          partsUsed: ticketPartsSnapshot.partsUsedJson,
           laborHours,
           technicianCompletedAt: completedAt,
           metadata: {
@@ -275,12 +304,14 @@ export async function POST(
               partsCost,
               laborCost,
               estimatedClaimValue: claimValue,
+              partUsageCount: resolvedPartUsages.length,
               completedAt: completedAt.toISOString(),
             },
           },
         },
-      }),
-      db.ticketTimeline.create({
+      });
+
+      await tx.ticketTimeline.create({
         data: {
           ticketId: ticket.id,
           eventType: "work_completed",
@@ -289,11 +320,23 @@ export async function POST(
           actorName: technician.name,
           metadata: {
             laborHours,
-            partsUsed,
+            partUsages: ticketPartsSnapshot.partsUsedJson,
           } as unknown as Prisma.InputJsonValue,
         },
-      }),
-      db.technician.update({
+      });
+
+      if (mainAsset && resolvedPartUsages.length > 0) {
+        await tx.jobPartUsage.createMany({
+          data: toJobPartUsageCreateManyInput({
+            mainAssetId: mainAsset.id,
+            ticketId: ticket.id,
+            linkedByUserId: technician.userId,
+            resolvedUsages: resolvedPartUsages,
+          }),
+        });
+      }
+
+      await tx.technician.update({
         where: { id: technician.id },
         data: {
           totalJobsCompleted: {
@@ -307,8 +350,12 @@ export async function POST(
               }
             : {}),
         },
-      }),
-    ]);
+      });
+
+      return {
+        claimValue,
+      };
+    });
 
     await stopTrackingForTicket({
       ticketId: ticket.id,
@@ -347,7 +394,7 @@ export async function POST(
       ticketNumber: ticket.ticketNumber,
       status: "pending_confirmation",
       technicianCompletedAt: completedAt.toISOString(),
-      claimValue,
+      claimValue: completionResult.claimValue,
     });
   } catch (error) {
     const message =

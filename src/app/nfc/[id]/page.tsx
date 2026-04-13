@@ -329,6 +329,8 @@ function mapTicketToView(
       partNumber: part.partNumber,
       typicalCost: part.typicalCost,
     })),
+    partTraceabilityMode: productModel.partTraceabilityMode,
+    smallPartTrackingMode: productModel.smallPartTrackingMode,
     productSummary: {
       serialNumber: product.serialNumber,
       modelName: productModel.name,
@@ -387,6 +389,12 @@ function mapWarrantyModel(productModel: {
   modelNumber: string | null;
   imageUrl: string | null;
   warrantyDurationMonths: number;
+  partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+  smallPartTrackingMode:
+    | "individual"
+    | "pack_level"
+    | "kit_level"
+    | "pack_or_kit";
   commonIssues: unknown;
   requiredSkills: string[];
   partsCatalog: unknown;
@@ -399,6 +407,8 @@ function mapWarrantyModel(productModel: {
     modelNumber: productModel.modelNumber ?? "",
     imageUrl: productModel.imageUrl,
     warrantyDurationMonths: productModel.warrantyDurationMonths,
+    partTraceabilityMode: productModel.partTraceabilityMode,
+    smallPartTrackingMode: productModel.smallPartTrackingMode,
     commonIssues: parseCommonIssues(productModel.commonIssues),
     requiredSkills: productModel.requiredSkills,
     partsCatalog: parsePartsCatalog(productModel.partsCatalog),
@@ -650,6 +660,8 @@ export default async function NfcStickerPage({
           modelNumber: true,
           imageUrl: true,
           warrantyDurationMonths: true,
+          partTraceabilityMode: true,
+          smallPartTrackingMode: true,
           commonIssues: true,
           requiredSkills: true,
           partsCatalog: true,
