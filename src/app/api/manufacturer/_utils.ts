@@ -180,14 +180,6 @@ export function parseJsonBody<T extends object>(value: unknown) {
   return value as T;
 }
 
-export function formatAllocationId(allocationId: string, allocatedAt: Date) {
-  const y = allocatedAt.getFullYear().toString();
-  const m = String(allocatedAt.getMonth() + 1).padStart(2, "0");
-  const d = String(allocatedAt.getDate()).padStart(2, "0");
-
-  return `ALLOC-${y}${m}${d}-${allocationId.slice(0, 8).toUpperCase()}`;
-}
-
 export function formatMonthLabel(date: Date) {
   return date.toLocaleDateString("en-US", {
     month: "short",

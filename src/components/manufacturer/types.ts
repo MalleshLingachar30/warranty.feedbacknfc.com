@@ -1,3 +1,14 @@
+import type { AssetProductClass, TagSymbology } from "@/lib/asset-generation";
+import type {
+  ActivationMode,
+  ActivationTrigger,
+  CustomerCreationMode,
+  InstallationOwnershipMode,
+  PartTraceabilityMode,
+  RequiredPhotoPolicy,
+  SmallPartTrackingMode,
+} from "@/lib/manufacturer-policy";
+
 export type TicketStatusTone =
   | "new"
   | "assigned"
@@ -65,26 +76,34 @@ export type ManufacturerProductModel = {
   updatedAt?: string;
 };
 
-export type StickerInventorySummary = {
-  totalAllocated: number;
-  totalBound: number;
-  totalActivated: number;
-  totalAvailable: number;
+export type TagGenerationBatchRow = {
+  id: string;
+  batchCode: string;
+  createdAt: string;
+  productClass: AssetProductClass;
+  quantity: number;
+  serialPrefix: string | null;
+  serialStart: string | null;
+  serialEnd: string | null;
+  includeCartonRegistrationTags: boolean;
+  defaultSymbology: TagSymbology;
+  symbologies: TagSymbology[];
+  productModel: {
+    id: string;
+    name: string;
+  };
+  assetsGenerated: number;
+  tagsGenerated: number;
+  tagCountBySymbology: Partial<Record<TagSymbology, number>>;
 };
 
-export type AllocationHistoryRow = {
-  id: string;
-  allocationId: string;
-  date: string;
-  stickerStart: number;
-  stickerEnd: number;
-  serialPrefix: string;
-  serialStart: number;
-  serialEnd: number;
-  productModelId: string;
-  productModelName: string;
-  count: number;
-  includeCartonQr: boolean;
+export type TagGenerationSummary = {
+  totalBatches: number;
+  totalAssets: number;
+  totalTags: number;
+  qrTags: number;
+  dataMatrixTags: number;
+  nfcTags: number;
 };
 
 export type ServiceCenterRow = {
@@ -180,12 +199,3 @@ export type ClaimQueueRow = {
   rejectionReason: string | null;
   isDemo?: boolean;
 };
-import type {
-  ActivationMode,
-  ActivationTrigger,
-  CustomerCreationMode,
-  InstallationOwnershipMode,
-  PartTraceabilityMode,
-  RequiredPhotoPolicy,
-  SmallPartTrackingMode,
-} from "@/lib/manufacturer-policy";

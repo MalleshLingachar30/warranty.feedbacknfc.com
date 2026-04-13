@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -154,6 +154,56 @@ enum SmallPartTrackingMode {
   pack_or_kit
 }
 
+enum AssetProductClass {
+  main_product
+  spare_part
+  small_part
+  kit
+  pack
+}
+
+enum AssetLifecycleState {
+  generated
+  packed
+  sold_pending_installation
+  installation_scheduled
+  installation_in_progress
+  active
+  consumed
+  retired
+  voided
+}
+
+enum TagClass {
+  unit_service
+  carton_registration
+  component_unit
+  small_part_batch
+  kit_parent
+  pack_parent
+}
+
+enum TagSymbology {
+  qr
+  data_matrix
+  nfc_uri
+}
+
+enum AssetTagStatus {
+  generated
+  printed
+  encoded
+  active
+  voided
+}
+
+enum TagViewerPolicy {
+  public
+  owner_only
+  technician_admin
+  warehouse_admin
+}
+
 model Organization {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                  String           @db.VarChar(255)
@@ -174,14 +224,16 @@ model Organization {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  users               User[]
-  productModels       ProductModel[]
-  allocatedStickers   Sticker[]           @relation("AllocatedOrganization")
-  products            Product[]
-  serviceCenters      ServiceCenter[]
-  manufacturerClaims  WarrantyClaim[]     @relation("ManufacturerOrganizationClaims")
-  serviceCenterClaims WarrantyClaim[]     @relation("ServiceCenterOrganizationClaims")
-  stickerAllocations  StickerAllocation[]
+  users                User[]
+  productModels        ProductModel[]
+  allocatedStickers    Sticker[]            @relation("AllocatedOrganization")
+  products             Product[]
+  serviceCenters       ServiceCenter[]
+  manufacturerClaims   WarrantyClaim[]      @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims  WarrantyClaim[]      @relation("ServiceCenterOrganizationClaims")
+  stickerAllocations   StickerAllocation[]
+  assetIdentities      AssetIdentity[]
+  tagGenerationBatches TagGenerationBatch[]
 
   @@map("organizations")
 }
@@ -200,14 +252,16 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  organization       Organization?       @relation(fields: [organizationId], references: [id])
-  technicianProfile  Technician?
-  reportedTickets    Ticket[]            @relation("ReportedTickets")
-  approvedClaims     WarrantyClaim[]     @relation("ClaimApprover")
-  timelineEvents     TicketTimeline[]    @relation("TimelineActor")
-  stickerAllocations StickerAllocation[] @relation("AllocatedByUser")
-  customerProducts   Product[]           @relation("CustomerProducts")
-  scanLogs          ScanLog[]           @relation("ScanLogActor")
+  organization                Organization?        @relation(fields: [organizationId], references: [id])
+  technicianProfile           Technician?
+  reportedTickets             Ticket[]             @relation("ReportedTickets")
+  approvedClaims              WarrantyClaim[]      @relation("ClaimApprover")
+  timelineEvents              TicketTimeline[]     @relation("TimelineActor")
+  stickerAllocations          StickerAllocation[]  @relation("AllocatedByUser")
+  createdTagGenerationBatches TagGenerationBatch[] @relation("TagGenerationBatchCreator")
+  customerAssetIdentities     AssetIdentity[]      @relation("AssetIdentityCustomer")
+  customerProducts            Product[]            @relation("CustomerProducts")
+  scanLogs                    ScanLog[]            @relation("ScanLogActor")
 
   @@map("users")
 }
@@ -228,62 +282,148 @@ model ChatLead {
 }
 
 model EndpointMonitorState {
-  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  checkName           String   @unique @map("check_name") @db.VarChar(100)
-  status              String   @default("healthy") @db.VarChar(20)
-  consecutiveFailures Int      @default(0) @map("consecutive_failures")
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checkName           String    @unique @map("check_name") @db.VarChar(100)
+  status              String    @default("healthy") @db.VarChar(20)
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
   lastCheckedAt       DateTime? @map("last_checked_at")
   lastSuccessAt       DateTime? @map("last_success_at")
   lastFailureAt       DateTime? @map("last_failure_at")
   lastAlertedAt       DateTime? @map("last_alerted_at")
   lastResolvedAt      DateTime? @map("last_resolved_at")
-  lastError           String?  @map("last_error")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  lastError           String?   @map("last_error")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   @@map("endpoint_monitor_states")
 }
 
 model ProductModel {
-  id                        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId            String   @map("organization_id") @db.Uuid
-  name                      String   @db.VarChar(255)
-  category                  String   @db.VarChar(100)
-  subCategory               String?  @map("sub_category") @db.VarChar(100)
-  modelNumber               String?  @map("model_number") @db.VarChar(100)
-  description               String?
-  imageUrl                  String?  @map("image_url")
-  warrantyDurationMonths    Int      @default(12) @map("warranty_duration_months")
-  extendedWarrantyAvailable Boolean  @default(false) @map("extended_warranty_available")
-  extendedWarrantyMonths    Int?     @map("extended_warranty_months")
-  specifications            Json     @default(dbgenerated("'{}'::jsonb"))
-  commonIssues              Json     @default(dbgenerated("'[]'::jsonb")) @map("common_issues")
-  requiredSkills            String[] @default([]) @map("required_skills")
-  partsCatalog              Json     @default(dbgenerated("'[]'::jsonb")) @map("parts_catalog")
-  activationMode            ActivationMode            @default(plug_and_play) @map("activation_mode")
-  installationOwnershipMode InstallationOwnershipMode @default(manufacturer_only) @map("installation_ownership_mode")
-  installationRequired      Boolean                   @default(false) @map("installation_required")
-  activationTrigger         ActivationTrigger         @default(self_activation) @map("activation_trigger")
-  customerCreationMode      CustomerCreationMode      @default(on_activation) @map("customer_creation_mode")
-  allowCartonSaleRegistration Boolean                 @default(true) @map("allow_carton_sale_registration")
-  allowUnitSelfActivation   Boolean                   @default(true) @map("allow_unit_self_activation")
-  partTraceabilityMode      PartTraceabilityMode      @default(none) @map("part_traceability_mode")
-  smallPartTrackingMode     SmallPartTrackingMode     @default(individual) @map("small_part_tracking_mode")
-  customerAcknowledgementRequired Boolean             @default(false) @map("customer_acknowledgement_required")
-  installationChecklistTemplate Json                  @default(dbgenerated("'[]'::jsonb")) @map("installation_checklist_template")
-  commissioningTemplate     Json                      @default(dbgenerated("'[]'::jsonb")) @map("commissioning_template")
-  requiredPhotoPolicy       Json                      @default(dbgenerated("'{}'::jsonb")) @map("required_photo_policy")
-  requiredGeoCapture        Boolean                   @default(false) @map("required_geo_capture")
-  defaultInstallerSkillTags String[]                 @default([]) @map("default_installer_skill_tags")
-  includedKitDefinition     Json                      @default(dbgenerated("'{}'::jsonb")) @map("included_kit_definition")
-  createdAt                 DateTime @default(now()) @map("created_at")
-  updatedAt                 DateTime @updatedAt @map("updated_at")
+  id                              String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId                  String                    @map("organization_id") @db.Uuid
+  name                            String                    @db.VarChar(255)
+  category                        String                    @db.VarChar(100)
+  subCategory                     String?                   @map("sub_category") @db.VarChar(100)
+  modelNumber                     String?                   @map("model_number") @db.VarChar(100)
+  description                     String?
+  imageUrl                        String?                   @map("image_url")
+  warrantyDurationMonths          Int                       @default(12) @map("warranty_duration_months")
+  extendedWarrantyAvailable       Boolean                   @default(false) @map("extended_warranty_available")
+  extendedWarrantyMonths          Int?                      @map("extended_warranty_months")
+  specifications                  Json                      @default(dbgenerated("'{}'::jsonb"))
+  commonIssues                    Json                      @default(dbgenerated("'[]'::jsonb")) @map("common_issues")
+  requiredSkills                  String[]                  @default([]) @map("required_skills")
+  partsCatalog                    Json                      @default(dbgenerated("'[]'::jsonb")) @map("parts_catalog")
+  activationMode                  ActivationMode            @default(plug_and_play) @map("activation_mode")
+  installationOwnershipMode       InstallationOwnershipMode @default(manufacturer_only) @map("installation_ownership_mode")
+  installationRequired            Boolean                   @default(false) @map("installation_required")
+  activationTrigger               ActivationTrigger         @default(self_activation) @map("activation_trigger")
+  customerCreationMode            CustomerCreationMode      @default(on_activation) @map("customer_creation_mode")
+  allowCartonSaleRegistration     Boolean                   @default(true) @map("allow_carton_sale_registration")
+  allowUnitSelfActivation         Boolean                   @default(true) @map("allow_unit_self_activation")
+  partTraceabilityMode            PartTraceabilityMode      @default(none) @map("part_traceability_mode")
+  smallPartTrackingMode           SmallPartTrackingMode     @default(individual) @map("small_part_tracking_mode")
+  customerAcknowledgementRequired Boolean                   @default(false) @map("customer_acknowledgement_required")
+  installationChecklistTemplate   Json                      @default(dbgenerated("'[]'::jsonb")) @map("installation_checklist_template")
+  commissioningTemplate           Json                      @default(dbgenerated("'[]'::jsonb")) @map("commissioning_template")
+  requiredPhotoPolicy             Json                      @default(dbgenerated("'{}'::jsonb")) @map("required_photo_policy")
+  requiredGeoCapture              Boolean                   @default(false) @map("required_geo_capture")
+  defaultInstallerSkillTags       String[]                  @default([]) @map("default_installer_skill_tags")
+  includedKitDefinition           Json                      @default(dbgenerated("'{}'::jsonb")) @map("included_kit_definition")
+  createdAt                       DateTime                  @default(now()) @map("created_at")
+  updatedAt                       DateTime                  @updatedAt @map("updated_at")
 
-  organization       Organization        @relation(fields: [organizationId], references: [id])
-  products           Product[]
-  stickerAllocations StickerAllocation[]
+  organization         Organization         @relation(fields: [organizationId], references: [id])
+  products             Product[]
+  stickerAllocations   StickerAllocation[]
+  assetIdentities      AssetIdentity[]
+  tagGenerationBatches TagGenerationBatch[]
 
   @@map("product_models")
+}
+
+model TagGenerationBatch {
+  id                            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId                String            @map("organization_id") @db.Uuid
+  productModelId                String            @map("product_model_id") @db.Uuid
+  productClass                  AssetProductClass @map("product_class")
+  quantity                      Int
+  serialPrefix                  String?           @map("serial_prefix") @db.VarChar(100)
+  serialStart                   String?           @map("serial_start") @db.VarChar(100)
+  serialEnd                     String?           @map("serial_end") @db.VarChar(100)
+  includeCartonRegistrationTags Boolean           @default(false) @map("include_carton_registration_tags")
+  defaultSymbology              TagSymbology      @map("default_symbology")
+  outputProfile                 Json              @default(dbgenerated("'{}'::jsonb")) @map("output_profile")
+  createdById                   String            @map("created_by_id") @db.Uuid
+  createdAt                     DateTime          @default(now()) @map("created_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id])
+  productModel ProductModel    @relation(fields: [productModelId], references: [id])
+  createdBy    User            @relation("TagGenerationBatchCreator", fields: [createdById], references: [id])
+  assets       AssetIdentity[]
+  tags         AssetTag[]
+
+  @@index([organizationId, createdAt], map: "idx_tag_generation_batches_org_created")
+  @@index([productModelId], map: "idx_tag_generation_batches_model")
+  @@map("tag_generation_batches")
+}
+
+model AssetIdentity {
+  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicCode           String              @unique @map("public_code") @db.VarChar(80)
+  organizationId       String              @map("organization_id") @db.Uuid
+  productModelId       String              @map("product_model_id") @db.Uuid
+  productClass         AssetProductClass   @map("product_class")
+  serialNumber         String?             @map("serial_number") @db.VarChar(255)
+  batchCode            String?             @map("batch_code") @db.VarChar(120)
+  lifecycleState       AssetLifecycleState @default(generated) @map("lifecycle_state")
+  warrantyState        WarrantyStatus?     @map("warranty_state")
+  customerId           String?             @map("customer_id") @db.Uuid
+  installationDate     DateTime?           @map("installation_date")
+  installationLocation Json?               @map("installation_location")
+  rootMainAssetId      String?             @map("root_main_asset_id") @db.Uuid
+  metadata             Json                @default(dbgenerated("'{}'::jsonb"))
+  generationBatchId    String?             @map("generation_batch_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  productModel    ProductModel        @relation(fields: [productModelId], references: [id])
+  customer        User?               @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
+  rootMainAsset   AssetIdentity?      @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
+  childAssets     AssetIdentity[]     @relation("AssetRootLineage")
+  generationBatch TagGenerationBatch? @relation(fields: [generationBatchId], references: [id])
+  tags            AssetTag[]
+
+  @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
+  @@index([organizationId, productModelId], map: "idx_asset_identities_org_model")
+  @@index([serialNumber], map: "idx_asset_identities_serial")
+  @@index([generationBatchId], map: "idx_asset_identities_batch")
+  @@map("asset_identities")
+}
+
+model AssetTag {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  publicCode        String          @unique @map("public_code") @db.VarChar(100)
+  assetId           String          @map("asset_id") @db.Uuid
+  generationBatchId String?         @map("generation_batch_id") @db.Uuid
+  tagClass          TagClass        @map("tag_class")
+  symbology         TagSymbology    @map("symbology")
+  status            AssetTagStatus  @default(generated)
+  materialVariant   StickerVariant  @default(standard) @map("material_variant")
+  printSizeMm       Int?            @map("print_size_mm")
+  encodedValue      String          @map("encoded_value")
+  viewerPolicy      TagViewerPolicy @default(public) @map("viewer_policy")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  asset           AssetIdentity       @relation(fields: [assetId], references: [id])
+  generationBatch TagGenerationBatch? @relation(fields: [generationBatchId], references: [id])
+
+  @@index([assetId], map: "idx_asset_tags_asset")
+  @@index([generationBatchId], map: "idx_asset_tags_batch")
+  @@index([symbology, status], map: "idx_asset_tags_symbology_status")
+  @@map("asset_tags")
 }
 
 model Sticker {
@@ -396,9 +536,9 @@ model Technician {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
 
-  user            User          @relation(fields: [userId], references: [id])
-  serviceCenter   ServiceCenter @relation(fields: [serviceCenterId], references: [id])
-  assignedTickets Ticket[]      @relation("AssignedTechnicianTickets")
+  user            User               @relation(fields: [userId], references: [id])
+  serviceCenter   ServiceCenter      @relation(fields: [serviceCenterId], references: [id])
+  assignedTickets Ticket[]           @relation("AssignedTechnicianTickets")
   liveStatuses    TicketLiveStatus[]
 
   @@index([serviceCenterId], map: "idx_technicians_service_center")
@@ -445,15 +585,15 @@ model Ticket {
   createdAt               DateTime         @default(now()) @map("created_at")
   updatedAt               DateTime         @updatedAt @map("updated_at")
 
-  product               Product          @relation(fields: [productId], references: [id])
-  sticker               Sticker          @relation(fields: [stickerId], references: [id])
-  reportedByUser        User?            @relation("ReportedTickets", fields: [reportedByUserId], references: [id])
-  assignedServiceCenter ServiceCenter?   @relation("AssignedServiceCenterTickets", fields: [assignedServiceCenterId], references: [id])
-  assignedTechnician    Technician?      @relation("AssignedTechnicianTickets", fields: [assignedTechnicianId], references: [id])
+  product               Product           @relation(fields: [productId], references: [id])
+  sticker               Sticker           @relation(fields: [stickerId], references: [id])
+  reportedByUser        User?             @relation("ReportedTickets", fields: [reportedByUserId], references: [id])
+  assignedServiceCenter ServiceCenter?    @relation("AssignedServiceCenterTickets", fields: [assignedServiceCenterId], references: [id])
+  assignedTechnician    Technician?       @relation("AssignedTechnicianTickets", fields: [assignedTechnicianId], references: [id])
   liveStatus            TicketLiveStatus?
   timelineEntries       TicketTimeline[]
-  claimById             WarrantyClaim?   @relation("TicketClaimPointer", fields: [claimId], references: [id])
-  claim                 WarrantyClaim?   @relation("TicketToWarrantyClaim")
+  claimById             WarrantyClaim?    @relation("TicketClaimPointer", fields: [claimId], references: [id])
+  claim                 WarrantyClaim?    @relation("TicketToWarrantyClaim")
 
   @@index([status], map: "idx_tickets_status")
   @@index([productId], map: "idx_tickets_product")
@@ -463,28 +603,28 @@ model Ticket {
 }
 
 model TicketLiveStatus {
-  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ticketId                String                  @unique @map("ticket_id") @db.Uuid
-  technicianId            String?                 @map("technician_id") @db.Uuid
-  state                   TicketLiveTrackingState @default(inactive)
-  serviceAnchorLatitude   Decimal?                @map("service_anchor_latitude") @db.Decimal(9, 6)
-  serviceAnchorLongitude  Decimal?                @map("service_anchor_longitude") @db.Decimal(9, 6)
-  technicianLatitude      Decimal?                @map("technician_latitude") @db.Decimal(9, 6)
-  technicianLongitude     Decimal?                @map("technician_longitude") @db.Decimal(9, 6)
-  technicianAccuracyM     Decimal?                @map("technician_accuracy_m") @db.Decimal(8, 2)
-  distanceKm              Decimal?                @map("distance_km") @db.Decimal(6, 2)
-  etaMinutes              Int?                    @map("eta_minutes")
-  lastUpdatedAt           DateTime?               @map("last_updated_at")
-  startedAt               DateTime?               @map("started_at")
-  arrivedAt               DateTime?               @map("arrived_at")
-  pausedAt                DateTime?               @map("paused_at")
-  stoppedAt               DateTime?               @map("stopped_at")
-  metadata                Json                    @default(dbgenerated("'{}'::jsonb"))
-  createdAt               DateTime                @default(now()) @map("created_at")
-  updatedAt               DateTime                @updatedAt @map("updated_at")
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId               String                  @unique @map("ticket_id") @db.Uuid
+  technicianId           String?                 @map("technician_id") @db.Uuid
+  state                  TicketLiveTrackingState @default(inactive)
+  serviceAnchorLatitude  Decimal?                @map("service_anchor_latitude") @db.Decimal(9, 6)
+  serviceAnchorLongitude Decimal?                @map("service_anchor_longitude") @db.Decimal(9, 6)
+  technicianLatitude     Decimal?                @map("technician_latitude") @db.Decimal(9, 6)
+  technicianLongitude    Decimal?                @map("technician_longitude") @db.Decimal(9, 6)
+  technicianAccuracyM    Decimal?                @map("technician_accuracy_m") @db.Decimal(8, 2)
+  distanceKm             Decimal?                @map("distance_km") @db.Decimal(6, 2)
+  etaMinutes             Int?                    @map("eta_minutes")
+  lastUpdatedAt          DateTime?               @map("last_updated_at")
+  startedAt              DateTime?               @map("started_at")
+  arrivedAt              DateTime?               @map("arrived_at")
+  pausedAt               DateTime?               @map("paused_at")
+  stoppedAt              DateTime?               @map("stopped_at")
+  metadata               Json                    @default(dbgenerated("'{}'::jsonb"))
+  createdAt              DateTime                @default(now()) @map("created_at")
+  updatedAt              DateTime                @updatedAt @map("updated_at")
 
-  ticket                  Ticket                  @relation(fields: [ticketId], references: [id])
-  technician              Technician?             @relation(fields: [technicianId], references: [id])
+  ticket     Ticket      @relation(fields: [ticketId], references: [id])
+  technician Technician? @relation(fields: [technicianId], references: [id])
 
   @@index([state], map: "idx_ticket_live_status_state")
   @@index([technicianId], map: "idx_ticket_live_status_technician")
@@ -571,13 +711,13 @@ model StickerAllocation {
 }
 
 model StickerScanEvent {
-  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  stickerId      String           @map("sticker_id") @db.Uuid
-  stickerNumber  Int              @map("sticker_number")
-  organizationId String?          @map("organization_id") @db.Uuid
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stickerId      String            @map("sticker_id") @db.Uuid
+  stickerNumber  Int               @map("sticker_number")
+  organizationId String?           @map("organization_id") @db.Uuid
   source         StickerScanSource @default(unknown)
-  userAgent      String?          @map("user_agent")
-  scannedAt      DateTime         @default(now()) @map("scanned_at")
+  userAgent      String?           @map("user_agent")
+  scannedAt      DateTime          @default(now()) @map("scanned_at")
 
   @@index([organizationId, scannedAt], map: "idx_sticker_scans_org_time")
   @@index([stickerId, scannedAt], map: "idx_sticker_scans_sticker_time")
@@ -586,17 +726,17 @@ model StickerScanEvent {
 }
 
 model OtpSession {
-  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  phone            String   @db.VarChar(20)
-  productId        String   @map("product_id") @db.Uuid
-  purpose          String   @db.VarChar(30)
-  otpCode          String   @map("otp_code") @db.VarChar(6)
-  otpExpiresAt     DateTime @map("otp_expires_at")
-  verified         Boolean  @default(false)
-  sessionToken     String?  @unique(map: "otp_sessions_session_token_key") @map("session_token") @db.VarChar(255)
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone            String    @db.VarChar(20)
+  productId        String    @map("product_id") @db.Uuid
+  purpose          String    @db.VarChar(30)
+  otpCode          String    @map("otp_code") @db.VarChar(6)
+  otpExpiresAt     DateTime  @map("otp_expires_at")
+  verified         Boolean   @default(false)
+  sessionToken     String?   @unique(map: "otp_sessions_session_token_key") @map("session_token") @db.VarChar(255)
   sessionExpiresAt DateTime? @map("session_expires_at")
-  attempts         Int      @default(0)
-  createdAt        DateTime @default(now()) @map("created_at")
+  attempts         Int       @default(0)
+  createdAt        DateTime  @default(now()) @map("created_at")
 
   product Product @relation(fields: [productId], references: [id])
 
@@ -605,17 +745,17 @@ model OtpSession {
 }
 
 model ScanLog {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  stickerNumber Int    @map("sticker_number")
-  productId   String?  @map("product_id") @db.Uuid
-  scanSource  String?  @map("scan_source") @db.VarChar(10)
-  scanContext String?  @map("scan_context") @db.VarChar(20)
-  viewerType  String   @map("viewer_type") @db.VarChar(30)
-  userId      String?  @map("user_id") @db.Uuid
-  ipAddress   String?  @map("ip_address") @db.VarChar(45)
-  userAgent   String?  @map("user_agent")
-  actionTaken String?  @map("action_taken") @db.VarChar(50)
-  createdAt   DateTime @default(now()) @map("created_at")
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stickerNumber Int      @map("sticker_number")
+  productId     String?  @map("product_id") @db.Uuid
+  scanSource    String?  @map("scan_source") @db.VarChar(10)
+  scanContext   String?  @map("scan_context") @db.VarChar(20)
+  viewerType    String   @map("viewer_type") @db.VarChar(30)
+  userId        String?  @map("user_id") @db.Uuid
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  userAgent     String?  @map("user_agent")
+  actionTaken   String?  @map("action_taken") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
 
   product Product? @relation(fields: [productId], references: [id])
   user    User?    @relation("ScanLogActor", fields: [userId], references: [id])

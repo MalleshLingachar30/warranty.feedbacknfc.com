@@ -1,11 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  CheckCircle2Icon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Loader2Icon, PackagePlusIcon } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
@@ -25,94 +21,65 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  ASSET_PRODUCT_CLASSES,
+  formatProductClassLabel,
+  formatSymbologyLabel,
+  recommendedSymbologiesFromPolicy,
+  TAG_MATERIAL_VARIANTS,
+  TAG_SYMBOLOGIES,
+  TAG_VIEWER_POLICIES,
+  type AssetProductClass,
+  type TagMaterialVariant,
+  type TagSymbology,
+  type TagViewerPolicy,
+} from "@/lib/asset-generation";
 
 import type {
-  AllocationHistoryRow,
   ManufacturerProductModel,
-  StickerInventorySummary,
+  TagGenerationBatchRow,
+  TagGenerationSummary,
 } from "./types";
-import { type ManufacturerStickerConfig } from "@/lib/sticker-config";
 
-type WizardState = {
-  stickerStart: string;
-  stickerEnd: string;
-  stickerVariant: "standard" | "high_temp" | "premium";
-  includeCartonQr: boolean;
+type CreateBatchState = {
   productModelId: string;
+  productClass: AssetProductClass;
+  quantity: string;
   serialPrefix: string;
   serialStart: string;
-  serialEnd: string;
+  includeCartonRegistrationTags: boolean;
+  symbologies: TagSymbology[];
+  defaultSymbology: TagSymbology;
+  materialVariant: TagMaterialVariant;
+  viewerPolicy: TagViewerPolicy;
+  printSizeMm: string;
 };
 
-type PreviewRow = {
-  type: "row" | "ellipsis";
-  sticker: string;
-  serial: string;
+type CreateBatchApiResponse = {
+  batch?: {
+    id: string;
+    batchCode: string;
+    createdAt: string;
+    productClass: AssetProductClass;
+    quantity: number;
+    serialPrefix: string | null;
+    serialStart: string | null;
+    serialEnd: string | null;
+    includeCartonRegistrationTags: boolean;
+    defaultSymbology: TagSymbology;
+    symbologies: TagSymbology[];
+    assetsGenerated: number;
+    tagsGenerated: number;
+    tagCountBySymbology: Partial<Record<TagSymbology, number>>;
+  };
+  error?: string;
 };
-
-type RangeValidationState =
-  | { status: "idle"; message: null }
-  | { status: "checking"; message: null }
-  | { status: "valid"; message: null }
-  | { status: "invalid"; message: string };
 
 type StickerWizardClientProps = {
   initialProductModels: ManufacturerProductModel[];
-  initialAllocationHistory: AllocationHistoryRow[];
-  initialInventory: StickerInventorySummary;
-  stickerConfig: ManufacturerStickerConfig;
-  hasRealAllocations: boolean;
+  initialBatches: TagGenerationBatchRow[];
+  initialSummary: TagGenerationSummary;
 };
-
-const stepTitles = [
-  "Sticker Range",
-  "Product Model",
-  "Serial Range",
-  "Review",
-  "Success",
-];
-
-function isProbablyUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value,
-  );
-}
-
-function formatSerial(prefix: string, number: number, padLength: number) {
-  return `${prefix}${number.toString().padStart(padLength, "0")}`;
-}
-
-function buildPreviewRows(
-  stickerStart: number,
-  serialStart: number,
-  count: number,
-  serialPrefix: string,
-  serialPadLength: number,
-): PreviewRow[] {
-  if (count <= 0) {
-    return [];
-  }
-
-  const buildRow = (offset: number): PreviewRow => ({
-    type: "row",
-    sticker: (stickerStart + offset).toString(),
-    serial: formatSerial(serialPrefix, serialStart + offset, serialPadLength),
-  });
-
-  if (count <= 10) {
-    return Array.from({ length: count }, (_, offset) => buildRow(offset));
-  }
-
-  return [
-    ...Array.from({ length: 5 }, (_, offset) => buildRow(offset)),
-    {
-      type: "ellipsis",
-      sticker: "...",
-      serial: "...",
-    },
-    ...Array.from({ length: 5 }, (_, offset) => buildRow(count - 5 + offset)),
-  ];
-}
 
 function formatDate(isoDate: string) {
   return new Date(isoDate).toLocaleDateString("en-US", {
@@ -122,1143 +89,700 @@ function formatDate(isoDate: string) {
   });
 }
 
+function asPositiveInteger(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function classSupportsCartonTags(productClass: AssetProductClass) {
+  return productClass === "main_product";
+}
+
+function hasSymbology(
+  row: TagGenerationBatchRow | undefined,
+  symbology: TagSymbology,
+) {
+  if (!row) {
+    return false;
+  }
+
+  return (row.tagCountBySymbology[symbology] ?? 0) > 0;
+}
+
 export function StickerWizardClient({
   initialProductModels,
-  initialAllocationHistory,
-  initialInventory,
-  stickerConfig,
-  hasRealAllocations,
+  initialBatches,
+  initialSummary,
 }: StickerWizardClientProps) {
-  const [step, setStep] = useState(1);
-  const defaultStickerVariant =
-    stickerConfig.mode === "nfc_qr" ? "premium" : "standard";
-  const [wizard, setWizard] = useState<WizardState>(() => ({
-    stickerStart: "",
-    stickerEnd: "",
-    stickerVariant: defaultStickerVariant,
-    includeCartonQr: true,
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<TagGenerationSummary>(initialSummary);
+  const [batches, setBatches] = useState<TagGenerationBatchRow[]>(initialBatches);
+  const [selectedBatchId, setSelectedBatchId] = useState(
+    initialBatches[0]?.id ?? "",
+  );
+  const [form, setForm] = useState<CreateBatchState>({
     productModelId: initialProductModels[0]?.id ?? "",
+    productClass: "main_product",
+    quantity: "100",
     serialPrefix: "",
     serialStart: "",
-    serialEnd: "",
-  }));
-  const [wizardError, setWizardError] = useState<string | null>(null);
-  const [rangeValidation, setRangeValidation] = useState<RangeValidationState>({
-    status: "idle",
-    message: null,
+    includeCartonRegistrationTags: true,
+    symbologies: ["qr"],
+    defaultSymbology: "qr",
+    materialVariant: "standard",
+    viewerPolicy: "public",
+    printSizeMm: "30",
   });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [allocationHistory, setAllocationHistory] = useState<
-    AllocationHistoryRow[]
-  >(initialAllocationHistory);
-  const [inventory, setInventory] = useState(initialInventory);
-  const [lastAllocationId, setLastAllocationId] = useState("");
-  const [lastAllocatedCount, setLastAllocatedCount] = useState(0);
 
-  const [productionAllocationId, setProductionAllocationId] = useState("");
-  const [qrSizeMm, setQrSizeMm] = useState<25 | 30 | 35>(30);
-  const [qrErrorCorrection, setQrErrorCorrection] = useState<
-    "L" | "M" | "Q" | "H"
-  >("M");
-  const [qrFormat, setQrFormat] = useState<"pdf_sheet" | "png_zip" | "csv">(
-    "png_zip",
-  );
-  const [nfcFormat, setNfcFormat] = useState<"ndef_uri_csv" | "nfc_tools_json">(
-    "ndef_uri_csv",
-  );
-
-  const parsedStickerStart = Number(wizard.stickerStart);
-  const parsedStickerEnd = Number(wizard.stickerEnd);
-  const parsedSerialStart = Number(wizard.serialStart);
-  const parsedSerialEnd = Number(wizard.serialEnd);
-
-  const stickerCount =
-    Number.isFinite(parsedStickerStart) &&
-    Number.isFinite(parsedStickerEnd) &&
-    parsedStickerEnd >= parsedStickerStart
-      ? parsedStickerEnd - parsedStickerStart + 1
-      : 0;
-
-  const serialCount =
-    Number.isFinite(parsedSerialStart) &&
-    Number.isFinite(parsedSerialEnd) &&
-    parsedSerialEnd >= parsedSerialStart
-      ? parsedSerialEnd - parsedSerialStart + 1
-      : 0;
-
-  const serialPadLength = Math.max(
-    String(parsedSerialStart).length,
-    String(parsedSerialEnd).length,
-    5,
-  );
-
-  const previewRows = useMemo(
+  const selectedProductModel = useMemo(
     () =>
-      buildPreviewRows(
-        parsedStickerStart,
-        parsedSerialStart,
-        Math.min(stickerCount, serialCount),
-        wizard.serialPrefix,
-        serialPadLength,
-      ),
-    [
-      parsedSerialStart,
-      parsedStickerStart,
-      serialCount,
-      serialPadLength,
-      stickerCount,
-      wizard.serialPrefix,
-    ],
+      initialProductModels.find((productModel) => productModel.id === form.productModelId),
+    [form.productModelId, initialProductModels],
   );
 
-  const selectedProductModel = initialProductModels.find(
-    (productModel) => productModel.id === wizard.productModelId,
-  );
-  const selectedAllocation = allocationHistory.find(
-    (allocation) => allocation.id === productionAllocationId,
-  );
-
-  const technologyLabel =
-    stickerConfig.mode === "qr_only"
-      ? "QR Code Only"
-      : stickerConfig.mode === "nfc_qr"
-        ? "NFC + QR Code"
-        : "NFC Only (no QR printed)";
-
-  const allowedVariants = useMemo<WizardState["stickerVariant"][]>(() => {
-    if (stickerConfig.mode === "qr_only") {
-      return ["standard", "high_temp"];
+  const recommendedSymbologies = useMemo(() => {
+    if (!selectedProductModel) {
+      return ["qr"] satisfies TagSymbology[];
     }
 
-    if (stickerConfig.mode === "nfc_qr") {
-      return ["premium"];
-    }
+    return recommendedSymbologiesFromPolicy({
+      productClass: form.productClass,
+      activationMode: selectedProductModel.activationMode ?? "plug_and_play",
+      partTraceabilityMode: selectedProductModel.partTraceabilityMode ?? "none",
+      smallPartTrackingMode: selectedProductModel.smallPartTrackingMode ?? "individual",
+    });
+  }, [form.productClass, selectedProductModel]);
 
-    return ["standard"];
-  }, [stickerConfig.mode]);
+  const selectedBatch = batches.find((batch) => batch.id === selectedBatchId);
+  const canGenerate = initialProductModels.length > 0 && !isSubmitting;
 
-  const effectiveStickerVariant = allowedVariants.includes(wizard.stickerVariant)
-    ? wizard.stickerVariant
-    : allowedVariants[0];
-
-  const stickerVariantLabel =
-    effectiveStickerVariant === "high_temp"
-      ? "High Temperature (up to 150°C)"
-      : effectiveStickerVariant === "premium"
-        ? "Premium"
-        : "Standard (up to 80°C)";
-  const hasProductModels = initialProductModels.length > 0;
-
-  useEffect(() => {
-    if (step !== 1) {
-      return;
-    }
-
-    if (
-      !Number.isInteger(parsedStickerStart) ||
-      !Number.isInteger(parsedStickerEnd) ||
-      parsedStickerStart <= 0 ||
-      parsedStickerEnd <= 0 ||
-      parsedStickerEnd < parsedStickerStart
-    ) {
-      setRangeValidation({ status: "idle", message: null });
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(async () => {
-      setRangeValidation({ status: "checking", message: null });
-
-      try {
-        const response = await fetch(
-          `/api/manufacturer/allocate/validate?stickerStartNumber=${parsedStickerStart}&stickerEndNumber=${parsedStickerEnd}`,
-          {
-            method: "GET",
-            signal: controller.signal,
-          },
-        );
-
-        const payload = (await response.json()) as {
-          valid?: boolean;
-          message?: string;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? "Unable to validate sticker range.");
-        }
-
-        if (payload.valid) {
-          setRangeValidation({ status: "valid", message: null });
-          return;
-        }
-
-        setRangeValidation({
-          status: "invalid",
-          message:
-            payload.message ?? "This sticker range has already been allocated.",
-        });
-      } catch (error) {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setRangeValidation({
-          status: "invalid",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Unable to validate sticker range.",
-        });
-      }
-    }, 250);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(timeoutId);
-    };
-  }, [parsedStickerEnd, parsedStickerStart, step]);
-
-  const goToNextStep = () => {
-    setWizardError(null);
-
-    if (step === 1) {
-      if (stickerCount <= 0) {
-        setWizardError("Enter a valid sticker start and end range.");
-        return;
-      }
-
-      if (rangeValidation.status === "checking") {
-        setWizardError("Validating sticker range. Please wait a moment.");
-        return;
-      }
-
-      if (rangeValidation.status === "invalid" && rangeValidation.message) {
-        setWizardError(rangeValidation.message);
-        return;
-      }
-    }
-
-    if (step === 2 && (!wizard.productModelId || !isProbablyUuid(wizard.productModelId))) {
-      setWizardError(
-        hasProductModels
-          ? "Select a valid product model before continuing."
-          : "Create a product model before allocating stickers.",
-      );
-      return;
-    }
-
-    if (step === 3) {
-      if (!wizard.serialPrefix.trim()) {
-        setWizardError("Enter a serial prefix before continuing.");
-        return;
-      }
-
-      if (serialCount <= 0) {
-        setWizardError("Enter a valid appliance serial range.");
-        return;
-      }
-
-      if (stickerCount !== serialCount) {
-        setWizardError(
-          "Sticker count and serial count must match for one-to-one binding.",
-        );
-        return;
-      }
-    }
-
-    setStep((current) => Math.min(current + 1, 5));
+  const applyRecommendedSymbologies = () => {
+    setForm((current) => {
+      const nextSymbologies = [...recommendedSymbologies];
+      return {
+        ...current,
+        symbologies: nextSymbologies,
+        defaultSymbology: nextSymbologies[0] ?? current.defaultSymbology,
+      };
+    });
   };
 
-  const goToPreviousStep = () => {
-    setWizardError(null);
-    setStep((current) => Math.max(current - 1, 1));
+  const toggleSymbology = (symbology: TagSymbology) => {
+    setForm((current) => {
+      const exists = current.symbologies.includes(symbology);
+      const nextSymbologies = exists
+        ? current.symbologies.filter((value) => value !== symbology)
+        : [...current.symbologies, symbology];
+
+      if (nextSymbologies.length === 0) {
+        return current;
+      }
+
+      return {
+        ...current,
+        symbologies: nextSymbologies,
+        defaultSymbology: nextSymbologies.includes(current.defaultSymbology)
+          ? current.defaultSymbology
+          : nextSymbologies[0],
+      };
+    });
   };
 
-  const confirmAllocation = async () => {
-    setWizardError(null);
+  const createBatch = async () => {
+    setError(null);
+
+    const quantity = asPositiveInteger(form.quantity);
+    if (!quantity) {
+      setError("Quantity must be a positive integer.");
+      return;
+    }
+
+    if (!form.productModelId) {
+      setError("Select a product model.");
+      return;
+    }
+
+    if (form.symbologies.length === 0) {
+      setError("Select at least one symbology.");
+      return;
+    }
+
+    const useSerials = form.serialPrefix.trim().length > 0 || form.serialStart.trim().length > 0;
+    const serialStart = useSerials ? asPositiveInteger(form.serialStart) : null;
+
+    if (useSerials && !form.serialPrefix.trim()) {
+      setError("Serial prefix is required when using serial generation.");
+      return;
+    }
+
+    if (useSerials && !serialStart) {
+      setError("Serial start must be a positive integer when using serial generation.");
+      return;
+    }
+
     setIsSubmitting(true);
-
     try {
-      const response = await fetch("/api/manufacturer/allocate", {
+      const response = await fetch("/api/manufacturer/tag-generation/batches", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          stickerStartNumber: parsedStickerStart,
-          stickerEndNumber: parsedStickerEnd,
-          stickerVariant: effectiveStickerVariant,
-          includeCartonQr: wizard.includeCartonQr,
-          productModelId: wizard.productModelId,
-          serialPrefix: wizard.serialPrefix,
-          serialStartNumber: parsedSerialStart,
-          serialEndNumber: parsedSerialEnd,
+          productModelId: form.productModelId,
+          productClass: form.productClass,
+          quantity,
+          serialPrefix: useSerials ? form.serialPrefix.trim() : null,
+          serialStart: useSerials ? serialStart : null,
+          includeCartonRegistrationTags:
+            classSupportsCartonTags(form.productClass) &&
+            form.includeCartonRegistrationTags,
+          symbologies: form.symbologies,
+          defaultSymbology: form.defaultSymbology,
+          materialVariant: form.materialVariant,
+          viewerPolicy: form.viewerPolicy,
+          printSizeMm: asPositiveInteger(form.printSizeMm),
+          outputProfile: {
+            source: "manufacturer_ui",
+          },
         }),
       });
 
-      const json = (await response.json()) as {
-        error?: string;
-        allocation?: {
-          id: string;
-          allocationId: string;
-          totalCount: number;
-          includeCartonQr?: boolean;
-        };
-        inventory?: StickerInventorySummary;
-      };
-
-      if (!response.ok || !json.allocation || !json.inventory) {
-        throw new Error(json.error ?? "Unable to complete sticker allocation.");
+      const payload = (await response.json()) as CreateBatchApiResponse;
+      if (!response.ok || !payload.batch) {
+        throw new Error(payload.error ?? "Unable to create generation batch.");
       }
 
-      setInventory(json.inventory);
+      const model = initialProductModels.find(
+        (productModel) => productModel.id === form.productModelId,
+      );
 
-      const now = new Date();
-      const newHistoryRow: AllocationHistoryRow = {
-        id: json.allocation.id,
-        allocationId: json.allocation.allocationId,
-        date: now.toISOString(),
-        stickerStart: parsedStickerStart,
-        stickerEnd: parsedStickerEnd,
-        serialPrefix: wizard.serialPrefix,
-        serialStart: parsedSerialStart,
-        serialEnd: parsedSerialEnd,
-        productModelId: wizard.productModelId,
-        productModelName: selectedProductModel?.name ?? "Unknown Model",
-        count: json.allocation.totalCount,
-        includeCartonQr: json.allocation.includeCartonQr ?? wizard.includeCartonQr,
+      const row: TagGenerationBatchRow = {
+        id: payload.batch.id,
+        batchCode: payload.batch.batchCode,
+        createdAt: payload.batch.createdAt,
+        productClass: payload.batch.productClass,
+        quantity: payload.batch.quantity,
+        serialPrefix: payload.batch.serialPrefix,
+        serialStart: payload.batch.serialStart,
+        serialEnd: payload.batch.serialEnd,
+        includeCartonRegistrationTags: payload.batch.includeCartonRegistrationTags,
+        defaultSymbology: payload.batch.defaultSymbology,
+        symbologies: payload.batch.symbologies,
+        productModel: {
+          id: form.productModelId,
+          name: model?.name ?? "Unknown Model",
+        },
+        assetsGenerated: payload.batch.assetsGenerated,
+        tagsGenerated: payload.batch.tagsGenerated,
+        tagCountBySymbology: payload.batch.tagCountBySymbology,
       };
 
-      setAllocationHistory((current) => [newHistoryRow, ...current]);
-      setProductionAllocationId(newHistoryRow.id);
-      setLastAllocationId(json.allocation.allocationId);
-      setLastAllocatedCount(json.allocation.totalCount);
-      setStep(5);
-    } catch (error) {
-      setWizardError(
-        error instanceof Error
-          ? error.message
-          : "Unable to complete allocation.",
+      setBatches((current) => [row, ...current]);
+      setSelectedBatchId(row.id);
+      setSummary((current) => ({
+        totalBatches: current.totalBatches + 1,
+        totalAssets: current.totalAssets + row.assetsGenerated,
+        totalTags: current.totalTags + row.tagsGenerated,
+        qrTags: current.qrTags + (row.tagCountBySymbology.qr ?? 0),
+        dataMatrixTags:
+          current.dataMatrixTags + (row.tagCountBySymbology.data_matrix ?? 0),
+        nfcTags: current.nfcTags + (row.tagCountBySymbology.nfc_uri ?? 0),
+      }));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create generation batch.",
       );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const resetWizard = () => {
-    setWizard({
-      stickerStart: "",
-      stickerEnd: "",
-      stickerVariant: defaultStickerVariant,
-      includeCartonQr: true,
-      productModelId: initialProductModels[0]?.id ?? "",
-      serialPrefix: "",
-      serialStart: "",
-      serialEnd: "",
-    });
-    setWizardError(null);
-    setStep(1);
-  };
-
   return (
     <div>
       <PageHeader
-        title="Sticker Management"
-        description="Bulk allocate and bind sticker ranges to product model serial ranges."
+        title="Generate Item Labels"
+        description="Generate canonical asset identities and multi-symbology tags for main products, spares, small parts, kits, and packs."
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>Bulk Allocation Wizard</CardTitle>
+          <CardTitle>Tag Generation Batch</CardTitle>
           <CardDescription>
-            Follow each step to allocate and bind stickers in bulk.
+            Create one generic batch and export QR, Data Matrix, NFC, and manifest outputs.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-2 md:grid-cols-5">
-            {stepTitles.map((stepTitle, index) => {
-              const stepNumber = index + 1;
-              const isCurrent = stepNumber === step;
-              const isCompleted = stepNumber < step;
-
-              return (
-                <div
-                  key={stepTitle}
-                  className={`rounded-md border px-3 py-2 text-sm ${
-                    isCurrent
-                      ? "border-primary bg-primary/5"
-                      : isCompleted
-                        ? "border-emerald-300 bg-emerald-50"
-                        : ""
-                  }`}
-                >
-                  <p className="text-xs text-muted-foreground">
-                    Step {stepNumber}
-                  </p>
-                  <p className="font-medium">{stepTitle}</p>
-                </div>
-              );
-            })}
-          </div>
-
-          {step === 1 ? (
-            <div className="space-y-4">
-              {!hasProductModels ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  Create a product model in the Products section before starting a
-                  sticker allocation.
-                </div>
-              ) : null}
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Sticker Start Number
-                  </label>
-                  <Input
-                    type="number"
-                    value={wizard.stickerStart}
-                    onChange={(event) =>
-                      setWizard((current) => ({
-                        ...current,
-                        stickerStart: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Sticker End Number
-                  </label>
-                  <Input
-                    type="number"
-                    value={wizard.stickerEnd}
-                    onChange={(event) =>
-                      setWizard((current) => ({
-                        ...current,
-                        stickerEnd: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Total Sticker Count
-                  </label>
-                  <Input value={stickerCount.toLocaleString()} readOnly />
-                </div>
-              </div>
-
-              {rangeValidation.status === "checking" ? (
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                  Checking whether this sticker range is available...
-                </div>
-              ) : null}
-
-              {rangeValidation.status === "valid" ? (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  Sticker range is available for allocation.
-                </div>
-              ) : null}
-
-              {rangeValidation.status === "invalid" && rangeValidation.message ? (
-                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                  {rangeValidation.message}
-                </div>
-              ) : null}
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Technology</label>
-                  <Input value={technologyLabel} readOnly />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Material Variant</label>
-                  <select
-                    value={effectiveStickerVariant}
-                    onChange={(event) =>
-                      setWizard((current) => ({
-                        ...current,
-                        stickerVariant: event.target.value as WizardState["stickerVariant"],
-                      }))
-                    }
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    disabled={allowedVariants.length === 1}
-                  >
-                    {allowedVariants.includes("standard") ? (
-                      <option value="standard">Standard (up to 80°C)</option>
-                    ) : null}
-                    {allowedVariants.includes("high_temp") ? (
-                      <option value="high_temp">
-                        High Temperature (up to 150°C)
-                      </option>
-                    ) : null}
-                    {allowedVariants.includes("premium") ? (
-                      <option value="premium">Premium</option>
-                    ) : null}
-                  </select>
-                </div>
-              </div>
-
-              <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={wizard.includeCartonQr}
-                  onChange={(event) =>
-                    setWizard((current) => ({
-                      ...current,
-                      includeCartonQr: event.target.checked,
-                    }))
-                  }
-                  className="mt-0.5"
-                />
-                <span>
-                  <span className="font-medium">
-                    Include carton QR labels
-                  </span>{" "}
-                  <span className="text-muted-foreground">
-                    (recommended for retail activation)
-                  </span>
-                </span>
-              </label>
-
-              {stickerConfig.mode === "nfc_qr" || stickerConfig.mode === "nfc_only" ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  ⚠ NFC encoding is only required for blank chips or when you are
-                  changing the programmed URL. If you are reusing existing{" "}
-                  <code className="mx-1 rounded bg-amber-100 px-1 py-0.5">
-                    warranty.feedbacknfc.com/nfc/12345
-                  </code>{" "}
-                  cards, allocate the matching sticker range and keep the
-                  existing encoding.
-                </div>
-              ) : null}
+        <CardContent className="space-y-5">
+          {initialProductModels.length === 0 ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Create at least one product model before generating assets and tags.
             </div>
           ) : null}
 
-          {step === 2 ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Select Product Model
-              </label>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <label className="space-y-1 text-sm">
+              <span>Product Model</span>
               <select
-                value={wizard.productModelId}
+                value={form.productModelId}
                 onChange={(event) =>
-                  setWizard((current) => ({
+                  setForm((current) => ({
                     ...current,
                     productModelId: event.target.value,
                   }))
                 }
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={!hasProductModels}
+                disabled={isSubmitting || initialProductModels.length === 0}
               >
-                {initialProductModels.length === 0 ? (
-                  <option value="">No product models found</option>
-                ) : null}
-                {initialProductModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} ({model.modelNumber})
+                {initialProductModels.map((productModel) => (
+                  <option key={productModel.id} value={productModel.id}>
+                    {productModel.name} ({productModel.modelNumber || "No model number"})
                   </option>
                 ))}
               </select>
-              {!hasProductModels ? (
-                <p className="text-sm text-muted-foreground">
-                  No real product models are available for this manufacturer yet.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
+            </label>
 
-          {step === 3 ? (
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium">Serial Prefix</label>
-                  <Input
-                    value={wizard.serialPrefix}
-                    onChange={(event) =>
-                      setWizard((current) => ({
-                        ...current,
-                        serialPrefix: event.target.value,
-                      }))
-                    }
-                    placeholder="e.g. AX-IND-BLR-"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Serial Start Number
-                  </label>
-                  <Input
-                    type="number"
-                    value={wizard.serialStart}
-                    onChange={(event) =>
-                      setWizard((current) => ({
-                        ...current,
-                        serialStart: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Serial End Number
-                  </label>
-                  <Input
-                    type="number"
-                    value={wizard.serialEnd}
-                    onChange={(event) =>
-                      setWizard((current) => ({
-                        ...current,
-                        serialEnd: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {step === 4 ? (
-            <div className="space-y-4">
-              <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="text-base">Mapping Preview</CardTitle>
-                  <CardDescription>
-                    Previewing first 5 and last 5 sticker-to-serial bindings.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Sticker Number</TableHead>
-                        <TableHead>Appliance Serial</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {previewRows.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={2}
-                            className="text-muted-foreground"
-                          >
-                            Enter valid ranges to view mapping preview.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        previewRows.map((row, index) => (
-                          <TableRow key={`${row.sticker}-${index}`}>
-                            <TableCell>{row.sticker}</TableCell>
-                            <TableCell>{row.serial}</TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-muted/20">
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Review Allocation Summary
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Sticker Range
-                    </p>
-                    <p className="font-medium">
-                      {wizard.stickerStart} - {wizard.stickerEnd}
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="text-xs text-muted-foreground">Technology</p>
-                    <p className="font-medium">{technologyLabel}</p>
-                  </div>
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Product Model
-                    </p>
-                    <p className="font-medium">
-                      {selectedProductModel
-                        ? `${selectedProductModel.name} (${selectedProductModel.modelNumber})`
-                        : "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Material Variant
-                    </p>
-                    <p className="font-medium">{stickerVariantLabel}</p>
-                  </div>
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="text-xs text-muted-foreground">Serial Range</p>
-                    <p className="font-medium">
-                      {formatSerial(
-                        wizard.serialPrefix,
-                        parsedSerialStart,
-                        serialPadLength,
-                      )}{" "}
-                      -{" "}
-                      {formatSerial(
-                        wizard.serialPrefix,
-                        parsedSerialEnd,
-                        serialPadLength,
-                      )}
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-background p-3">
-                    <p className="text-xs text-muted-foreground">Total Count</p>
-                    <p className="font-medium">
-                      {stickerCount.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-background p-3 md:col-span-2">
-                    <p className="text-xs text-muted-foreground">
-                      Sticker Deliverables
-                    </p>
-                    <div className="space-y-1 text-sm">
-                      <p>
-                        {stickerCount.toLocaleString()} product sticker QR codes (
-                        <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                          ctx=product
-                        </code>
-                        )
-                      </p>
-                      {wizard.includeCartonQr ? (
-                        <p>
-                          {stickerCount.toLocaleString()} carton QR labels (
-                          <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                            ctx=carton
-                          </code>
-                          )
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">
-                          Carton QR labels not included in this allocation.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          ) : null}
-
-          {step === 5 ? (
-            <Card className="border-emerald-300 bg-emerald-50">
-              <CardContent className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                <CheckCircle2Icon className="size-12 text-emerald-600" />
-                <p className="text-xl font-semibold">
-                  {lastAllocatedCount.toLocaleString()} stickers allocated
-                  successfully
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Allocation ID:{" "}
-                  <span className="font-medium">{lastAllocationId}</span>
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Carton QR labels:{" "}
-                  <span className="font-medium">
-                    {wizard.includeCartonQr ? "Included" : "Not included"}
-                  </span>
-                </p>
-                <Button className="mt-3" onClick={resetWizard}>
-                  Start New Allocation
-                </Button>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {wizardError ? (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {wizardError}
-            </div>
-          ) : null}
-
-          {step < 5 ? (
-            <div className="flex justify-between gap-2">
-              <Button
-                variant="outline"
-                onClick={goToPreviousStep}
-                disabled={step === 1 || isSubmitting}
+            <label className="space-y-1 text-sm">
+              <span>Item Class</span>
+              <select
+                value={form.productClass}
+                onChange={(event) => {
+                  const nextProductClass = event.target.value as AssetProductClass;
+                  setForm((current) => ({
+                    ...current,
+                    productClass: nextProductClass,
+                    includeCartonRegistrationTags:
+                      nextProductClass === "main_product"
+                        ? current.includeCartonRegistrationTags
+                        : false,
+                  }));
+                }}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={isSubmitting}
               >
-                <ChevronLeftIcon className="size-4" />
-                Back
-              </Button>
+                {ASSET_PRODUCT_CLASSES.map((itemClass) => (
+                  <option key={itemClass} value={itemClass}>
+                    {formatProductClassLabel(itemClass)}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-              {step === 4 ? (
-                <Button
-                  onClick={() => void confirmAllocation()}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Allocating..." : "Confirm Allocation"}
-                  <CheckCircle2Icon className="size-4" />
-                </Button>
-              ) : (
-                <Button onClick={goToNextStep} disabled={isSubmitting}>
-                  Next
-                  <ChevronRightIcon className="size-4" />
-                </Button>
-              )}
+            <label className="space-y-1 text-sm">
+              <span>Quantity</span>
+              <Input
+                type="number"
+                value={form.quantity}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    quantity: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span>Serial Prefix (optional)</span>
+              <Input
+                value={form.serialPrefix}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    serialPrefix: event.target.value,
+                  }))
+                }
+                placeholder="e.g. AX-IND-"
+                disabled={isSubmitting}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span>Serial Start (optional)</span>
+              <Input
+                type="number"
+                value={form.serialStart}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    serialStart: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span>Print Size (mm)</span>
+              <Input
+                type="number"
+                value={form.printSizeMm}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    printSizeMm: event.target.value,
+                  }))
+                }
+                disabled={isSubmitting}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span>Material Variant</span>
+              <select
+                value={form.materialVariant}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    materialVariant: event.target.value as TagMaterialVariant,
+                  }))
+                }
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={isSubmitting}
+              >
+                {TAG_MATERIAL_VARIANTS.map((variant) => (
+                  <option key={variant} value={variant}>
+                    {variant.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span>Viewer Policy</span>
+              <select
+                value={form.viewerPolicy}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    viewerPolicy: event.target.value as TagViewerPolicy,
+                  }))
+                }
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={isSubmitting}
+              >
+                {TAG_VIEWER_POLICIES.map((policy) => (
+                  <option key={policy} value={policy}>
+                    {policy.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {classSupportsCartonTags(form.productClass) ? (
+            <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+              <input
+                type="checkbox"
+                checked={form.includeCartonRegistrationTags}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    includeCartonRegistrationTags: event.target.checked,
+                  }))
+                }
+                className="mt-0.5"
+                disabled={isSubmitting}
+              />
+              <span>
+                <span className="font-medium">Include carton registration tags</span>{" "}
+                <span className="text-muted-foreground">
+                  for installation-driven sale registration workflows.
+                </span>
+              </span>
+            </label>
+          ) : null}
+
+          <div className="space-y-3 rounded-md border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Symbology Selection</p>
+                <p className="text-xs text-muted-foreground">
+                  Choose one or more symbologies for this batch.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={applyRecommendedSymbologies}
+                disabled={isSubmitting}
+              >
+                Use Policy Recommendation
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {TAG_SYMBOLOGIES.map((symbology) => {
+                const checked = form.symbologies.includes(symbology);
+                return (
+                  <label
+                    key={symbology}
+                    className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                      checked ? "border-primary bg-primary/5" : "border-slate-200"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSymbology(symbology)}
+                      disabled={isSubmitting}
+                    />
+                    {formatSymbologyLabel(symbology)}
+                  </label>
+                );
+              })}
+            </div>
+
+            <label className="space-y-1 text-sm">
+              <span>Default Symbology</span>
+              <select
+                value={form.defaultSymbology}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    defaultSymbology: event.target.value as TagSymbology,
+                  }))
+                }
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={isSubmitting}
+              >
+                {form.symbologies.map((symbology) => (
+                  <option key={symbology} value={symbology}>
+                    {formatSymbologyLabel(symbology)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {error ? (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
             </div>
           ) : null}
+
+          <div className="flex justify-end">
+            <Button onClick={() => void createBatch()} disabled={!canGenerate}>
+              {isSubmitting ? (
+                <>
+                  <Loader2Icon className="size-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <PackagePlusIcon className="size-4" />
+                  Create Tag Generation Batch
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-4">
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Allocated</CardDescription>
-            <CardTitle>{inventory.totalAllocated.toLocaleString()}</CardTitle>
+            <CardDescription>Total Batches</CardDescription>
+            <CardTitle>{summary.totalBatches.toLocaleString()}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Bound</CardDescription>
-            <CardTitle>{inventory.totalBound.toLocaleString()}</CardTitle>
+            <CardDescription>Total Assets</CardDescription>
+            <CardTitle>{summary.totalAssets.toLocaleString()}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Activated</CardDescription>
-            <CardTitle>{inventory.totalActivated.toLocaleString()}</CardTitle>
+            <CardDescription>Total Tags</CardDescription>
+            <CardTitle>{summary.totalTags.toLocaleString()}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Available</CardDescription>
-            <CardTitle>{inventory.totalAvailable.toLocaleString()}</CardTitle>
+            <CardDescription>QR Tags</CardDescription>
+            <CardTitle>{summary.qrTags.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Data Matrix Tags</CardDescription>
+            <CardTitle>{summary.dataMatrixTags.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>NFC URI Tags</CardDescription>
+            <CardTitle>{summary.nfcTags.toLocaleString()}</CardTitle>
           </CardHeader>
         </Card>
       </div>
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Production Tools</CardTitle>
+          <CardTitle>Export Outputs</CardTitle>
           <CardDescription>
-            Generate print-ready QR assets and NFC encoding exports for sticker
-            production.
+            Download QR, Data Matrix, manifest, and NFC outputs from any generated batch.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {hasRealAllocations || allocationHistory.some((row) => isProbablyUuid(row.id)) ? (
-            <>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Select Allocation
-                </label>
-                <select
-                  value={productionAllocationId}
-                  onChange={(event) => setProductionAllocationId(event.target.value)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Select an allocation…</option>
-                  {allocationHistory
-                    .filter((row) => isProbablyUuid(row.id))
-                    .map((allocation) => (
-                      <option key={allocation.id} value={allocation.id}>
-                        {allocation.allocationId} ({allocation.stickerStart}-
-                        {allocation.stickerEnd}, {allocation.productModelName}
-                        {allocation.includeCartonQr ? ", carton QR" : ""})
-                      </option>
-                    ))}
-                </select>
-              </div>
+        <CardContent className="space-y-4">
+          <label className="space-y-1 text-sm">
+            <span>Select Batch</span>
+            <select
+              value={selectedBatchId}
+              onChange={(event) => setSelectedBatchId(event.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Select a batch…</option>
+              {batches.map((batch) => (
+                <option key={batch.id} value={batch.id}>
+                  {batch.batchCode} ({batch.productModel.name}, {formatProductClassLabel(batch.productClass)})
+                </option>
+              ))}
+            </select>
+          </label>
 
-              {stickerConfig.mode !== "nfc_only" ? (
-                <div className="space-y-3 rounded-md border p-4">
-                  <div>
-                    <p className="text-sm font-medium">
-                      Generate Print-Ready QR Codes
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Available for QR Only and NFC + QR sticker modes.
-                    </p>
-                  </div>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={
+                selectedBatchId && hasSymbology(selectedBatch, "qr")
+                  ? `/api/manufacturer/tag-generation/batches/${encodeURIComponent(
+                      selectedBatchId,
+                    )}/exports/qr?format=png_zip`
+                  : undefined
+              }
+              target="_blank"
+              rel="noreferrer"
+              className={
+                selectedBatchId && hasSymbology(selectedBatch, "qr")
+                  ? "inline-flex"
+                  : "pointer-events-none inline-flex opacity-60"
+              }
+            >
+              <Button
+                type="button"
+                disabled={!selectedBatchId || !hasSymbology(selectedBatch, "qr")}
+              >
+                Download QR ZIP
+              </Button>
+            </a>
 
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span>QR Code Size</span>
-                      <select
-                        value={qrSizeMm}
-                        onChange={(event) =>
-                          setQrSizeMm(Number(event.target.value) as 25 | 30 | 35)
-                        }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value={25}>25mm</option>
-                        <option value={30}>30mm</option>
-                        <option value={35}>35mm</option>
-                      </select>
-                    </label>
+            <a
+              href={
+                selectedBatchId && hasSymbology(selectedBatch, "data_matrix")
+                  ? `/api/manufacturer/tag-generation/batches/${encodeURIComponent(
+                      selectedBatchId,
+                    )}/exports/data-matrix?format=csv`
+                  : undefined
+              }
+              target="_blank"
+              rel="noreferrer"
+              className={
+                selectedBatchId && hasSymbology(selectedBatch, "data_matrix")
+                  ? "inline-flex"
+                  : "pointer-events-none inline-flex opacity-60"
+              }
+            >
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedBatchId || !hasSymbology(selectedBatch, "data_matrix")}
+              >
+                Download Data Matrix CSV
+              </Button>
+            </a>
 
-                    <label className="space-y-1 text-sm">
-                      <span>Error Correction</span>
-                      <select
-                        value={qrErrorCorrection}
-                        onChange={(event) =>
-                          setQrErrorCorrection(
-                            event.target.value as "L" | "M" | "Q" | "H",
-                          )
-                        }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="M">M (15%)</option>
-                        <option value="Q">Q (25%)</option>
-                        <option value="H">H (30%)</option>
-                        <option value="L">L (7%)</option>
-                      </select>
-                    </label>
+            <a
+              href={
+                selectedBatchId
+                  ? `/api/manufacturer/tag-generation/batches/${encodeURIComponent(
+                      selectedBatchId,
+                    )}/exports/manifest?format=json`
+                  : undefined
+              }
+              target="_blank"
+              rel="noreferrer"
+              className={selectedBatchId ? "inline-flex" : "pointer-events-none inline-flex opacity-60"}
+            >
+              <Button type="button" variant="secondary" disabled={!selectedBatchId}>
+                Download Manifest JSON
+              </Button>
+            </a>
 
-                    <label className="space-y-1 text-sm md:col-span-2">
-                      <span>Output Format</span>
-                      <select
-                        value={qrFormat}
-                        onChange={(event) =>
-                          setQrFormat(
-                            event.target.value as "pdf_sheet" | "png_zip" | "csv",
-                          )
-                        }
-                        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        <option value="pdf_sheet">PDF (print sheet)</option>
-                        <option value="png_zip">Individual PNGs (ZIP)</option>
-                        <option value="csv">
-                          CSV (number + URL, for label printer)
-                        </option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <a
-                      href={
-                        productionAllocationId && isProbablyUuid(productionAllocationId)
-                          ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
-                              productionAllocationId,
-                            )}&variant=product&format=${encodeURIComponent(
-                              qrFormat,
-                            )}&qr_size_mm=${encodeURIComponent(
-                              String(qrSizeMm),
-                            )}&error_correction=${encodeURIComponent(
-                              qrErrorCorrection,
-                            )}`
-                          : undefined
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className={
-                        productionAllocationId && isProbablyUuid(productionAllocationId)
-                          ? "inline-flex"
-                          : "pointer-events-none inline-flex opacity-60"
-                      }
-                    >
-                      <Button
-                        type="button"
-                        disabled={
-                          !productionAllocationId ||
-                          !isProbablyUuid(productionAllocationId)
-                        }
-                      >
-                        Download Product Sticker QR Codes
-                      </Button>
-                    </a>
-
-                    {selectedAllocation?.includeCartonQr ? (
-                      <a
-                        href={
-                          productionAllocationId && isProbablyUuid(productionAllocationId)
-                            ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
-                                productionAllocationId,
-                              )}&variant=carton&format=${encodeURIComponent(
-                                qrFormat,
-                              )}&qr_size_mm=${encodeURIComponent(
-                                String(qrSizeMm),
-                              )}&error_correction=${encodeURIComponent(
-                                qrErrorCorrection,
-                              )}`
-                            : undefined
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className={
-                          productionAllocationId && isProbablyUuid(productionAllocationId)
-                            ? "inline-flex"
-                            : "pointer-events-none inline-flex opacity-60"
-                        }
-                      >
-                        <Button
-                          type="button"
-                          variant="outline"
-                          disabled={
-                            !productionAllocationId ||
-                            !isProbablyUuid(productionAllocationId)
-                          }
-                        >
-                          Download Carton QR Labels
-                        </Button>
-                      </a>
-                    ) : null}
-
-                    {selectedAllocation?.includeCartonQr ? (
-                      <a
-                        href={
-                          productionAllocationId && isProbablyUuid(productionAllocationId)
-                            ? `/api/manufacturer/stickers/generate-qr?allocation_id=${encodeURIComponent(
-                                productionAllocationId,
-                              )}&variant=combined&format=csv&qr_size_mm=${encodeURIComponent(
-                                String(qrSizeMm),
-                              )}&error_correction=${encodeURIComponent(
-                                qrErrorCorrection,
-                              )}`
-                            : undefined
-                        }
-                        target="_blank"
-                        rel="noreferrer"
-                        className={
-                          productionAllocationId && isProbablyUuid(productionAllocationId)
-                            ? "inline-flex"
-                            : "pointer-events-none inline-flex opacity-60"
-                        }
-                      >
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={
-                            !productionAllocationId ||
-                            !isProbablyUuid(productionAllocationId)
-                          }
-                        >
-                          Download Combined CSV
-                        </Button>
-                      </a>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-
-              {stickerConfig.mode !== "qr_only" ? (
-                <div className="space-y-3 rounded-md border p-4">
-                  <div>
-                    <p className="text-sm font-medium">
-                      Generate NFC Encoding File
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Available for NFC + QR and NFC Only sticker modes. Skip
-                      this when reusing already-programmed{" "}
-                      <code className="mx-1 rounded bg-muted px-1 py-0.5">
-                        warranty.feedbacknfc.com/nfc/12345
-                      </code>{" "}
-                      cards.
-                    </p>
-                  </div>
-
-                  <label className="space-y-1 text-sm">
-                    <span>Output Format</span>
-                    <select
-                      value={nfcFormat}
-                      onChange={(event) =>
-                        setNfcFormat(
-                          event.target.value as "ndef_uri_csv" | "nfc_tools_json",
-                        )
-                      }
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      <option value="ndef_uri_csv">
-                        NDEF URI CSV (for encoding machines)
-                      </option>
-                      <option value="nfc_tools_json">
-                        NFC Tools JSON (generic)
-                      </option>
-                    </select>
-                  </label>
-
-                  <a
-                    href={
-                      productionAllocationId && isProbablyUuid(productionAllocationId)
-                        ? `/api/manufacturer/stickers/generate-nfc-encoding?allocation_id=${encodeURIComponent(
-                            productionAllocationId,
-                          )}&format=${encodeURIComponent(nfcFormat)}`
-                        : undefined
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    className={
-                      productionAllocationId && isProbablyUuid(productionAllocationId)
-                        ? "inline-flex"
-                        : "pointer-events-none inline-flex opacity-60"
-                    }
-                  >
-                    <Button
-                      type="button"
-                      disabled={
-                        !productionAllocationId ||
-                        !isProbablyUuid(productionAllocationId)
-                      }
-                    >
-                      Generate & Download
-                    </Button>
-                  </a>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              Create at least one real allocation to unlock production tools.
-            </div>
-          )}
+            <a
+              href={
+                selectedBatchId && hasSymbology(selectedBatch, "nfc_uri")
+                  ? `/api/manufacturer/tag-generation/batches/${encodeURIComponent(
+                      selectedBatchId,
+                    )}/exports/nfc?format=csv`
+                  : undefined
+              }
+              target="_blank"
+              rel="noreferrer"
+              className={
+                selectedBatchId && hasSymbology(selectedBatch, "nfc_uri")
+                  ? "inline-flex"
+                  : "pointer-events-none inline-flex opacity-60"
+              }
+            >
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!selectedBatchId || !hasSymbology(selectedBatch, "nfc_uri")}
+              >
+                Download NFC CSV
+              </Button>
+            </a>
+          </div>
         </CardContent>
       </Card>
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Allocation History</CardTitle>
-          <CardDescription>Past sticker allocation records.</CardDescription>
+          <CardTitle>Batch History</CardTitle>
+          <CardDescription>Recent tag generation batches for this manufacturer.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Batch</TableHead>
+                <TableHead>Model</TableHead>
+                <TableHead>Class</TableHead>
+                <TableHead>Quantity</TableHead>
+                <TableHead>Symbologies</TableHead>
+                <TableHead className="text-right">Tags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {batches.length === 0 ? (
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Allocation ID</TableHead>
-                  <TableHead>Range</TableHead>
-                  <TableHead>Product Model</TableHead>
-                  <TableHead>Deliverables</TableHead>
-                  <TableHead className="text-right">Count</TableHead>
+                  <TableCell colSpan={7} className="text-muted-foreground">
+                    No batches generated yet.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allocationHistory.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-muted-foreground">
-                      No allocations recorded yet.
-                    </TableCell>
-                  </TableRow>
               ) : (
-                allocationHistory.map((allocation) => (
-                  <TableRow key={allocation.id}>
-                    <TableCell>{formatDate(allocation.date)}</TableCell>
-                    <TableCell className="font-medium">
-                      {allocation.allocationId}
-                    </TableCell>
+                batches.map((batch) => (
+                  <TableRow key={batch.id}>
+                    <TableCell>{formatDate(batch.createdAt)}</TableCell>
+                    <TableCell className="font-medium">{batch.batchCode}</TableCell>
+                    <TableCell>{batch.productModel.name}</TableCell>
+                    <TableCell>{formatProductClassLabel(batch.productClass)}</TableCell>
+                    <TableCell>{batch.quantity.toLocaleString()}</TableCell>
                     <TableCell>
-                      {allocation.stickerStart} - {allocation.stickerEnd}
-                    </TableCell>
-                    <TableCell>
-                      {allocation.productModelName || "Unknown Model"}
-                    </TableCell>
-                    <TableCell>
-                      {allocation.includeCartonQr
-                        ? "Product + carton QR"
-                        : "Product QR only"}
+                      {batch.symbologies.map((symbology) => formatSymbologyLabel(symbology)).join(", ")}
+                      {batch.includeCartonRegistrationTags ? ", Carton QR" : ""}
                     </TableCell>
                     <TableCell className="text-right">
-                      {allocation.count.toLocaleString()}
+                      {batch.tagsGenerated.toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))

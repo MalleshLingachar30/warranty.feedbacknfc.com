@@ -347,7 +347,8 @@ export async function DELETE(
         _count: {
           select: {
             products: true,
-            stickerAllocations: true,
+            tagGenerationBatches: true,
+            assetIdentities: true,
           },
         },
       },
@@ -364,9 +365,16 @@ export async function DELETE(
       );
     }
 
-    if (existingModel._count.stickerAllocations > 0) {
+    if (existingModel._count.tagGenerationBatches > 0) {
       throw new ApiError(
-        "Cannot delete this model because sticker allocations reference it.",
+        "Cannot delete this model because tag generation batches reference it.",
+        409,
+      );
+    }
+
+    if (existingModel._count.assetIdentities > 0) {
+      throw new ApiError(
+        "Cannot delete this model because generated assets reference it.",
         409,
       );
     }

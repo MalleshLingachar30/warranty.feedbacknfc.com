@@ -1,19 +1,20 @@
 import dynamic from "next/dynamic";
+import { type Prisma } from "@prisma/client";
 
 import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import {
-  type AllocationHistoryRow,
   type ManufacturerProductModel,
-  type StickerInventorySummary,
+  type TagGenerationBatchRow,
+  type TagGenerationSummary,
 } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
-import { normalizeManufacturerStickerConfig } from "@/lib/sticker-config";
-
 import {
-  buildAllocationDisplayId,
-  jsonStringArray,
-  resolveManufacturerPageContext,
-} from "../_lib/server-context";
+  asTagSymbology,
+  formatTagGenerationBatchCode,
+  type TagSymbology,
+} from "@/lib/asset-generation";
+
+import { jsonStringArray, resolveManufacturerPageContext } from "../_lib/server-context";
 
 const StickerWizardClient = dynamic(
   () =>
@@ -29,24 +30,24 @@ export default async function ManufacturerStickersPage() {
   const { organizationId } = await resolveManufacturerPageContext();
 
   let productModels: ManufacturerProductModel[] = [];
-  let allocationHistory: AllocationHistoryRow[] = [];
-  let stickerConfig = normalizeManufacturerStickerConfig({});
-  let inventory: StickerInventorySummary = {
-    totalAllocated: 0,
-    totalBound: 0,
-    totalActivated: 0,
-    totalAvailable: 0,
+  let batches: TagGenerationBatchRow[] = [];
+  let summary: TagGenerationSummary = {
+    totalBatches: 0,
+    totalAssets: 0,
+    totalTags: 0,
+    qrTags: 0,
+    dataMatrixTags: 0,
+    nfcTags: 0,
   };
-  let hasRealAllocations = false;
 
   if (organizationId) {
     const [
       models,
-      allocations,
-      totalAllocated,
-      totalBound,
-      totalActivated,
-      organization,
+      generationBatches,
+      totalBatches,
+      totalAssets,
+      totalTags,
+      symbologyCounts,
     ] = await Promise.all([
       db.productModel.findMany({
         where: {
@@ -66,6 +67,24 @@ export default async function ManufacturerStickersPage() {
           warrantyDurationMonths: true,
           requiredSkills: true,
           commonIssues: true,
+          activationMode: true,
+          installationOwnershipMode: true,
+          installationRequired: true,
+          activationTrigger: true,
+          customerCreationMode: true,
+          allowCartonSaleRegistration: true,
+          allowUnitSelfActivation: true,
+          partTraceabilityMode: true,
+          smallPartTrackingMode: true,
+          customerAcknowledgementRequired: true,
+          installationChecklistTemplate: true,
+          commissioningTemplate: true,
+          requiredPhotoPolicy: true,
+          requiredGeoCapture: true,
+          defaultInstallerSkillTags: true,
+          includedKitDefinition: true,
+          createdAt: true,
+          updatedAt: true,
           _count: {
             select: {
               products: true,
@@ -73,42 +92,66 @@ export default async function ManufacturerStickersPage() {
           },
         },
       }),
-      db.stickerAllocation.findMany({
+      db.tagGenerationBatch.findMany({
         where: {
           organizationId,
         },
         orderBy: {
-          allocatedAt: "desc",
+          createdAt: "desc",
         },
-        include: {
+        select: {
+          id: true,
+          createdAt: true,
+          productClass: true,
+          quantity: true,
+          serialPrefix: true,
+          serialStart: true,
+          serialEnd: true,
+          includeCartonRegistrationTags: true,
+          defaultSymbology: true,
+          outputProfile: true,
           productModel: {
             select: {
+              id: true,
               name: true,
+            },
+          },
+          _count: {
+            select: {
+              assets: true,
+              tags: true,
             },
           },
         },
         take: 30,
       }),
-      db.sticker.count({
+      db.tagGenerationBatch.count({
         where: {
-          allocatedToOrgId: organizationId,
+          organizationId,
         },
       }),
-      db.sticker.count({
+      db.assetIdentity.count({
         where: {
-          allocatedToOrgId: organizationId,
-          status: "bound",
+          organizationId,
         },
       }),
-      db.sticker.count({
+      db.assetTag.count({
         where: {
-          allocatedToOrgId: organizationId,
-          status: "activated",
+          generationBatch: {
+            organizationId,
+          },
         },
       }),
-      db.organization.findUnique({
-        where: { id: organizationId },
-        select: { settings: true },
+      db.assetTag.groupBy({
+        by: ["symbology"],
+        where: {
+          generationBatch: {
+            organizationId,
+          },
+        },
+        _count: {
+          _all: true,
+        },
       }),
     ]);
 
@@ -124,52 +167,126 @@ export default async function ManufacturerStickersPage() {
       totalUnits: model._count.products,
       commonIssues: jsonStringArray(model.commonIssues),
       requiredSkills: model.requiredSkills,
+      activationMode: model.activationMode,
+      installationOwnershipMode: model.installationOwnershipMode,
+      installationRequired: model.installationRequired,
+      activationTrigger: model.activationTrigger,
+      customerCreationMode: model.customerCreationMode,
+      allowCartonSaleRegistration: model.allowCartonSaleRegistration,
+      allowUnitSelfActivation: model.allowUnitSelfActivation,
+      partTraceabilityMode: model.partTraceabilityMode,
+      smallPartTrackingMode: model.smallPartTrackingMode,
+      customerAcknowledgementRequired: model.customerAcknowledgementRequired,
+      installationChecklistTemplate: jsonStringArray(
+        model.installationChecklistTemplate,
+      ),
+      commissioningTemplate: jsonStringArray(model.commissioningTemplate),
+      requiredPhotoPolicy: model.requiredPhotoPolicy as {
+        requireBeforePhoto: boolean;
+        requireAfterPhoto: boolean;
+        minimumPhotoCount: number;
+      },
+      requiredGeoCapture: model.requiredGeoCapture,
+      defaultInstallerSkillTags: model.defaultInstallerSkillTags,
+      includedKitDefinition:
+        (model.includedKitDefinition as Record<string, unknown>) ?? {},
+      createdAt: model.createdAt.toISOString(),
+      updatedAt: model.updatedAt.toISOString(),
     }));
 
-    hasRealAllocations = allocations.length > 0;
+    const symbologyMap = new Map<TagSymbology, number>();
+    for (const row of symbologyCounts) {
+      symbologyMap.set(row.symbology, row._count._all);
+    }
 
-    allocationHistory = allocations.map((allocation) => {
-      const serialStartNumber = Number(allocation.applianceSerialStart ?? 0);
-      const serialEndNumber = Number(allocation.applianceSerialEnd ?? 0);
+    const batchIds = generationBatches.map((batch) => batch.id);
+    const batchSymbologyCounts =
+      batchIds.length === 0
+        ? []
+        : await db.assetTag.groupBy({
+            by: ["generationBatchId", "symbology"],
+            where: {
+              generationBatchId: {
+                in: batchIds,
+              },
+            },
+            _count: {
+              _all: true,
+            },
+          });
 
-      return {
-        id: allocation.id,
-        allocationId: buildAllocationDisplayId(
-          allocation.id,
-          allocation.allocatedAt,
-        ),
-        date: allocation.allocatedAt.toISOString(),
-        stickerStart: allocation.stickerStartNumber,
-        stickerEnd: allocation.stickerEndNumber,
-        serialPrefix: allocation.applianceSerialPrefix ?? "",
-        serialStart: Number.isFinite(serialStartNumber) ? serialStartNumber : 0,
-        serialEnd: Number.isFinite(serialEndNumber) ? serialEndNumber : 0,
-        productModelId: allocation.productModelId ?? "",
-        productModelName: allocation.productModel?.name ?? "Unknown Model",
-        count: allocation.totalCount,
-        includeCartonQr: allocation.includeCartonQr,
-      };
-    });
+    const batchSymbologyMap = new Map<
+      string,
+      Partial<Record<TagSymbology, number>>
+    >();
+    for (const row of batchSymbologyCounts) {
+      if (!row.generationBatchId) {
+        continue;
+      }
+      const current = batchSymbologyMap.get(row.generationBatchId) ?? {};
+      current[row.symbology] = row._count._all;
+      batchSymbologyMap.set(row.generationBatchId, current);
+    }
 
-    inventory = {
-      totalAllocated,
-      totalBound,
-      totalActivated,
-      totalAvailable: Math.max(totalAllocated - totalBound - totalActivated, 0),
+    function parseOutputSymbologies(
+      outputProfile: Prisma.JsonValue,
+      fallback: TagSymbology,
+    ) {
+      if (!outputProfile || typeof outputProfile !== "object") {
+        return [fallback];
+      }
+
+      const profile = outputProfile as Record<string, unknown>;
+      if (!Array.isArray(profile.symbologies)) {
+        return [fallback];
+      }
+
+      const values = profile.symbologies
+        .map((entry) => asTagSymbology(entry))
+        .filter((value): value is TagSymbology => Boolean(value));
+
+      return values.length > 0 ? values : [fallback];
+    }
+
+    batches = generationBatches.map((batch) => ({
+      id: batch.id,
+      batchCode: formatTagGenerationBatchCode(batch.id, batch.createdAt),
+      createdAt: batch.createdAt.toISOString(),
+      productClass: batch.productClass,
+      quantity: batch.quantity,
+      serialPrefix: batch.serialPrefix,
+      serialStart: batch.serialStart,
+      serialEnd: batch.serialEnd,
+      includeCartonRegistrationTags: batch.includeCartonRegistrationTags,
+      defaultSymbology: batch.defaultSymbology,
+      symbologies: parseOutputSymbologies(
+        batch.outputProfile as Prisma.JsonValue,
+        batch.defaultSymbology,
+      ),
+      productModel: {
+        id: batch.productModel.id,
+        name: batch.productModel.name,
+      },
+      assetsGenerated: batch._count.assets,
+      tagsGenerated: batch._count.tags,
+      tagCountBySymbology: batchSymbologyMap.get(batch.id) ?? {},
+    }));
+
+    summary = {
+      totalBatches,
+      totalAssets,
+      totalTags,
+      qrTags: symbologyMap.get("qr") ?? 0,
+      dataMatrixTags: symbologyMap.get("data_matrix") ?? 0,
+      nfcTags: symbologyMap.get("nfc_uri") ?? 0,
     };
-
-    stickerConfig = normalizeManufacturerStickerConfig(
-      organization?.settings ?? {},
-    );
   }
 
   return (
     <StickerWizardClient
       initialProductModels={productModels}
-      initialAllocationHistory={allocationHistory}
-      initialInventory={inventory}
-      stickerConfig={stickerConfig}
-      hasRealAllocations={hasRealAllocations}
+      initialBatches={batches}
+      initialSummary={summary}
     />
   );
 }
