@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { OrganizationType, UserRole, type Prisma } from "@prisma/client";
+import { UserRole, type OrganizationType, type Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
@@ -98,19 +98,6 @@ function parseStringArray(value: unknown): string[] {
   return value
     .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
-}
-
-function asOrganizationType(value: unknown): OrganizationType | null {
-  if (
-    value === "manufacturer" ||
-    value === "distributor" ||
-    value === "service_center" ||
-    value === "retailer"
-  ) {
-    return value;
-  }
-
-  return null;
 }
 
 function asAdminRole(value: unknown): UserRole | null {

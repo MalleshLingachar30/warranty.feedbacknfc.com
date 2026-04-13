@@ -135,7 +135,6 @@ export function StickerSheetDocument({
   branding,
   qrSizeMm,
   items,
-  labelVariant = "product",
   showSerial = true,
   instructionTextEn,
 }: StickerSheetDocumentProps) {

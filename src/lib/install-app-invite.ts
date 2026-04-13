@@ -12,12 +12,6 @@ function isRecord(value: unknown): value is InviteMetadataRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function asString(value: unknown) {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
-}
-
 function firstName(name: string | null) {
   if (!name) {
     return "there";
