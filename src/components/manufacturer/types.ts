@@ -1,6 +1,7 @@
 import type {
   AssetLifecycleState,
   InstallationJobStatus,
+  InstallationReportSubmitterRole,
   SaleRegistrationChannel,
   SaleRegistrationStatus,
 } from "@prisma/client";
@@ -140,6 +141,13 @@ export type ServiceCenterOption = {
   city: string;
 };
 
+export type TechnicianOption = {
+  id: string;
+  name: string;
+  serviceCenterId: string;
+  serviceCenterName: string;
+};
+
 export type SaleRegistrationRow = {
   id: string;
   assetId: string;
@@ -185,6 +193,7 @@ export type InstallationJobRow = {
   status: InstallationJobStatus;
   scheduledFor: string | null;
   createdAt: string;
+  activationTriggeredAt: string | null;
   assetId: string;
   assetCode: string;
   serialNumber: string;
@@ -200,7 +209,14 @@ export type InstallationJobRow = {
     name: string;
     city: string;
   } | null;
+  assignedTechnicianId: string | null;
   assignedTechnicianName: string | null;
+  installationReport: {
+    id: string;
+    submittedAt: string;
+    submittedByRole: InstallationReportSubmitterRole;
+    customerName: string;
+  } | null;
 };
 
 export type ClaimStatusType =

@@ -83,3 +83,75 @@ export interface TechnicianJobsResponse {
   performance: TechnicianPerformance;
   generatedAt: string;
 }
+
+export type TechnicianInstallationJobStatus =
+  | "pending_assignment"
+  | "assigned"
+  | "scheduled"
+  | "technician_enroute"
+  | "on_site"
+  | "commissioning"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export type RequiredPhotoPolicy = {
+  requireBeforePhoto: boolean;
+  requireAfterPhoto: boolean;
+  minimumPhotoCount: number;
+};
+
+export interface TechnicianInstallationJob {
+  id: string;
+  jobNumber: string;
+  status: TechnicianInstallationJobStatus;
+  scheduledFor: string | null;
+  createdAt: string;
+  technicianStartedAt: string | null;
+  technicianCompletedAt: string | null;
+  activationTriggeredAt: string | null;
+  checklistTemplateSnapshot: string[];
+  commissioningTemplateSnapshot: string[];
+  asset: {
+    id: string;
+    code: string;
+    serialNumber: string;
+    lifecycleState: string;
+  };
+  productModel: {
+    name: string;
+    modelNumber: string;
+    installationOwnershipMode: "manufacturer_only" | "dealer_allowed";
+    partTraceabilityMode: "none" | "pack_or_kit" | "unit_scan_mandatory";
+    requiredGeoCapture: boolean;
+    customerAcknowledgementRequired: boolean;
+    requiredPhotoPolicy: RequiredPhotoPolicy;
+  };
+  manufacturerName: string;
+  assignedServiceCenterName: string;
+  saleRegistration: {
+    registeredAt: string;
+    dealerName: string | null;
+    distributorName: string | null;
+  } | null;
+  installationReport: {
+    id: string;
+    submittedAt: string;
+    customerName: string;
+    submittedByRole:
+      | "manufacturer_engineer"
+      | "dealer_engineer"
+      | "dealer_technician";
+  } | null;
+}
+
+export interface TechnicianInstallationJobsResponse {
+  technician: {
+    id: string;
+    name: string;
+    phone: string;
+    serviceCenterName: string;
+  };
+  jobs: TechnicianInstallationJob[];
+  generatedAt: string;
+}

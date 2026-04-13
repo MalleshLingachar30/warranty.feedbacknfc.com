@@ -1,6 +1,8 @@
 import type {
   AssetLifecycleState,
+  CustomerAcknowledgementType,
   InstallationJobStatus,
+  InstallationReportSubmitterRole,
   SaleRegistrationChannel,
   SaleRegistrationStatus,
 } from "@prisma/client";
@@ -29,6 +31,18 @@ export const INSTALLATION_JOB_STATUSES = [
   "cancelled",
   "failed",
 ] as const satisfies readonly InstallationJobStatus[];
+
+export const INSTALLATION_REPORT_SUBMITTER_ROLES = [
+  "manufacturer_engineer",
+  "dealer_engineer",
+  "dealer_technician",
+] as const satisfies readonly InstallationReportSubmitterRole[];
+
+export const CUSTOMER_ACKNOWLEDGEMENT_TYPES = [
+  "otp",
+  "signature",
+  "digital_acceptance",
+] as const satisfies readonly CustomerAcknowledgementType[];
 
 export function formatWorkflowLabel(value: string) {
   return value
@@ -65,8 +79,9 @@ export function installationJobLifecycleState(
     case "technician_enroute":
     case "on_site":
     case "commissioning":
-    case "completed":
       return "installation_in_progress";
+    case "completed":
+      return "active";
     case "cancelled":
     case "failed":
     case "pending_assignment":

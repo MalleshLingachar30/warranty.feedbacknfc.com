@@ -278,6 +278,13 @@ export default async function ServiceCenterTicketsPage() {
             name: true,
           },
         },
+        installationReport: {
+          select: {
+            submittedAt: true,
+            customerName: true,
+          },
+        },
+        activationTriggeredAt: true,
         manufacturerOrg: {
           select: {
             name: true,
@@ -486,23 +493,24 @@ export default async function ServiceCenterTicketsPage() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>Asset</TableHead>
-                <TableHead>Manufacturer</TableHead>
-                <TableHead>Commercial Handoff</TableHead>
-                <TableHead>Scheduled</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Technician</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {installationJobs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">
-                    No installation jobs are assigned to this service-center
-                    organization yet.
-                  </TableCell>
+                  <TableHead>Job</TableHead>
+                  <TableHead>Asset</TableHead>
+                  <TableHead>Manufacturer</TableHead>
+                  <TableHead>Commercial Handoff</TableHead>
+                  <TableHead>Scheduled</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead>Report</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {installationJobs.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-muted-foreground">
+                      No installation jobs are assigned to this service-center
+                      organization yet.
+                    </TableCell>
                 </TableRow>
               ) : (
                 installationJobs.map((job) => (
@@ -559,6 +567,24 @@ export default async function ServiceCenterTicketsPage() {
                     </TableCell>
                     <TableCell>
                       {job.assignedTechnician?.name ?? "Pending"}
+                    </TableCell>
+                    <TableCell>
+                      {job.installationReport ? (
+                        <div className="space-y-0.5">
+                          <p>{job.installationReport.customerName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Submitted{" "}
+                            {formatDateTime(job.installationReport.submittedAt)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Activated {formatDateTime(job.activationTriggeredAt)}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Pending
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))
