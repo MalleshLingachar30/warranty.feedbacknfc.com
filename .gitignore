@@ -49,3 +49,4 @@ next-env.d.ts
 # local agent outputs and notes
 /gg/
 /md/landing-page-updates.md
+.env*.local

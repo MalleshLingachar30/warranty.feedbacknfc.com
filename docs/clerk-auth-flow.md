@@ -3,7 +3,7 @@
 This project already includes Clerk integration in these paths:
 
 - `src/app/layout.tsx` uses `ClerkProvider`
-- `src/proxy.ts` protects `/dashboard/*`
+- `src/middleware.ts` protects `/dashboard/*`
 - `src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`
 - `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx`
 
