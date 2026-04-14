@@ -52,20 +52,36 @@ The installed customer base is large, with about 4.5 lakh customers in total. Ho
 
 ### 6. Spare Parts Fulfilment
 
+- Service requests generally come with customer identity, customer site, and product reference details, but spare fulfilment still moves through multiple internal and channel handoff points.
 - If a regular spare part is required, the zonal office may supply it immediately.
-- If a non-regular part is needed, the request is routed through the head office and commercial department.
-- The commercial department may then coordinate dispatch through a field sales representative.
-- The spare is then routed from Bangalore to a regional or local office and then onward to the required customer or dealer location.
+- If a non-regular part is needed, the spare request first goes to the commercial team of the branch.
+- The branch commercial team then routes the request to SCM through the field sales representative channel.
+- The spare is then sent from the Bangalore office to the zonal office.
+- From the zonal office, the spare moves to the authorized sales and service dealer, and then further to the customer site.
 - For overseas customers, replacements are generally processed on request.
 
 ### 7. Repair and Return Handling
 
-- When an item is received for repair, it is tagged with source information, place information, and serial number.
+- When an item is received for repair, it comes with a site tag carrying source information, place or site information, serial number, and related identification details.
+- Once green-tagged faulty devices arrive into the repair or return process, they are marked with two labels for further handling and traceability.
 - After repair:
   - a green sticker indicates the item may return to inventory
   - a red sticker suggests that replacement or additional parts may still be required
 - Replaced or failed parts are not always returned immediately by dealers or distributors.
 - There is no dependable closed-loop mechanism to confirm where a replacement spare was actually used or whether the old part has been received back.
+
+### 8. Calibration, AMC, Extended Warranty, and OEM Spare Obligations
+
+- During the warranty period, calibration is carried out at two scheduled points: around the 4th month and around the 10th month.
+- When the equipment invoice is generated in SAP, there is no separate line item for this service obligation.
+- The expected service cost is instead factored into the main equipment invoice, generally as a percentage of the invoiced value.
+- The company therefore knows that a portion of the equipment value is expected to be spent on warranty-period service delivery.
+- AMC includes scheduled maintenance, but generally covers labor as the main service component.
+- Extended warranty is agreed prior to sale and becomes part of the commercial commitment made to the customer.
+- The manufacturer also imports certain equipment from OEMs along with specified spares.
+- In some cases, the manufacturer may not know whether the originally intended spare will actually work because of version changes, design changes, or compatibility differences.
+- In such cases, a new compatible spare may have to be sourced from the OEM.
+- Since the manufacturer has already committed warranty support to the customer, it remains obligated to support the equipment even beyond the OEM's own warranty or compatibility coverage.
 
 ## Operational Challenges
 
