@@ -3,6 +3,7 @@ import { AlertTriangle, Clock3, TicketCheck, TimerReset } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
+import { InstallationQueueClient } from "@/components/service-center/installation-queue-client";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -20,7 +21,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
-import { formatWorkflowLabel } from "@/lib/installation-workflow";
 import { getSlaIndicator, type SlaIndicatorState } from "@/lib/sla-config";
 
 import { resolveServiceCenterPageContext } from "../_lib/service-center-context";
@@ -105,27 +105,6 @@ function slaIndicatorLabel(state: SlaIndicatorState) {
   }
 }
 
-function installationStatusClass(status: string) {
-  switch (status) {
-    case "pending_assignment":
-      return "border-amber-200 bg-amber-50 text-amber-800";
-    case "assigned":
-    case "scheduled":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-    case "technician_enroute":
-    case "on_site":
-    case "commissioning":
-      return "border-indigo-200 bg-indigo-50 text-indigo-700";
-    case "completed":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "cancelled":
-    case "failed":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
-  }
-}
-
 type TicketMetricRow = {
   avgAssignmentLatencyHours: number | null;
   avgResolutionHours: number | null;
@@ -146,82 +125,83 @@ export default async function ServiceCenterTicketsPage() {
     );
   }
 
-  const [tickets, aggregate, metricRows, installationJobs] = await Promise.all([
-    db.ticket.findMany({
-      where: {
-        OR: [
-          {
-            assignedServiceCenter: {
-              organizationId,
-            },
-          },
-          {
-            assignedTechnician: {
-              serviceCenter: {
+  const [tickets, aggregate, metricRows, installationJobs, technicians] =
+    await Promise.all([
+      db.ticket.findMany({
+        where: {
+          OR: [
+            {
+              assignedServiceCenter: {
                 organizationId,
               },
             },
-          },
-        ],
-      },
-      orderBy: {
-        reportedAt: "desc",
-      },
-      take: 150,
-      select: {
-        id: true,
-        ticketNumber: true,
-        status: true,
-        issueCategory: true,
-        issueSeverity: true,
-        reportedAt: true,
-        assignedAt: true,
-        slaBreached: true,
-        slaResponseDeadline: true,
-        slaResolutionDeadline: true,
-        product: {
-          select: {
-            customerName: true,
-            customerPhone: true,
-            serialNumber: true,
-            productModel: {
-              select: {
-                name: true,
-                modelNumber: true,
+            {
+              assignedTechnician: {
+                serviceCenter: {
+                  organizationId,
+                },
+              },
+            },
+          ],
+        },
+        orderBy: {
+          reportedAt: "desc",
+        },
+        take: 150,
+        select: {
+          id: true,
+          ticketNumber: true,
+          status: true,
+          issueCategory: true,
+          issueSeverity: true,
+          reportedAt: true,
+          assignedAt: true,
+          slaBreached: true,
+          slaResponseDeadline: true,
+          slaResolutionDeadline: true,
+          product: {
+            select: {
+              customerName: true,
+              customerPhone: true,
+              serialNumber: true,
+              productModel: {
+                select: {
+                  name: true,
+                  modelNumber: true,
+                },
               },
             },
           },
-        },
-        assignedTechnician: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    }),
-    db.ticket.groupBy({
-      by: ["status"],
-      where: {
-        OR: [
-          {
-            assignedServiceCenter: {
-              organizationId,
+          assignedTechnician: {
+            select: {
+              name: true,
             },
           },
-          {
-            assignedTechnician: {
-              serviceCenter: {
+        },
+      }),
+      db.ticket.groupBy({
+        by: ["status"],
+        where: {
+          OR: [
+            {
+              assignedServiceCenter: {
                 organizationId,
               },
             },
-          },
-        ],
-      },
-      _count: {
-        _all: true,
-      },
-    }),
-    db.$queryRaw<TicketMetricRow[]>(Prisma.sql`
+            {
+              assignedTechnician: {
+                serviceCenter: {
+                  organizationId,
+                },
+              },
+            },
+          ],
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      db.$queryRaw<TicketMetricRow[]>(Prisma.sql`
       WITH latest_tickets AS (
         SELECT
           t.reported_at,
@@ -258,61 +238,79 @@ export default async function ServiceCenterTicketsPage() {
           END
         )::double precision AS "avgResolutionHours"
       FROM latest_tickets
-    `),
-    db.installationJob.findMany({
-      where: {
-        assignedServiceCenter: {
-          organizationId,
-        },
-      },
-      orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
-      take: 100,
-      select: {
-        id: true,
-        jobNumber: true,
-        status: true,
-        scheduledFor: true,
-        createdAt: true,
-        assignedTechnician: {
-          select: {
-            name: true,
+      `),
+      db.installationJob.findMany({
+        where: {
+          assignedServiceCenter: {
+            organizationId,
           },
         },
-        installationReport: {
-          select: {
-            submittedAt: true,
-            customerName: true,
+        orderBy: [{ scheduledFor: "asc" }, { createdAt: "desc" }],
+        take: 100,
+        select: {
+          id: true,
+          jobNumber: true,
+          status: true,
+          scheduledFor: true,
+          createdAt: true,
+          assignedServiceCenterId: true,
+          assignedTechnician: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
-        },
-        activationTriggeredAt: true,
-        manufacturerOrg: {
-          select: {
-            name: true,
+          installationReport: {
+            select: {
+              submittedAt: true,
+              customerName: true,
+            },
           },
-        },
-        saleRegistration: {
-          select: {
-            registeredAt: true,
-            dealerName: true,
-            distributorName: true,
+          activationTriggeredAt: true,
+          manufacturerOrg: {
+            select: {
+              name: true,
+            },
           },
-        },
-        asset: {
-          select: {
-            publicCode: true,
-            serialNumber: true,
-            lifecycleState: true,
-            productModel: {
-              select: {
-                name: true,
-                modelNumber: true,
+          saleRegistration: {
+            select: {
+              registeredAt: true,
+              dealerName: true,
+              distributorName: true,
+            },
+          },
+          asset: {
+            select: {
+              publicCode: true,
+              serialNumber: true,
+              lifecycleState: true,
+              productModel: {
+                select: {
+                  name: true,
+                  modelNumber: true,
+                },
               },
             },
           },
         },
-      },
-    }),
-  ]);
+      }),
+      db.technician.findMany({
+        where: {
+          serviceCenter: {
+            organizationId,
+          },
+        },
+        orderBy: [{ serviceCenterId: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          serviceCenterId: true,
+          isAvailable: true,
+          activeJobCount: true,
+          maxConcurrentJobs: true,
+        },
+      }),
+    ]);
 
   const openCount = aggregate
     .filter((entry) => OPEN_STATUSES.includes(entry.status))
@@ -491,106 +489,43 @@ export default async function ServiceCenterTicketsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-                <TableRow>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Asset</TableHead>
-                  <TableHead>Manufacturer</TableHead>
-                  <TableHead>Commercial Handoff</TableHead>
-                  <TableHead>Scheduled</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Technician</TableHead>
-                  <TableHead>Report</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {installationJobs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-muted-foreground">
-                      No installation jobs are assigned to this service-center
-                      organization yet.
-                    </TableCell>
-                </TableRow>
-              ) : (
-                installationJobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p className="font-medium">{job.jobNumber}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Created {formatDateTime(job.createdAt)}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p>{job.asset.productModel.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {job.asset.productModel.modelNumber
-                            ? `${job.asset.productModel.modelNumber} • `
-                            : ""}
-                          {job.asset.serialNumber ?? "Serial unavailable"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {job.asset.publicCode} •{" "}
-                          {formatWorkflowLabel(job.asset.lifecycleState)}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{job.manufacturerOrg.name}</TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p>
-                          Registered{" "}
-                          {job.saleRegistration
-                            ? formatDateTime(job.saleRegistration.registeredAt)
-                            : "-"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Dealer {job.saleRegistration?.dealerName ?? "-"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Distributor{" "}
-                          {job.saleRegistration?.distributorName ?? "-"}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{formatDateTime(job.scheduledFor)}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={installationStatusClass(job.status)}
-                      >
-                        {formatWorkflowLabel(job.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {job.assignedTechnician?.name ?? "Pending"}
-                    </TableCell>
-                    <TableCell>
-                      {job.installationReport ? (
-                        <div className="space-y-0.5">
-                          <p>{job.installationReport.customerName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Submitted{" "}
-                            {formatDateTime(job.installationReport.submittedAt)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Activated {formatDateTime(job.activationTriggeredAt)}
-                          </p>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          Pending
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <InstallationQueueClient
+            initialJobs={installationJobs.map((job) => ({
+              id: job.id,
+              jobNumber: job.jobNumber,
+              status: job.status,
+              scheduledFor: job.scheduledFor?.toISOString() ?? null,
+              createdAt: job.createdAt.toISOString(),
+              activationTriggeredAt: job.activationTriggeredAt?.toISOString() ?? null,
+              assignedServiceCenterId: job.assignedServiceCenterId,
+              assignedTechnicianId: job.assignedTechnician?.id ?? null,
+              assignedTechnicianName: job.assignedTechnician?.name ?? null,
+              manufacturerName: job.manufacturerOrg.name,
+              saleRegistration: job.saleRegistration
+                ? {
+                    registeredAt: job.saleRegistration.registeredAt.toISOString(),
+                    dealerName: job.saleRegistration.dealerName,
+                    distributorName: job.saleRegistration.distributorName,
+                  }
+                : null,
+              installationReport: job.installationReport
+                ? {
+                    submittedAt: job.installationReport.submittedAt.toISOString(),
+                    customerName: job.installationReport.customerName,
+                  }
+                : null,
+              asset: {
+                publicCode: job.asset.publicCode,
+                serialNumber: job.asset.serialNumber,
+                lifecycleState: job.asset.lifecycleState,
+                productModel: {
+                  name: job.asset.productModel.name,
+                  modelNumber: job.asset.productModel.modelNumber,
+                },
+              },
+            }))}
+            technicians={technicians}
+          />
         </CardContent>
       </Card>
     </div>
