@@ -412,10 +412,17 @@ export async function POST(
       | "dealer_technician";
 
     if (technician) {
-      if (
-        job.assignedTechnicianId &&
-        job.assignedTechnicianId !== technician.id
-      ) {
+      if (!job.assignedTechnicianId) {
+        return NextResponse.json(
+          {
+            error:
+              "Installation job has not been dispatched yet. Ask your service center admin to assign it first.",
+          },
+          { status: 409 },
+        );
+      }
+
+      if (job.assignedTechnicianId !== technician.id) {
         return NextResponse.json(
           { error: "Installation job is assigned to another technician." },
           { status: 403 },
