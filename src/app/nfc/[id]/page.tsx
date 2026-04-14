@@ -1,4 +1,5 @@
 import { CustomerConfirmResolution } from "@/components/nfc/customer-confirm-resolution";
+import { InstallationActivationRequired } from "@/components/nfc/installation-activation-required";
 import { CustomerProductView } from "@/components/nfc/customer-product-view";
 import { CustomerTicketTracker } from "@/components/nfc/customer-ticket-tracker";
 import { NfcLanguageToggle } from "@/components/nfc/language-toggle";
@@ -659,6 +660,8 @@ export default async function NfcStickerPage({
           category: true,
           modelNumber: true,
           imageUrl: true,
+          activationMode: true,
+          installationRequired: true,
           warrantyDurationMonths: true,
           partTraceabilityMode: true,
           smallPartTrackingMode: true,
@@ -840,6 +843,10 @@ export default async function NfcStickerPage({
   );
 
   if (mappedProduct.warrantyStatus === "pending_activation") {
+    const isInstallationDrivenActivation =
+      product.productModel.activationMode === "installation_driven" ||
+      product.productModel.installationRequired;
+
     after(async () => {
       await writeScanLog({
         stickerNumber: sticker.stickerNumber,
@@ -847,11 +854,25 @@ export default async function NfcStickerPage({
         scanSource,
         scanContext,
         viewerType: "public",
-        actionTaken: "view_activation",
+        actionTaken: isInstallationDrivenActivation
+          ? "view_only"
+          : "view_activation",
         userAgent: requestUserAgent,
         ipAddress: requestIp,
       });
     });
+
+    if (isInstallationDrivenActivation) {
+      return (
+        <InstallationActivationRequired
+          language={nfcLanguage}
+          languageToggle={languageToggle}
+          productName={product.productModel.name}
+          manufacturerName={product.organization.name}
+          serialNumber={mappedProduct.serialNumber}
+        />
+      );
+    }
 
     return (
       <WarrantyActivation

@@ -121,8 +121,23 @@ export async function POST(request: Request) {
       select: {
         warrantyDurationMonths: true,
         name: true,
+        activationMode: true,
+        installationRequired: true,
       },
     });
+
+    if (
+      model?.activationMode === "installation_driven" ||
+      model?.installationRequired
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This product requires installation report submission before warranty activation.",
+        },
+        { status: 403 },
+      );
+    }
 
     const warrantyDurationMonths = model?.warrantyDurationMonths ?? 12;
     const now = new Date();

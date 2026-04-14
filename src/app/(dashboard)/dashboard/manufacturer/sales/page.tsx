@@ -19,7 +19,19 @@ const SaleRegistrationsClient = dynamic(
   },
 );
 
-export default async function ManufacturerSalesPage() {
+export default async function ManufacturerSalesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lookup?: string | string[] }>;
+}) {
+  const resolvedSearchParams = await searchParams;
+  const lookupParam = resolvedSearchParams.lookup;
+  const initialLookupCode =
+    typeof lookupParam === "string"
+      ? lookupParam.trim()
+      : Array.isArray(lookupParam)
+        ? (lookupParam.find((entry) => typeof entry === "string") ?? "").trim()
+        : "";
   const { organizationId } = await resolveManufacturerPageContext();
 
   const registrations = organizationId
@@ -38,6 +50,7 @@ export default async function ManufacturerSalesPage() {
   return (
     <SaleRegistrationsClient
       initialRegistrations={registrations.map(serializeSaleRegistrationRow)}
+      initialLookupCode={initialLookupCode.length > 0 ? initialLookupCode : null}
     />
   );
 }

@@ -589,12 +589,18 @@ export async function POST(
       },
     });
 
-    const certificatePath = linkedProduct
-      ? `/api/products/${linkedProduct.id}/certificate?download=1`
-      : null;
-    const certificateUrl = certificatePath
-      ? buildAbsoluteWarrantyUrl(certificatePath)
-      : null;
+    if (!linkedProduct) {
+      return NextResponse.json(
+        {
+          error:
+            "Customer warranty surface is missing for this serialized asset. Link/create the product sticker record before submitting installation report.",
+        },
+        { status: 409 },
+      );
+    }
+
+    const certificatePath = `/api/products/${linkedProduct.id}/certificate?download=1`;
+    const certificateUrl = buildAbsoluteWarrantyUrl(certificatePath);
     const geoLocationJson = (geoLocation ?? {}) as unknown as Prisma.InputJsonValue;
     const acknowledgementPayloadJson =
       customerAcknowledgementPayload as unknown as Prisma.InputJsonValue;
@@ -720,55 +726,53 @@ export async function POST(
         },
       });
 
-      if (linkedProduct) {
-        await tx.product.update({
-          where: {
-            id: linkedProduct.id,
-          },
-          data: {
-            warrantyStartDate: activationAt,
-            warrantyEndDate,
-            warrantyStatus: "active",
-            installationDate,
-            customerId: customer.id,
-            customerName,
-            customerPhone: normalizedPhone,
-            customerPhoneVerified: true,
-            customerEmail,
-            customerAddress: installAddress,
-            customerCity: installCity,
-            customerState: installState,
-            customerPincode: installPincode,
+      await tx.product.update({
+        where: {
+          id: linkedProduct.id,
+        },
+        data: {
+          warrantyStartDate: activationAt,
+          warrantyEndDate,
+          warrantyStatus: "active",
+          installationDate,
+          customerId: customer.id,
+          customerName,
+          customerPhone: normalizedPhone,
+          customerPhoneVerified: true,
+          customerEmail,
+          customerAddress: installAddress,
+          customerCity: installCity,
+          customerState: installState,
+          customerPincode: installPincode,
+          activatedVia: "installation_report",
+          activatedAtLocation: installCity,
+          installationLocation: {
+            ...(geoLocation ?? {}),
+            address: installAddress,
+            city: installCity,
+            state: installState,
+            pincode: installPincode,
+          } satisfies Prisma.InputJsonValue,
+          metadata: {
+            ...asRecord(linkedProduct.metadata),
+            warrantyCertificateUrl: certificateUrl,
+            warrantyCertificatePath: certificatePath,
+            activationSource: "installation_report",
             activatedVia: "installation_report",
-            activatedAtLocation: installCity,
-            installationLocation: {
-              ...(geoLocation ?? {}),
-              address: installAddress,
-              city: installCity,
-              state: installState,
-              pincode: installPincode,
-            } satisfies Prisma.InputJsonValue,
-            metadata: {
-              ...asRecord(linkedProduct.metadata),
-              warrantyCertificateUrl: certificateUrl,
-              warrantyCertificatePath: certificatePath,
-              activationSource: "installation_report",
-              activatedVia: "installation_report",
-              installationJobId: job.id,
-              installationReportSubmittedAt: activationAt.toISOString(),
-            } satisfies Prisma.InputJsonValue,
-          },
-        });
+            installationJobId: job.id,
+            installationReportSubmittedAt: activationAt.toISOString(),
+          } satisfies Prisma.InputJsonValue,
+        },
+      });
 
-        await tx.sticker.update({
-          where: {
-            id: linkedProduct.stickerId,
-          },
-          data: {
-            status: "activated",
-          },
-        });
-      }
+      await tx.sticker.update({
+        where: {
+          id: linkedProduct.stickerId,
+        },
+        data: {
+          status: "activated",
+        },
+      });
 
       const nextJob = await tx.installationJob.update({
         where: {
@@ -788,26 +792,24 @@ export async function POST(
       };
     });
 
-    if (linkedProduct) {
-      void sendWarrantyActivatedNotification({
-        customerPhone: normalizedPhone,
+    void sendWarrantyActivatedNotification({
+      customerPhone: normalizedPhone,
+      productName: job.asset.productModel.name,
+      warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
+      stickerNumber: linkedProduct.sticker.stickerNumber,
+      stickerType: linkedProduct.sticker.type,
+      certificateUrl,
+      languagePreference: updated.customer.languagePreference,
+    });
+
+    if (customerEmail) {
+      void sendCustomerWarrantyActivatedEmail({
+        customerEmail,
+        customerName,
         productName: job.asset.productModel.name,
         warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
-        stickerNumber: linkedProduct.sticker.stickerNumber,
-        stickerType: linkedProduct.sticker.type,
         certificateUrl,
-        languagePreference: updated.customer.languagePreference,
       });
-
-      if (customerEmail) {
-        void sendCustomerWarrantyActivatedEmail({
-          customerEmail,
-          customerName,
-          productName: job.asset.productModel.name,
-          warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
-          certificateUrl,
-        });
-      }
     }
 
     return NextResponse.json({

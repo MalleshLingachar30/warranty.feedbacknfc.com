@@ -51,6 +51,7 @@ type SaleRegistrationFormValues = {
 
 type SaleRegistrationsClientProps = {
   initialRegistrations: SaleRegistrationRow[];
+  initialLookupCode?: string | null;
 };
 
 function formatDateTime(value: string | null) {
@@ -107,9 +108,9 @@ function lifecycleClass(value: SaleRegistrationRow["assetLifecycleState"]) {
   }
 }
 
-function emptyFormValues(): SaleRegistrationFormValues {
+function emptyFormValues(initialLookupCode: string | null = null): SaleRegistrationFormValues {
   return {
-    assetLookupCode: "",
+    assetLookupCode: initialLookupCode ?? "",
     channel: "manual_admin",
     purchaseDate: "",
     dealerName: "",
@@ -146,12 +147,13 @@ function mergeJobIntoRegistration(
 
 export function SaleRegistrationsClient({
   initialRegistrations,
+  initialLookupCode = null,
 }: SaleRegistrationsClientProps) {
   const [registrations, setRegistrations] =
     useState<SaleRegistrationRow[]>(initialRegistrations);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(Boolean(initialLookupCode));
   const [formValues, setFormValues] =
-    useState<SaleRegistrationFormValues>(emptyFormValues());
+    useState<SaleRegistrationFormValues>(emptyFormValues(initialLookupCode));
   const [isSaving, setIsSaving] = useState(false);
   const [creatingJobId, setCreatingJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
