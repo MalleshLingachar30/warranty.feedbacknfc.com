@@ -3,9 +3,11 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Camera,
   CheckCircle2,
@@ -38,6 +40,10 @@ import {
   type QueuedPhotoRecord,
 } from "@/lib/photo-queue";
 import { uploadPhotoFiles } from "@/lib/photo-upload";
+import {
+  parsePartScanFromQuery,
+  partScanSignature,
+} from "@/lib/part-scan-handoff";
 import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 import { useTechnicianLiveTracking } from "@/hooks/use-technician-live-tracking";
 
@@ -305,6 +311,7 @@ export function TechnicianCompleteWork({
   ticket,
   technicianId,
 }: TechnicianCompleteWorkProps) {
+  const searchParams = useSearchParams();
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [laborHours, setLaborHours] = useState("1");
   const [beforePhotos, setBeforePhotos] = useState<File[]>([]);
@@ -315,14 +322,15 @@ export function TechnicianCompleteWork({
   const [queuedAfterPhotos, setQueuedAfterPhotos] = useState<
     QueuedPhotoRecord[]
   >([]);
-  const [parts, setParts] = useState<PartSelection[]>(
-    ticket.partsCatalog.length > 0
-      ? [createPartSelection(ticket.partsCatalog[0])]
-      : [],
-  );
+  const [parts, setParts] = useState<PartSelection[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const consumedScannedRowsRef = useRef<Set<string>>(new Set());
+  const scannedPart = useMemo(
+    () => parsePartScanFromQuery(searchParams),
+    [searchParams],
+  );
   const liveTracking = useTechnicianLiveTracking({
     ticketId: ticket.id,
     enabled: Boolean(technicianId) && ticket.status === "work_in_progress",
@@ -356,11 +364,7 @@ export function TechnicianCompleteWork({
     setAfterPhotos([]);
     setQueuedBeforePhotos([]);
     setQueuedAfterPhotos([]);
-    setParts(
-      ticket.partsCatalog.length > 0
-        ? [createPartSelection(ticket.partsCatalog[0])]
-        : [],
-    );
+    setParts([]);
     setMessage(null);
     setError(null);
 
@@ -381,9 +385,88 @@ export function TechnicianCompleteWork({
     };
   }, [ticket]);
 
+  const scannedPartBlockingError = useMemo(() => {
+    if (scannedPart.error) {
+      return scannedPart.error;
+    }
+
+    if (!scannedPart.scan) {
+      return null;
+    }
+
+    if (!scannedPart.context.ticketId) {
+      return "Scanned part is missing ticket context. Re-open this ticket from the resolver action link.";
+    }
+
+    if (scannedPart.context.ticketId !== ticket.id) {
+      return "Scanned part context points to a different ticket. Re-scan from this ticket workflow.";
+    }
+
+    if (scannedPart.scan.organizationId !== ticket.organizationId) {
+      return "This scanned part belongs to another manufacturer and cannot be linked to this ticket.";
+    }
+
+    return null;
+  }, [scannedPart, ticket.id, ticket.organizationId]);
+
+  useEffect(() => {
+    const scan = scannedPart.scan;
+    if (!scan || scannedPartBlockingError) {
+      return;
+    }
+
+    const rowKey = `${ticket.id}:${partScanSignature(scan)}`;
+    if (consumedScannedRowsRef.current.has(rowKey)) {
+      return;
+    }
+
+    const normalizedPartNumber = scan.partNumber?.toLowerCase() ?? null;
+    const normalizedPartName = scan.partName?.toLowerCase() ?? null;
+    const matchedCatalogPart =
+      ticket.partsCatalog.find((catalogPart) => {
+        const byNumber =
+          normalizedPartNumber &&
+          catalogPart.partNumber.toLowerCase() === normalizedPartNumber;
+        const byName =
+          normalizedPartName &&
+          catalogPart.name.toLowerCase() === normalizedPartName;
+        return Boolean(byNumber || byName);
+      }) ?? ticket.partsCatalog[0];
+
+    setParts((previous) => {
+      const duplicate = previous.some(
+        (part) =>
+          part.assetCode.trim().toLowerCase() ===
+            scan.assetCode.toLowerCase() &&
+          part.tagCode.trim().toLowerCase() ===
+            scan.tagCode.toLowerCase(),
+      );
+
+      if (duplicate) {
+        return previous;
+      }
+
+      return [
+        ...previous,
+        {
+          ...createPartSelection(matchedCatalogPart),
+          assetCode: scan.assetCode,
+          tagCode: scan.tagCode,
+        },
+      ];
+    });
+
+    consumedScannedRowsRef.current.add(rowKey);
+    setError(null);
+    setMessage(
+      `Scanned part ${scan.assetCode} (${scan.tagCode}) added to this completion.`,
+    );
+  }, [scannedPart.scan, scannedPartBlockingError, ticket.id, ticket.partsCatalog]);
+
   const canSubmit = useMemo(() => {
     return (
       Boolean(technicianId) &&
+      !scannedPartBlockingError &&
       resolutionNotes.trim().length >= 10 &&
       Number.isFinite(Number.parseFloat(laborHours)) &&
       beforePhotos.length +
@@ -399,6 +482,7 @@ export function TechnicianCompleteWork({
     queuedAfterPhotos.length,
     queuedBeforePhotos.length,
     resolutionNotes,
+    scannedPartBlockingError,
     technicianId,
   ]);
 
@@ -493,6 +577,11 @@ export function TechnicianCompleteWork({
       return;
     }
 
+    if (scannedPartBlockingError) {
+      setError(scannedPartBlockingError);
+      return;
+    }
+
     if (beforePhotos.length + afterPhotos.length > 10) {
       setError("Upload up to 10 total before/after photos.");
       return;
@@ -566,7 +655,7 @@ export function TechnicianCompleteWork({
         })
         .filter(
           (part) =>
-            part.assetCode.length > 0 &&
+            (part.assetCode.length > 0 || Boolean(part.tagCode)) &&
             Number.isFinite(part.unitCost) &&
             part.unitCost >= 0,
         );
@@ -740,6 +829,10 @@ export function TechnicianCompleteWork({
                 Traceability mode: {ticket.partTraceabilityMode} • Small-part mode:{" "}
                 {ticket.smallPartTrackingMode}
               </p>
+              <p className="text-xs text-slate-500">
+                Primary flow: scan generated part tags through `/r/[code]` and
+                return using the resolver action links.
+              </p>
             </div>
             <Button
               type="button"
@@ -756,6 +849,18 @@ export function TechnicianCompleteWork({
               Add Part
             </Button>
           </div>
+
+          {scannedPartBlockingError ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {scannedPartBlockingError}
+            </p>
+          ) : null}
+
+          {scannedPart.scan ? (
+            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              Resolver scan ready: {scannedPart.scan.assetCode} ({scannedPart.scan.tagCode})
+            </p>
+          ) : null}
 
           {parts.length === 0 ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">

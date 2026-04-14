@@ -6,6 +6,10 @@ import { formatProductClassLabel } from "@/lib/asset-generation";
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { formatWorkflowLabel } from "@/lib/installation-workflow";
+import {
+  buildPartScanQueryString,
+  type PartScanPayload,
+} from "@/lib/part-scan-handoff";
 import { parseAppRole, parseAppRoleFromClaims, type AppRole } from "@/lib/roles";
 
 type ResolverPageProps = {
@@ -43,6 +47,15 @@ function firstQueryValue(value: string | string[] | undefined): string | null {
   }
 
   return null;
+}
+
+function parsePositiveInteger(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function toSearchParamString(
@@ -195,6 +208,11 @@ export default async function TagResolverPage({
   const scanSourceRaw = firstQueryValue(resolvedSearchParams.src);
   const scanSource =
     scanSourceRaw === "qr" || scanSourceRaw === "nfc" ? scanSourceRaw : null;
+  const ticketContext = asString(firstQueryValue(resolvedSearchParams.ticket));
+  const installationJobContext = asString(firstQueryValue(resolvedSearchParams.job));
+  const stickerContext = parsePositiveInteger(
+    firstQueryValue(resolvedSearchParams.sticker),
+  );
 
   const lookupCode = code.trim();
 
@@ -654,6 +672,38 @@ export default async function TagResolverPage({
   }
 
   if (!staffForAssetOrg) {
+    const signedInStaffFromOtherOrg =
+      viewer.userId &&
+      isStaffRole(viewer.role) &&
+      viewer.organizationId &&
+      viewer.organizationId !== resolvedTag.asset.organizationId;
+
+    if (signedInStaffFromOtherOrg) {
+      return (
+        <ResolverShell
+          title="Wrong manufacturer context"
+          description="This scanned part tag belongs to another manufacturer organization and cannot be linked in your current staff context."
+        >
+          <div className="space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <p>
+              Tag:{" "}
+              <span className="font-medium text-rose-900">{resolvedTag.publicCode}</span>
+            </p>
+            <p>
+              Owning organization:{" "}
+              <span className="font-medium text-rose-900">
+                {resolvedTag.asset.organization.name}
+              </span>
+            </p>
+            <p>
+              Your signed-in staff org does not match this part tag. Sign into the
+              correct manufacturer/service-center context and scan again.
+            </p>
+          </div>
+        </ResolverShell>
+      );
+    }
+
     return (
       <ResolverShell
         title="Staff workflow sign-in required"
@@ -687,6 +737,89 @@ export default async function TagResolverPage({
     asString(metadata.partCode) ??
     asString(metadata.itemCode);
   const batchCode = asString(metadata.batchCode);
+  const supportedAssetClass =
+    resolvedTag.asset.productClass === "spare_part" ||
+    resolvedTag.asset.productClass === "small_part" ||
+    resolvedTag.asset.productClass === "kit" ||
+    resolvedTag.asset.productClass === "pack";
+  const supportedTagClass =
+    resolvedTag.tagClass === "component_unit" ||
+    resolvedTag.tagClass === "small_part_batch" ||
+    resolvedTag.tagClass === "kit_parent" ||
+    resolvedTag.tagClass === "pack_parent";
+
+  if (!supportedAssetClass || !supportedTagClass) {
+    return (
+      <ResolverShell
+        title="Unsupported tag class for part capture"
+        description="This resolved tag cannot be used for technician part-usage linking."
+      >
+        <div className="space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+          <p>
+            Tag:{" "}
+            <span className="font-medium text-rose-900">{resolvedTag.publicCode}</span>
+          </p>
+          <p>
+            Tag class:{" "}
+            <span className="font-medium text-rose-900">
+              {formatTagClassLabel(resolvedTag.tagClass)}
+            </span>
+          </p>
+          <p>
+            Product class:{" "}
+            <span className="font-medium text-rose-900">
+              {formatProductClassLabel(resolvedTag.asset.productClass)}
+            </span>
+          </p>
+          <p>
+            Only component-unit, small-part-batch, kit-parent, and pack-parent
+            generated tags can be linked as part usage.
+          </p>
+        </div>
+      </ResolverShell>
+    );
+  }
+
+  const partAssetClass =
+    resolvedTag.asset.productClass as PartScanPayload["assetClass"];
+  const partTagClass = resolvedTag.tagClass as PartScanPayload["tagClass"];
+  const partScanPayload: PartScanPayload = {
+    assetCode: resolvedTag.asset.publicCode,
+    tagCode: resolvedTag.publicCode,
+    assetClass: partAssetClass,
+    tagClass: partTagClass,
+    organizationId: resolvedTag.asset.organizationId,
+    partName,
+    partNumber,
+    batchCode,
+    resolverCode: resolvedTag.publicCode,
+  };
+
+  const serviceWorkflowQuery = buildPartScanQueryString({
+    scan: partScanPayload,
+    context: {
+      ticketId: ticketContext,
+      stickerNumber: stickerContext,
+    },
+  });
+  const installationWorkflowQuery = buildPartScanQueryString({
+    scan: partScanPayload,
+    context: {
+      installationJobId: installationJobContext,
+      ticketId: ticketContext,
+      stickerNumber: stickerContext,
+    },
+  });
+  const nfcWorkflowQuery = buildPartScanQueryString({
+    scan: partScanPayload,
+    context: {
+      ticketId: ticketContext,
+      installationJobId: installationJobContext,
+      stickerNumber: stickerContext,
+    },
+  });
+  const missingWorkflowContext =
+    !ticketContext && !installationJobContext && !stickerContext;
 
   return (
     <ResolverShell
@@ -767,14 +900,37 @@ export default async function TagResolverPage({
           ) : null}
         </div>
 
+        {missingWorkflowContext ? (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            No active ticket/job context was provided with this scan. Choose the
+            workflow below, then open the current job and submit from there.
+          </p>
+        ) : null}
+
         <div className="flex flex-wrap gap-2 pt-1">
           {viewer.role === "technician" ? (
-            <Link
-              href="/dashboard/my-jobs"
-              className="inline-flex rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700"
-            >
-              Open My Jobs
-            </Link>
+            <>
+              <Link
+                href={`/dashboard/my-jobs?tab=service&${serviceWorkflowQuery}`}
+                className="inline-flex rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700"
+              >
+                Add To Service Job
+              </Link>
+              <Link
+                href={`/dashboard/my-jobs?tab=installation&${installationWorkflowQuery}`}
+                className="inline-flex rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700"
+              >
+                Add To Installation Job
+              </Link>
+              {stickerContext ? (
+                <Link
+                  href={`/nfc/${encodeURIComponent(String(stickerContext))}?${nfcWorkflowQuery}`}
+                  className="inline-flex rounded-md border border-slate-300 bg-white px-3 py-2 font-medium text-slate-900 hover:bg-slate-100"
+                >
+                  Return To NFC Ticket
+                </Link>
+              ) : null}
+            </>
           ) : null}
           {viewer.role === "service_center_admin" ? (
             <Link

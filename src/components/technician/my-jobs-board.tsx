@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Briefcase, Clock3, MapPin, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { parsePartScanFromQuery } from "@/lib/part-scan-handoff";
 
 interface MyJobsBoardProps {
   title?: string;
@@ -43,6 +45,7 @@ export function MyJobsBoard({
   title = "My Jobs",
   description = "Assigned, active, and completed service jobs",
 }: MyJobsBoardProps) {
+  const searchParams = useSearchParams();
   const [payload, setPayload] = useState<TechnicianJobsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -53,6 +56,10 @@ export function MyJobsBoard({
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartYRef = useRef<number | null>(null);
   const knownOpenJobIdsRef = useRef<Set<string> | null>(null);
+  const scannedPart = useMemo(
+    () => parsePartScanFromQuery(searchParams),
+    [searchParams],
+  );
 
   const fetchJobs = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -144,6 +151,88 @@ export function MyJobsBoard({
 
     return payload.jobs.find((job) => job.id === selectedJobId) ?? null;
   }, [payload, selectedJobId]);
+
+  useEffect(() => {
+    if (!payload || !scannedPart.context.ticketId) {
+      return;
+    }
+
+    const hasReferencedTicket = payload.jobs.some(
+      (job) => job.id === scannedPart.context.ticketId,
+    );
+
+    if (hasReferencedTicket) {
+      setSelectedJobId(scannedPart.context.ticketId);
+    }
+  }, [payload, scannedPart.context.ticketId]);
+
+  const scanContextError = useMemo(() => {
+    if (scannedPart.error) {
+      return scannedPart.error;
+    }
+
+    if (
+      scannedPart.scan &&
+      scannedPart.context.ticketId &&
+      payload &&
+      !payload.jobs.some((job) => job.id === scannedPart.context.ticketId)
+    ) {
+      return "This scanned part link references a ticket that is not assigned to you.";
+    }
+
+    return null;
+  }, [payload, scannedPart.context.ticketId, scannedPart.error, scannedPart.scan]);
+
+  const scanForSelectedJob = useMemo(() => {
+    if (!selectedJob || !scannedPart.scan) {
+      return null;
+    }
+
+    if (
+      scannedPart.context.ticketId &&
+      scannedPart.context.ticketId !== selectedJob.id
+    ) {
+      return null;
+    }
+
+    if (scannedPart.scan.organizationId !== selectedJob.organizationId) {
+      return null;
+    }
+
+    return scannedPart.scan;
+  }, [scannedPart.context.ticketId, scannedPart.scan, selectedJob]);
+
+  const selectedJobScanError = useMemo(() => {
+    if (!selectedJob) {
+      return null;
+    }
+
+    if (scannedPart.error) {
+      return scannedPart.error;
+    }
+
+    if (
+      scannedPart.scan &&
+      scannedPart.context.ticketId &&
+      scannedPart.context.ticketId !== selectedJob.id
+    ) {
+      return "Scanned part context does not match this ticket. Re-open the linked ticket or scan again from this job.";
+    }
+
+    if (
+      scannedPart.scan &&
+      scannedPart.scan.organizationId !== selectedJob.organizationId
+    ) {
+      return "This scanned part belongs to another manufacturer and cannot be linked to this service ticket.";
+    }
+
+    return null;
+  }, [
+    scannedPart.context.ticketId,
+    scannedPart.error,
+    scannedPart.scan,
+    selectedJob,
+  ]);
 
   const jobsForActiveTab = useMemo(() => {
     if (!payload) {
@@ -292,6 +381,14 @@ export function MyJobsBoard({
         </CardHeader>
       </Card>
 
+      {scanContextError ? (
+        <Card className="border-rose-200 bg-rose-50">
+          <CardContent className="py-3 text-sm text-rose-700">
+            {scanContextError}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as JobTabValue)}
@@ -398,6 +495,8 @@ export function MyJobsBoard({
                 technicianId={payload.technician.id}
                 onClose={() => setSelectedJobId(null)}
                 onUpdated={handleJobUpdated}
+                scannedPart={scanForSelectedJob}
+                scannedPartError={selectedJobScanError}
               />
             </>
           ) : null}

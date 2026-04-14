@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   AlertCircle,
@@ -48,6 +48,10 @@ import {
 } from "@/lib/photo-queue";
 import { uploadPhotoFiles } from "@/lib/photo-upload";
 import { useTechnicianLiveTracking } from "@/hooks/use-technician-live-tracking";
+import {
+  partScanSignature,
+  type PartScanPayload,
+} from "@/lib/part-scan-handoff";
 
 interface PartSelection {
   id: string;
@@ -64,6 +68,8 @@ interface JobDetailProps {
   technicianId?: string | null;
   onClose: () => void;
   onUpdated: (ticketId: string) => Promise<void> | void;
+  scannedPart?: PartScanPayload | null;
+  scannedPartError?: string | null;
 }
 
 function createSelectionFromCatalog(
@@ -85,6 +91,8 @@ export function JobDetail({
   technicianId,
   onClose,
   onUpdated,
+  scannedPart = null,
+  scannedPartError = null,
 }: JobDetailProps) {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -101,6 +109,7 @@ export function JobDetail({
     QueuedPhotoRecord[]
   >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
+  const consumedScannedRowsRef = useRef<Set<string>>(new Set());
   const trackingEnabled =
     Boolean(technicianId) &&
     (job.status === "technician_enroute" || job.status === "work_in_progress");
@@ -134,16 +143,64 @@ export function JobDetail({
       setQueuedAfterPhotos(afterQueued);
     });
 
-    if (job.partsCatalog.length > 0) {
-      setParts([createSelectionFromCatalog(job.partsCatalog[0])]);
-    } else {
-      setParts([]);
-    }
+    setParts([]);
 
     return () => {
       active = false;
     };
   }, [job]);
+
+  useEffect(() => {
+    if (!scannedPart) {
+      return;
+    }
+
+    const rowKey = `${job.id}:${partScanSignature(scannedPart)}`;
+    if (consumedScannedRowsRef.current.has(rowKey)) {
+      return;
+    }
+
+    const normalizedPartNumber = scannedPart.partNumber?.toLowerCase() ?? null;
+    const normalizedPartName = scannedPart.partName?.toLowerCase() ?? null;
+    const matchedCatalogPart =
+      job.partsCatalog.find((catalogPart) => {
+        const byNumber =
+          normalizedPartNumber &&
+          catalogPart.partNumber.toLowerCase() === normalizedPartNumber;
+        const byName =
+          normalizedPartName &&
+          catalogPart.name.toLowerCase() === normalizedPartName;
+        return Boolean(byNumber || byName);
+      }) ?? job.partsCatalog[0];
+
+    setParts((previous) => {
+      const duplicate = previous.some(
+        (part) =>
+          part.assetCode.trim().toLowerCase() ===
+            scannedPart.assetCode.toLowerCase() &&
+          part.tagCode.trim().toLowerCase() === scannedPart.tagCode.toLowerCase(),
+      );
+
+      if (duplicate) {
+        return previous;
+      }
+
+      return [
+        ...previous,
+        {
+          ...createSelectionFromCatalog(matchedCatalogPart),
+          assetCode: scannedPart.assetCode,
+          tagCode: scannedPart.tagCode,
+        },
+      ];
+    });
+
+    consumedScannedRowsRef.current.add(rowKey);
+    setActionError(null);
+    setActionSuccess(
+      `Scanned part ${scannedPart.assetCode} (${scannedPart.tagCode}) added to this ticket.`,
+    );
+  }, [job.id, job.partsCatalog, scannedPart]);
 
   const mapLink = useMemo(
     () => googleMapsUrl(job.customerAddress),
@@ -406,7 +463,7 @@ export function JobDetail({
         })
         .filter(
           (part) =>
-            part.assetCode.length > 0 &&
+            (part.assetCode.length > 0 || Boolean(part.tagCode)) &&
             Number.isFinite(part.unitCost) &&
             part.unitCost >= 0,
         );
@@ -696,6 +753,10 @@ export function JobDetail({
                       Traceability mode: {job.partTraceabilityMode} • Small-part
                       mode: {job.smallPartTrackingMode}
                     </p>
+                    <p className="text-xs text-slate-500">
+                      Primary flow: scan a generated part tag via `/r/[code]` and
+                      return. Manual entry remains available if needed.
+                    </p>
                   </div>
                   <Button
                     type="button"
@@ -713,6 +774,18 @@ export function JobDetail({
                     Add Part
                   </Button>
                 </div>
+
+                {scannedPartError ? (
+                  <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                    {scannedPartError}
+                  </p>
+                ) : null}
+
+                {scannedPart ? (
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                    Resolver scan ready: {scannedPart.assetCode} ({scannedPart.tagCode})
+                  </p>
+                ) : null}
 
                 {parts.length === 0 ? (
                   <p className="text-xs text-slate-500">No parts added.</p>

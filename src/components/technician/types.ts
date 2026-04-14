@@ -45,6 +45,7 @@ export interface TechnicianServiceHistoryItem {
 
 export interface TechnicianJob {
   id: string;
+  organizationId: string;
   ticketNumber: string;
   status: TechnicianTicketStatus;
   severity: TechnicianIssueSeverity;
@@ -118,6 +119,7 @@ export type RequiredPhotoPolicy = {
 
 export interface TechnicianInstallationJob {
   id: string;
+  manufacturerOrganizationId: string;
   jobNumber: string;
   status: TechnicianInstallationJobStatus;
   scheduledFor: string | null;
