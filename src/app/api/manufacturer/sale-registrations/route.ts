@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { Prisma, type TagClass } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import {
@@ -58,44 +58,97 @@ function asSalesLinePayload(value: unknown) {
   return value as NonNullable<SaleRegistrationPayload["salesLine"]>;
 }
 
+const registrationAssetSelect = Prisma.validator<Prisma.AssetIdentitySelect>()({
+  id: true,
+  publicCode: true,
+  serialNumber: true,
+  lifecycleState: true,
+  productModel: {
+    select: {
+      name: true,
+      activationMode: true,
+      installationRequired: true,
+      allowCartonSaleRegistration: true,
+    },
+  },
+});
+
+type RegistrationAsset = Prisma.AssetIdentityGetPayload<{
+  select: typeof registrationAssetSelect;
+}>;
+type RegistrationLookupMatchType =
+  | "asset_public_code"
+  | "serial_number"
+  | "tag_public_code";
+type ResolvedRegistrationAsset = {
+  asset: RegistrationAsset;
+  matchedBy: RegistrationLookupMatchType;
+  matchedTagClass: TagClass | null;
+};
+
 async function resolveRegistrationAsset(
   organizationId: string,
   lookupCode: string,
-) {
-  return db.assetIdentity.findFirst({
+): Promise<ResolvedRegistrationAsset | null> {
+  const byPublicCode = await db.assetIdentity.findFirst({
     where: {
       organizationId,
       productClass: "main_product",
-      OR: [
-        {
-          publicCode: lookupCode,
-        },
-        {
-          serialNumber: lookupCode,
-        },
-        {
-          tags: {
-            some: {
-              publicCode: lookupCode,
-            },
-          },
-        },
-      ],
+      publicCode: lookupCode,
+    },
+    select: registrationAssetSelect,
+  });
+
+  if (byPublicCode) {
+    return {
+      asset: byPublicCode,
+      matchedBy: "asset_public_code",
+      matchedTagClass: null,
+    };
+  }
+
+  const bySerialNumber = await db.assetIdentity.findFirst({
+    where: {
+      organizationId,
+      productClass: "main_product",
+      serialNumber: lookupCode,
+    },
+    select: registrationAssetSelect,
+  });
+
+  if (bySerialNumber) {
+    return {
+      asset: bySerialNumber,
+      matchedBy: "serial_number",
+      matchedTagClass: null,
+    };
+  }
+
+  const byTag = await db.assetTag.findFirst({
+    where: {
+      publicCode: lookupCode,
+      asset: {
+        organizationId,
+        productClass: "main_product",
+      },
     },
     select: {
-      id: true,
-      publicCode: true,
-      serialNumber: true,
-      lifecycleState: true,
-      productModel: {
-        select: {
-          name: true,
-          activationMode: true,
-          installationRequired: true,
-        },
+      tagClass: true,
+      asset: {
+        select: registrationAssetSelect,
       },
     },
   });
+
+  if (byTag) {
+    return {
+      asset: byTag.asset,
+      matchedBy: "tag_public_code",
+      matchedTagClass: byTag.tagClass,
+    };
+  }
+
+  return null;
 }
 
 export async function GET() {
@@ -125,18 +178,41 @@ export async function POST(request: Request) {
   try {
     const { organizationId } = await requireManufacturerContext();
     const body = parseJsonBody<SaleRegistrationPayload>(await request.json());
+    const channel = parseChannel(body.channel);
 
     const assetLookupCode = parseOptionalString(body.assetLookupCode);
     if (!assetLookupCode) {
-      throw new ApiError("Asset code, tag code, or serial number is required.");
+      throw new ApiError(
+        channel === "carton_scan"
+          ? "Carton registration tag code is required for carton scan."
+          : "Asset code, tag code, or serial number is required.",
+      );
     }
 
-    const asset = await resolveRegistrationAsset(
+    const resolvedAsset = await resolveRegistrationAsset(
       organizationId,
       assetLookupCode,
     );
-    if (!asset) {
+    if (!resolvedAsset) {
       throw new ApiError("No matching serialized asset was found.", 404);
+    }
+    const { asset, matchedBy, matchedTagClass } = resolvedAsset;
+
+    if (channel === "carton_scan") {
+      if (
+        matchedBy !== "tag_public_code" ||
+        matchedTagClass !== "carton_registration"
+      ) {
+        throw new ApiError(
+          "Carton scan requires scanning a carton registration tag code.",
+        );
+      }
+
+      if (!asset.productModel.allowCartonSaleRegistration) {
+        throw new ApiError(
+          "Carton scan sale registration is disabled for this product model.",
+        );
+      }
     }
 
     if (
@@ -179,7 +255,11 @@ export async function POST(request: Request) {
     const purchaseDate = parseOptionalDate(body.purchaseDate);
     const dealerName = parseOptionalString(body.dealerName);
     const distributorName = parseOptionalString(body.distributorName);
-    const channel = parseChannel(body.channel);
+    const registrationLookupMetadata = {
+      registrationLookupCode: assetLookupCode,
+      registrationLookupMatchType: matchedBy,
+      registrationLookupTagClass: matchedTagClass,
+    } satisfies Prisma.InputJsonValue;
 
     const registration = await db.$transaction(async (tx) => {
       const salesLine = await tx.serializedSalesLine.upsert({
@@ -199,9 +279,7 @@ export async function POST(request: Request) {
           warehouseCode,
           transactionDate,
           sourceSystem,
-          metadata: {
-            registrationLookupCode: assetLookupCode,
-          } satisfies Prisma.InputJsonValue,
+          metadata: registrationLookupMetadata,
         },
         create: {
           organizationId,
@@ -218,9 +296,7 @@ export async function POST(request: Request) {
           warehouseCode,
           transactionDate,
           sourceSystem,
-          metadata: {
-            registrationLookupCode: assetLookupCode,
-          } satisfies Prisma.InputJsonValue,
+          metadata: registrationLookupMetadata,
         },
         select: {
           id: true,
@@ -268,6 +344,8 @@ export async function POST(request: Request) {
             status,
             metadata: {
               assetLookupCode,
+              registrationLookupMatchType: matchedBy,
+              registrationLookupTagClass: matchedTagClass,
             } satisfies Prisma.InputJsonValue,
           },
           select: saleRegistrationSelect,
@@ -286,6 +364,8 @@ export async function POST(request: Request) {
           status,
           metadata: {
             assetLookupCode,
+            registrationLookupMatchType: matchedBy,
+            registrationLookupTagClass: matchedTagClass,
           } satisfies Prisma.InputJsonValue,
         },
         select: saleRegistrationSelect,

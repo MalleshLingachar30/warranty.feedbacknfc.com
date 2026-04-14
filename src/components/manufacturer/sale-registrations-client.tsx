@@ -170,8 +170,14 @@ export function SaleRegistrationsClient({
   ).length;
 
   const submitRegistration = async () => {
+    const isCartonScanChannel = formValues.channel === "carton_scan";
+
     if (!formValues.assetLookupCode.trim()) {
-      setError("Asset code, tag code, or serial number is required.");
+      setError(
+        isCartonScanChannel
+          ? "Carton registration tag code is required for carton scan."
+          : "Asset code, tag code, or serial number is required.",
+      );
       return;
     }
 
@@ -300,16 +306,14 @@ export function SaleRegistrationsClient({
               <DialogHeader>
                 <DialogTitle>Register Serialized Sale</DialogTitle>
                 <DialogDescription>
-                  Tie a generated asset or carton tag to its serialized sales
-                  line before installation is scheduled.
+                  Capture the sales handoff before installation. Carton Scan
+                  accepts only carton registration labels.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="grid gap-4 py-2 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
-                  <label className="text-sm font-medium">
-                    Asset / Tag / Serial Lookup
-                  </label>
+                  <label className="text-sm font-medium">Lookup Code</label>
                   <Input
                     value={formValues.assetLookupCode}
                     onChange={(event) =>
@@ -318,8 +322,17 @@ export function SaleRegistrationsClient({
                         assetLookupCode: event.target.value,
                       }))
                     }
-                    placeholder="AST-..., TAG-..., or serial number"
+                    placeholder={
+                      formValues.channel === "carton_scan"
+                        ? "Carton registration tag code"
+                        : "AST-..., TAG-..., or serial number"
+                    }
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {formValues.channel === "carton_scan"
+                      ? "Carton Scan requires a generated carton registration label. Asset codes, serial numbers, and unit tags are rejected."
+                      : "For non-carton channels you can lookup by asset code, serial number, or generated tag code."}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
