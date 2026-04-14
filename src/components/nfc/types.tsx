@@ -101,6 +101,7 @@ export interface TicketLiveTrackingView {
 
 export interface TicketView {
   id: string;
+  organizationId: string;
   ticketNumber: string;
   productId: string;
   stickerId: string;

@@ -149,6 +149,7 @@ export async function GET() {
         },
         manufacturerOrg: {
           select: {
+            id: true,
             name: true,
           },
         },
@@ -206,6 +207,7 @@ export async function GET() {
       },
       jobs: jobs.map((job) => ({
         id: job.id,
+        manufacturerOrganizationId: job.manufacturerOrg.id,
         jobNumber: job.jobNumber,
         status: job.status,
         scheduledFor: job.scheduledFor?.toISOString() ?? null,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -30,11 +30,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { uploadPhotoFiles } from "@/lib/photo-upload";
+import {
+  partScanSignature,
+  type PartScanPayload,
+} from "@/lib/part-scan-handoff";
 
 interface InstallationJobDetailProps {
   job: TechnicianInstallationJob;
   technicianName?: string;
   onUpdated: (jobId: string) => Promise<void> | void;
+  scannedPart?: PartScanPayload | null;
+  scannedPartError?: string | null;
 }
 
 type GeoLocationState = {
@@ -118,6 +124,8 @@ export function InstallationJobDetail({
   job,
   technicianName,
   onUpdated,
+  scannedPart = null,
+  scannedPartError = null,
 }: InstallationJobDetailProps) {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -148,6 +156,7 @@ export function InstallationJobDetail({
     Record<string, string>
   >({});
   const [partUsages, setPartUsages] = useState<InstallationPartUsageDraft[]>([]);
+  const consumedScannedRowsRef = useRef<Set<string>>(new Set());
 
   const requiredKitCodes = parseRequiredKitCodes(
     job.productModel.includedKitDefinition,
@@ -187,6 +196,48 @@ export function InstallationJobDetail({
     setActionError(null);
     setActionSuccess(null);
   }, [job, technicianName]);
+
+  useEffect(() => {
+    if (!scannedPart) {
+      return;
+    }
+
+    const rowKey = `${job.id}:${partScanSignature(scannedPart)}`;
+    if (consumedScannedRowsRef.current.has(rowKey)) {
+      return;
+    }
+
+    setPartUsages((previous) => {
+      const duplicate = previous.some(
+        (usage) =>
+          usage.assetCode.trim().toLowerCase() ===
+            scannedPart.assetCode.toLowerCase() &&
+          usage.tagCode.trim().toLowerCase() === scannedPart.tagCode.toLowerCase(),
+      );
+
+      if (duplicate) {
+        return previous;
+      }
+
+      return [
+        ...previous,
+        {
+          ...createUsageDraft(),
+          assetCode: scannedPart.assetCode,
+          tagCode: scannedPart.tagCode,
+          note: scannedPart.partName
+            ? `Resolved from scan: ${scannedPart.partName}`
+            : "",
+        },
+      ];
+    });
+
+    consumedScannedRowsRef.current.add(rowKey);
+    setActionError(null);
+    setActionSuccess(
+      `Scanned part ${scannedPart.assetCode} (${scannedPart.tagCode}) added to this installation report.`,
+    );
+  }, [job.id, scannedPart]);
 
   const updatePartUsage = (
     usageId: string,
@@ -549,6 +600,10 @@ export function InstallationJobDetail({
                       Mode: {job.productModel.partTraceabilityMode} • Small parts:{" "}
                       {job.productModel.smallPartTrackingMode}
                     </p>
+                    <p className="text-xs text-slate-600">
+                      Primary flow: scan generated part tags through `/r/[code]` and
+                      continue from the resolver action links.
+                    </p>
                   </div>
                   <Button
                     type="button"
@@ -567,6 +622,18 @@ export function InstallationJobDetail({
                 {requiredKitCodes.length > 0 ? (
                   <p className="text-xs text-slate-700">
                     Required kit scans: {requiredKitCodes.join(", ")}
+                  </p>
+                ) : null}
+
+                {scannedPartError ? (
+                  <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                    {scannedPartError}
+                  </p>
+                ) : null}
+
+                {scannedPart ? (
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                    Resolver scan ready: {scannedPart.assetCode} ({scannedPart.tagCode})
                   </p>
                 ) : null}
 

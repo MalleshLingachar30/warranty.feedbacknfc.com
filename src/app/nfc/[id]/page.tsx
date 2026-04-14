@@ -300,6 +300,7 @@ function mapTicketToView(
 ): TicketView {
   return {
     id: ticket.id,
+    organizationId: product.organizationId,
     ticketNumber: ticket.ticketNumber,
     productId: ticket.productId,
     stickerId: ticket.stickerId,

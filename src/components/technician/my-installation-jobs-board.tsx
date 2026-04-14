@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CalendarDays, Wrench } from "lucide-react";
 
 import { InstallationJobDetail } from "@/components/technician/installation-job-detail";
@@ -29,6 +30,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { parsePartScanFromQuery } from "@/lib/part-scan-handoff";
 
 interface MyInstallationJobsBoardProps {
   title?: string;
@@ -39,12 +41,17 @@ export function MyInstallationJobsBoard({
   title = "Installation Jobs",
   description = "Execution flow for installation-driven products",
 }: MyInstallationJobsBoardProps) {
+  const searchParams = useSearchParams();
   const [payload, setPayload] =
     useState<TechnicianInstallationJobsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const scannedPart = useMemo(
+    () => parsePartScanFromQuery(searchParams),
+    [searchParams],
+  );
 
   const fetchJobs = async (silent = false) => {
     if (!silent) {
@@ -86,8 +93,94 @@ export function MyInstallationJobsBoard({
     void fetchJobs();
   }, []);
 
+  useEffect(() => {
+    if (!payload || !scannedPart.context.installationJobId) {
+      return;
+    }
+
+    const hasReferencedJob = payload.jobs.some(
+      (job) => job.id === scannedPart.context.installationJobId,
+    );
+
+    if (hasReferencedJob) {
+      setSelectedJobId(scannedPart.context.installationJobId);
+    }
+  }, [payload, scannedPart.context.installationJobId]);
+
   const selectedJob =
     payload?.jobs.find((job) => job.id === selectedJobId) ?? null;
+
+  const scanContextError = useMemo(() => {
+    if (scannedPart.error) {
+      return scannedPart.error;
+    }
+
+    if (
+      scannedPart.scan &&
+      scannedPart.context.installationJobId &&
+      payload &&
+      !payload.jobs.some((job) => job.id === scannedPart.context.installationJobId)
+    ) {
+      return "This scanned part link references an installation job that is not assigned to you.";
+    }
+
+    return null;
+  }, [
+    payload,
+    scannedPart.context.installationJobId,
+    scannedPart.error,
+    scannedPart.scan,
+  ]);
+
+  const scanForSelectedJob = useMemo(() => {
+    if (!selectedJob || !scannedPart.scan) {
+      return null;
+    }
+
+    if (
+      scannedPart.context.installationJobId &&
+      scannedPart.context.installationJobId !== selectedJob.id
+    ) {
+      return null;
+    }
+
+    if (
+      scannedPart.scan.organizationId !==
+      selectedJob.manufacturerOrganizationId
+    ) {
+      return null;
+    }
+
+    return scannedPart.scan;
+  }, [scannedPart.context.installationJobId, scannedPart.scan, selectedJob]);
+
+  const selectedJobScanError = useMemo(() => {
+    if (!selectedJob) {
+      return null;
+    }
+
+    if (scannedPart.error) {
+      return scannedPart.error;
+    }
+
+    if (
+      scannedPart.scan &&
+      scannedPart.context.installationJobId &&
+      scannedPart.context.installationJobId !== selectedJob.id
+    ) {
+      return "Scanned part context does not match this installation job. Re-open the linked job or scan again from this job.";
+    }
+
+    if (
+      scannedPart.scan &&
+      scannedPart.scan.organizationId !==
+        selectedJob.manufacturerOrganizationId
+    ) {
+      return "This scanned part belongs to another manufacturer and cannot be linked to this installation report.";
+    }
+
+    return null;
+  }, [scannedPart, selectedJob]);
 
   if (isLoading) {
     return (
@@ -139,6 +232,14 @@ export function MyInstallationJobsBoard({
           </div>
         </CardHeader>
       </Card>
+
+      {scanContextError ? (
+        <Card className="border-rose-200 bg-rose-50">
+          <CardContent className="py-3 text-sm text-rose-700">
+            {scanContextError}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {payload.jobs.length === 0 ? (
         <Card className="border-slate-200">
@@ -208,6 +309,8 @@ export function MyInstallationJobsBoard({
                 <InstallationJobDetail
                   job={selectedJob}
                   technicianName={payload.technician.name}
+                  scannedPart={scanForSelectedJob}
+                  scannedPartError={selectedJobScanError}
                   onUpdated={async () => {
                     await fetchJobs(true);
                   }}

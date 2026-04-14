@@ -339,6 +339,7 @@ export async function GET() {
             customerPincode: true,
             productModel: {
               select: {
+                organizationId: true,
                 name: true,
                 modelNumber: true,
                 partsCatalog: true,
@@ -436,6 +437,7 @@ export async function GET() {
 
       return {
         id: ticket.id,
+        organizationId: ticket.product.productModel.organizationId,
         ticketNumber: ticket.ticketNumber,
         status: ticket.status,
         severity: ticket.issueSeverity,
