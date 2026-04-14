@@ -1,5 +1,5 @@
-import { TechnicianDashboard } from "@/components/dashboard/technician-dashboard";
+import { redirect } from "next/navigation";
 
 export default function TechnicianDashboardPage() {
-  return <TechnicianDashboard />;
+  redirect("/dashboard/my-jobs");
 }
