@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head><title>Clerk Test</title></head>
+<body>
+<h1>Clerk Proxy Test</h1>
+<pre id="log"></pre>
+<script>
+const log = document.getElementById('log');
+function l(msg) {
+  log.textContent += new Date().toISOString().slice(11,23) + ' ' + msg + '\n';
+  console.log(msg);
+}
+
+// Test 1: Can we fetch the environment endpoint?
+l('Testing /__clerk/v1/environment ...');
+fetch('/__clerk/v1/environment')
+  .then(r => { l('Environment: ' + r.status + ' ' + r.statusText); return r.json(); })
+  .then(d => l('App name: ' + d.display_config?.application_name))
+  .catch(e => l('Environment ERROR: ' + e.message));
+
+// Test 2: Can we fetch the client endpoint?
+l('Testing /__clerk/v1/client ...');
+fetch('/__clerk/v1/client?_clerk_js_version=5')
+  .then(r => { l('Client: ' + r.status + ' ' + r.statusText); return r.json(); })
+  .then(d => l('Client ID: ' + d.response?.id))
+  .catch(e => l('Client ERROR: ' + e.message));
+
+// Test 3: Can we load the Clerk JS bundle?
+l('Testing clerk.browser.js load ...');
+const s = document.createElement('script');
+s.src = '/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
+s.crossOrigin = 'anonymous';
+s.onload = () => {
+  l('Clerk JS loaded OK');
+  l('window.Clerk exists: ' + !!window.Clerk);
+  // Try initializing
+  if (window.Clerk) {
+    l('Attempting Clerk.load() ...');
+    window.Clerk.load({
+      publishableKey: 'pk_live_Y2xlcmsud2FycmFudHkuZmVlZGJhY2tuZmMuY29tJA',
+      proxyUrl: 'https://warranty.feedbacknfc.com/__clerk',
+    }).then(() => {
+      l('Clerk.load() SUCCESS');
+      l('Clerk.client: ' + JSON.stringify(window.Clerk.client?.id));
+    }).catch(e => {
+      l('Clerk.load() ERROR: ' + e.message);
+      l('Error stack: ' + e.stack?.slice(0, 500));
+    });
+  }
+};
+s.onerror = (e) => l('Clerk JS LOAD ERROR: ' + e.type);
+document.head.appendChild(s);
+
+// Timeout check
+setTimeout(() => l('--- 10s timeout check ---'), 10000);
+</script>
+</body>
+</html>
