@@ -16,7 +16,7 @@ const isPublicRoute = createRouteMatcher([
   "/nfc(.*)",
   "/api/chat(.*)",
   "/api/sticker(.*)",
-  "/api/__clerk(.*)",
+  "/api/clerk-proxy(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

@@ -11,8 +11,8 @@ function l(msg) {
 }
 
 // Test 1: Raw fetch with no credentials
-l('Test 1: fetch /api/__clerk/v1/environment (no credentials)');
-fetch('/api/__clerk/v1/environment', { credentials: 'omit' })
+l('Test 1: fetch /api/clerk-proxy/v1/environment (no credentials)');
+fetch('/api/clerk-proxy/v1/environment', { credentials: 'omit' })
   .then(async r => {
     l('  Status: ' + r.status);
     l('  Headers: content-type=' + r.headers.get('content-type'));
@@ -24,8 +24,8 @@ fetch('/api/__clerk/v1/environment', { credentials: 'omit' })
   .catch(e => l('  ERROR: ' + e.name + ': ' + e.message));
 
 // Test 2: fetch with credentials (same-origin)
-l('Test 2: fetch /api/__clerk/v1/environment (with credentials)');
-fetch('/api/__clerk/v1/environment', { credentials: 'same-origin' })
+l('Test 2: fetch /api/clerk-proxy/v1/environment (with credentials)');
+fetch('/api/clerk-proxy/v1/environment', { credentials: 'same-origin' })
   .then(async r => {
     l('  Status: ' + r.status);
     const text = await r.text();
@@ -38,9 +38,9 @@ fetch('/api/__clerk/v1/environment', { credentials: 'same-origin' })
   .catch(e => l('  ERROR: ' + e.name + ': ' + e.message));
 
 // Test 3: Simple XHR test
-l('Test 3: XHR to /api/__clerk/v1/environment');
+l('Test 3: XHR to /api/clerk-proxy/v1/environment');
 const xhr = new XMLHttpRequest();
-xhr.open('GET', '/api/__clerk/v1/environment');
+xhr.open('GET', '/api/clerk-proxy/v1/environment');
 xhr.onload = () => {
   l('  XHR status: ' + xhr.status);
   l('  XHR body length: ' + xhr.responseText.length);
@@ -52,7 +52,7 @@ xhr.send();
 // Test 4: Load Clerk JS without crossOrigin
 l('Test 4: Loading clerk.browser.js (no crossOrigin)');
 const s1 = document.createElement('script');
-s1.src = '/api/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
+s1.src = '/api/clerk-proxy/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
 s1.onload = () => l('  clerk.browser.js loaded OK! window.Clerk=' + typeof window.Clerk);
 s1.onerror = (e) => l('  clerk.browser.js FAILED: ' + e.type + ' ' + (e.message||''));
 document.head.appendChild(s1);
@@ -60,7 +60,7 @@ document.head.appendChild(s1);
 // Test 5: Load Clerk JS with crossOrigin
 l('Test 5: Loading clerk.browser.js (crossOrigin=anonymous)');
 const s2 = document.createElement('script');
-s2.src = '/api/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js?v=2';
+s2.src = '/api/clerk-proxy/npm/@clerk/clerk-js@6/dist/clerk.browser.js?v=2';
 s2.crossOrigin = 'anonymous';
 s2.onload = () => l('  clerk.browser.js (cors) loaded OK!');
 s2.onerror = (e) => l('  clerk.browser.js (cors) FAILED: ' + e.type);
@@ -68,7 +68,7 @@ document.head.appendChild(s2);
 
 // Test 6: fetch the JS file directly
 l('Test 6: fetch clerk.browser.js as blob');
-fetch('/api/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js', { credentials: 'omit' })
+fetch('/api/clerk-proxy/npm/@clerk/clerk-js@6/dist/clerk.browser.js', { credentials: 'omit' })
   .then(async r => {
     l('  JS fetch status: ' + r.status);
     l('  JS content-type: ' + r.headers.get('content-type'));

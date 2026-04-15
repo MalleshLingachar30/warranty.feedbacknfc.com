@@ -119,7 +119,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Never intercept Clerk proxy requests (auth API, JS bundles, etc.)
-  if (requestUrl.pathname.startsWith("/__clerk") || requestUrl.pathname.startsWith("/api/__clerk")) {
+  if (requestUrl.pathname.startsWith("/__clerk") || requestUrl.pathname.startsWith("/api/__clerk") || requestUrl.pathname.startsWith("/api/clerk-proxy")) {
     return;
   }
 
