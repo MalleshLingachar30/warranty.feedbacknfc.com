@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Fragment } from "react";
 
 import { PwaRuntime } from "@/components/pwa/pwa-runtime";
 import { Toaster } from "@/components/ui/sonner";
@@ -58,31 +57,42 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const AuthProvider = clerkEnabled ? ClerkProvider : Fragment;
-
-  return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <AuthProvider
-          {...(clerkEnabled
-            ? {
-                publishableKey: clerkPublishableKey,
-                ...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {}),
-                signInUrl: "/sign-in",
-                signUpUrl: "/sign-up",
-                signInFallbackRedirectUrl: "/dashboard",
-                signUpFallbackRedirectUrl: "/dashboard",
-              }
-            : {})}
+  if (!clerkEnabled) {
+    return (
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <TooltipProvider>
             <PwaRuntime />
             {children}
             <Toaster />
           </TooltipProvider>
-        </AuthProvider>
+        </body>
+      </html>
+    );
+  }
+
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <ClerkProvider
+          publishableKey={clerkPublishableKey}
+          {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          signInFallbackRedirectUrl="/dashboard"
+          signUpFallbackRedirectUrl="/dashboard"
+          dynamic
+        >
+          <TooltipProvider>
+            <PwaRuntime />
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

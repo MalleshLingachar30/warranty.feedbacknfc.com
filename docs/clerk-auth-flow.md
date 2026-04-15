@@ -3,7 +3,7 @@
 This project already includes Clerk integration in these paths:
 
 - `src/app/layout.tsx` uses `ClerkProvider`
-- `src/middleware.ts` protects `/dashboard/*`
+- `src/proxy.ts` protects `/dashboard/*` (Next.js 16+ uses `proxy.ts` instead of `middleware.ts`)
 - `src/app/(auth)/sign-in/[[...sign-in]]/page.tsx`
 - `src/app/(auth)/sign-up/[[...sign-up]]/page.tsx`
 
