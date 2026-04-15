@@ -7,47 +7,81 @@ import { type NextRequest, NextResponse } from "next/server";
  * variants) stream response bodies, which Safari drops when routed
  * through Vercel's edge/serverless runtime.  This handler fetches the
  * full response body first, then returns a buffered NextResponse.
+ *
+ * Clerk's npm endpoints redirect versioned paths (e.g. @6 → @6.7.1)
+ * back through the proxy URL so we must follow those redirects
+ * server-side, rewriting them back to the Clerk FAPI.
  */
 
 const CLERK_FAPI = "https://frontend-api.clerk.dev";
 const PROXY_PATH = "/api/clerk-proxy";
+const MAX_REDIRECTS = 5;
 
 async function proxyToClerk(request: NextRequest) {
   const url = new URL(request.url);
+  const proxyOrigin = url.origin;
   const clerkPath = url.pathname.replace(PROXY_PATH, "");
-  const targetUrl = `${CLERK_FAPI}${clerkPath}${url.search}`;
+  let targetUrl = `${CLERK_FAPI}${clerkPath}${url.search}`;
 
-  // Clone headers, add required Clerk proxy headers
-  const headers = new Headers(request.headers);
-  headers.set("Clerk-Proxy-Url", `${url.origin}${PROXY_PATH}`);
-  headers.set(
-    "Clerk-Secret-Key",
-    process.env.CLERK_SECRET_KEY || "",
-  );
-  headers.set(
+  // Build headers once
+  const proxyHeaders = new Headers(request.headers);
+  proxyHeaders.set("Clerk-Proxy-Url", `${proxyOrigin}${PROXY_PATH}`);
+  proxyHeaders.set("Clerk-Secret-Key", process.env.CLERK_SECRET_KEY || "");
+  proxyHeaders.set(
     "X-Forwarded-For",
     request.headers.get("x-forwarded-for") || "127.0.0.1",
   );
-  // Remove host header so it doesn't conflict with the target
-  headers.delete("host");
+  proxyHeaders.delete("host");
 
   const body =
     request.method !== "GET" && request.method !== "HEAD"
       ? await request.arrayBuffer()
       : undefined;
 
-  const upstream = await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body,
-    // @ts-expect-error -- Next.js fetch supports this
-    duplex: body ? "half" : undefined,
-  });
+  // Follow redirects manually so we can rewrite proxy-URL redirects
+  // back to the Clerk FAPI origin
+  let upstream: Response | undefined;
+  for (let i = 0; i < MAX_REDIRECTS; i++) {
+    upstream = await fetch(targetUrl, {
+      method: request.method,
+      headers: proxyHeaders,
+      body: i === 0 ? body : undefined,
+      redirect: "manual",
+      // @ts-expect-error -- Next.js fetch supports this
+      duplex: body && i === 0 ? "half" : undefined,
+    });
+
+    if (
+      upstream.status >= 300 &&
+      upstream.status < 400 &&
+      upstream.headers.has("location")
+    ) {
+      let location = upstream.headers.get("location")!;
+
+      // Clerk redirects back through the proxy URL – rewrite to FAPI
+      if (location.includes(PROXY_PATH)) {
+        const locUrl = new URL(location);
+        location = `${CLERK_FAPI}${locUrl.pathname.replace(PROXY_PATH, "")}${locUrl.search}`;
+      }
+
+      targetUrl = location;
+      continue;
+    }
+
+    break;
+  }
+
+  if (!upstream) {
+    return NextResponse.json(
+      { error: "Proxy failed: no upstream response" },
+      { status: 502 },
+    );
+  }
 
   // Buffer the ENTIRE response body before returning
   const responseBody = await upstream.arrayBuffer();
 
-  // Copy response headers, but strip hop-by-hop and problematic headers
+  // Copy response headers, stripping hop-by-hop and encoding headers
   const responseHeaders = new Headers();
   const skipHeaders = new Set([
     "transfer-encoding",
