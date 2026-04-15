@@ -13,13 +13,20 @@ const isPublicRoute = createRouteMatcher([
   "/q(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
+  "/signin(.*)",
   "/nfc(.*)",
   "/api/chat(.*)",
   "/api/sticker(.*)",
+  "/__clerk(.*)",
 ]);
 
-const withClerk = clerkMiddleware(
+export default clerkMiddleware(
   async (auth, req) => {
+    // When Clerk is not configured, skip all auth checks
+    if (!clerkEnabled) {
+      return;
+    }
+
     if (isPublicRoute(req)) {
       return;
     }
@@ -30,18 +37,10 @@ const withClerk = clerkMiddleware(
   },
   {
     frontendApiProxy: {
-      enabled: true,
+      enabled: clerkEnabled,
     },
   },
 );
-
-export default function middleware(request: NextRequest, event: NextFetchEvent) {
-  if (!clerkEnabled) {
-    return NextResponse.next();
-  }
-
-  return withClerk(request, event);
-}
 
 export const config = {
   matcher: [
