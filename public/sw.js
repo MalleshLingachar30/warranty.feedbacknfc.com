@@ -1,4 +1,4 @@
-const SW_VERSION = "warranty-pwa-v1";
+const SW_VERSION = "warranty-pwa-v2";
 const STATIC_CACHE = `${SW_VERSION}-static`;
 const PAGE_CACHE = `${SW_VERSION}-pages`;
 const STICKER_API_CACHE = `${SW_VERSION}-sticker-api`;
@@ -115,6 +115,11 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(request.url);
 
   if (!isSameOrigin(requestUrl)) {
+    return;
+  }
+
+  // Never intercept Clerk proxy requests (auth API, JS bundles, etc.)
+  if (requestUrl.pathname.startsWith("/__clerk")) {
     return;
   }
 
