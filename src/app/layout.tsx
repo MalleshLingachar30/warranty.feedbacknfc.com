@@ -50,6 +50,7 @@ export const viewport: Viewport = {
 };
 
 const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const clerkProxyUrl = process.env.NEXT_PUBLIC_CLERK_PROXY_URL;
 const clerkEnabled = Boolean(clerkPublishableKey);
 
 export default function RootLayout({
@@ -68,6 +69,7 @@ export default function RootLayout({
           {...(clerkEnabled
             ? {
                 publishableKey: clerkPublishableKey,
+                ...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {}),
                 signInUrl: "/sign-in",
                 signUpUrl: "/sign-up",
                 signInFallbackRedirectUrl: "/dashboard",

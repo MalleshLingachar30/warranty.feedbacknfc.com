@@ -18,15 +18,22 @@ const isPublicRoute = createRouteMatcher([
   "/api/sticker(.*)",
 ]);
 
-const withClerk = clerkMiddleware(async (auth, req) => {
-  if (isPublicRoute(req)) {
-    return;
-  }
+const withClerk = clerkMiddleware(
+  async (auth, req) => {
+    if (isPublicRoute(req)) {
+      return;
+    }
 
-  if (isProtectedDashboardRoute(req)) {
-    await auth.protect();
-  }
-});
+    if (isProtectedDashboardRoute(req)) {
+      await auth.protect();
+    }
+  },
+  {
+    frontendApiProxy: {
+      enabled: true,
+    },
+  },
+);
 
 export default function middleware(request: NextRequest, event: NextFetchEvent) {
   if (!clerkEnabled) {
@@ -39,6 +46,6 @@ export default function middleware(request: NextRequest, event: NextFetchEvent) 
 export const config = {
   matcher: [
     "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpg|jpeg|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    "/(api|trpc|__clerk)(.*)",
   ],
 };
