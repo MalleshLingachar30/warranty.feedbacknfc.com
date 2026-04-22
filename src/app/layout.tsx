@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { PwaRuntime } from "@/components/pwa/pwa-runtime";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { getWarrantyAppBaseUrl } from "@/lib/warranty-app-url";
 
 import "./globals.css";
 
@@ -20,12 +21,36 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   applicationName: "FeedbackNFC Warranty",
+  metadataBase: new URL(getWarrantyAppBaseUrl()),
   title: {
-    default: "FeedbackNFC | Warranty",
-    template: "%s | FeedbackNFC | Warranty",
+    default: "Scan QR, Activate Warranty Instantly | FeedbackNFC",
+    template: "%s | FeedbackNFC Warranty",
   },
   description:
-    "Warranty lifecycle management for manufacturers and service networks",
+    "Scan the QR code on the TV box or product package and activate warranty instantly. No paperwork, no calls, no friction.",
+  openGraph: {
+    type: "website",
+    siteName: "FeedbackNFC Warranty",
+    title: "Scan QR, Activate Warranty Instantly",
+    description:
+      "Customers scan a QR code at sale or first use to activate warranty in seconds. No paperwork and no manual forms.",
+    url: "/",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Scan the QR code on the product box to activate warranty instantly",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Scan QR, Activate Warranty Instantly",
+    description:
+      "Activate warranty by scanning the QR code on the box or product package. No paperwork, no friction.",
+    images: ["/opengraph-image"],
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
