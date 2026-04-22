@@ -208,6 +208,14 @@ function FlowArrow() {
 }
 
 function QrBadge() {
+  const qrRows = [
+    [1, 1, 0, 1, 0],
+    [0, 1, 1, 0, 1],
+    [1, 0, 1, 1, 0],
+    [0, 1, 1, 1, 0],
+    [1, 0, 0, 1, 1],
+  ];
+
   return (
     <div
       style={{
@@ -216,22 +224,33 @@ function QrBadge() {
         borderRadius: 12,
         border: "6px solid #0f172a",
         background: "white",
-        display: "grid",
-        gridTemplateColumns: "repeat(5, 1fr)",
-        gridTemplateRows: "repeat(5, 1fr)",
-        gap: 5,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
         padding: 8,
       }}
     >
-      {[1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0,
-        1, 1].map((dot, index) => (
+      {qrRows.map((row, rowIndex) => (
         <div
-          key={index}
+          key={rowIndex}
           style={{
-            borderRadius: 2,
-            background: dot ? "#0f172a" : "#ffffff",
+            display: "flex",
+            justifyContent: "space-between",
+            flex: 1,
+            gap: 5,
           }}
-        />
+        >
+          {row.map((dot, cellIndex) => (
+            <div
+              key={`${rowIndex}-${cellIndex}`}
+              style={{
+                borderRadius: 2,
+                background: dot ? "#0f172a" : "#ffffff",
+                flex: 1,
+              }}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -278,6 +297,9 @@ function SuccessBadge() {
   return (
     <div
       style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
         borderRadius: 14,
         border: "2px solid #059669",
         background: "#ecfdf5",
