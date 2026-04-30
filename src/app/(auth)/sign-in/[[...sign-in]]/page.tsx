@@ -21,12 +21,19 @@ const unavailableState = (
   </div>
 );
 
+const emailPasswordNotice = (
+  <p className="mb-4 text-center text-sm text-slate-600">
+    Continue with your email and password.
+  </p>
+);
+
 export default function SignInPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <ClerkLoading>{loadingState}</ClerkLoading>
       <ClerkFailed>{unavailableState}</ClerkFailed>
       <ClerkLoaded>
+        {emailPasswordNotice}
         <SignIn
           routing="path"
           path="/sign-in"
@@ -34,6 +41,13 @@ export default function SignInPage() {
           fallback={loadingState}
           fallbackRedirectUrl="/dashboard"
           signUpFallbackRedirectUrl="/dashboard"
+          appearance={{
+            elements: {
+              socialButtonsBlockButton: "hidden",
+              socialButtonsBlock: "hidden",
+              dividerRow: "hidden",
+            },
+          }}
         />
       </ClerkLoaded>
     </main>
