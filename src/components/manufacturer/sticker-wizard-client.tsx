@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2Icon, PackagePlusIcon } from "lucide-react";
 
+import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,8 +38,10 @@ import {
 
 import type {
   ManufacturerProductModel,
+  SerializationReadinessRow,
   TagGenerationBatchRow,
   TagGenerationSummary,
+  TagGenerationWorkspacePayload,
 } from "./types";
 
 type CreateBatchState = {
@@ -47,6 +50,7 @@ type CreateBatchState = {
   quantity: string;
   serialPrefix: string;
   serialStart: string;
+  serialPadLength: string;
   includeCartonRegistrationTags: boolean;
   symbologies: TagSymbology[];
   defaultSymbology: TagSymbology;
@@ -75,11 +79,12 @@ type CreateBatchApiResponse = {
   error?: string;
 };
 
-type StickerWizardClientProps = {
+type StickerWizardClientProps = Partial<{
   initialProductModels: ManufacturerProductModel[];
+  initialReadinessRows: SerializationReadinessRow[];
   initialBatches: TagGenerationBatchRow[];
   initialSummary: TagGenerationSummary;
-};
+}>;
 
 function formatDate(isoDate: string) {
   return new Date(isoDate).toLocaleDateString("en-US", {
@@ -113,14 +118,54 @@ function hasSymbology(
   return (row.tagCountBySymbology[symbology] ?? 0) > 0;
 }
 
+async function fetchTagGenerationWorkspace() {
+  const response = await fetch("/api/manufacturer/tag-generation/workspace", {
+    cache: "no-store",
+  });
+  const payload = (await response.json()) as
+    | TagGenerationWorkspacePayload
+    | { error?: string };
+
+  if (!response.ok) {
+    throw new Error(
+      "error" in payload && payload.error
+        ? payload.error
+        : "Unable to load factory serialization workspace.",
+    );
+  }
+
+  return payload as TagGenerationWorkspacePayload;
+}
+
 export function StickerWizardClient({
-  initialProductModels,
-  initialBatches,
-  initialSummary,
+  initialProductModels = [],
+  initialReadinessRows = [],
+  initialBatches = [],
+  initialSummary = {
+    totalBatches: 0,
+    totalAssets: 0,
+    totalTags: 0,
+    qrTags: 0,
+    dataMatrixTags: 0,
+    nfcTags: 0,
+    readyForDispatch: 0,
+    dispatchMatched: 0,
+    pendingDispatchMatches: 0,
+  },
 }: StickerWizardClientProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(
+    initialProductModels.length === 0 &&
+      initialReadinessRows.length === 0 &&
+      initialBatches.length === 0,
+  );
+  const [isRefreshingWorkspace, setIsRefreshingWorkspace] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productModels, setProductModels] =
+    useState<ManufacturerProductModel[]>(initialProductModels);
   const [summary, setSummary] = useState<TagGenerationSummary>(initialSummary);
+  const [readinessRows, setReadinessRows] =
+    useState<SerializationReadinessRow[]>(initialReadinessRows);
   const [batches, setBatches] = useState<TagGenerationBatchRow[]>(initialBatches);
   const [selectedBatchId, setSelectedBatchId] = useState(
     initialBatches[0]?.id ?? "",
@@ -131,19 +176,72 @@ export function StickerWizardClient({
     quantity: "100",
     serialPrefix: "",
     serialStart: "",
+    serialPadLength: "4",
     includeCartonRegistrationTags: true,
     symbologies: ["qr"],
     defaultSymbology: "qr",
     materialVariant: "standard",
-    viewerPolicy: "public",
-    printSizeMm: "30",
+      viewerPolicy: "public",
+      printSizeMm: "30",
   });
 
+  const applyWorkspacePayload = (payload: TagGenerationWorkspacePayload) => {
+    setProductModels(payload.productModels);
+    setReadinessRows(payload.readinessRows);
+    setBatches(payload.batches);
+    setSummary(payload.summary);
+    setSelectedBatchId((current) => current || payload.batches[0]?.id || "");
+    setForm((current) => ({
+      ...current,
+      productModelId: current.productModelId || payload.productModels[0]?.id || "",
+    }));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function initialize() {
+      try {
+        const payload = await fetchTagGenerationWorkspace();
+        if (!cancelled) {
+          applyWorkspacePayload(payload);
+        }
+      } catch (workspaceError) {
+        if (!cancelled) {
+          setError(
+            workspaceError instanceof Error
+              ? workspaceError.message
+              : "Unable to load factory serialization workspace.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingWorkspace(false);
+        }
+      }
+    }
+
+    void initialize();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const selectedProductModel = useMemo(
-    () =>
-      initialProductModels.find((productModel) => productModel.id === form.productModelId),
-    [form.productModelId, initialProductModels],
+    () => productModels.find((productModel) => productModel.id === form.productModelId),
+    [form.productModelId, productModels],
   );
+  const selectedProductModelHasSapBinding = Boolean(
+    selectedProductModel?.externalItemCode,
+  );
+  const requiresFactorySerialRange = form.productClass === "main_product";
+  const hasWorkspaceData =
+    productModels.length > 0 ||
+    readinessRows.length > 0 ||
+    batches.length > 0 ||
+    summary.totalBatches > 0 ||
+    summary.totalAssets > 0;
 
   const recommendedSymbologies = useMemo(() => {
     if (!selectedProductModel) {
@@ -159,7 +257,7 @@ export function StickerWizardClient({
   }, [form.productClass, selectedProductModel]);
 
   const selectedBatch = batches.find((batch) => batch.id === selectedBatchId);
-  const canGenerate = initialProductModels.length > 0 && !isSubmitting;
+  const canGenerate = productModels.length > 0 && !isSubmitting && !isLoadingWorkspace;
 
   const applyRecommendedSymbologies = () => {
     setForm((current) => {
@@ -193,6 +291,23 @@ export function StickerWizardClient({
     });
   };
 
+  const refreshWorkspace = async () => {
+    setIsRefreshingWorkspace(true);
+    setError(null);
+
+    try {
+      applyWorkspacePayload(await fetchTagGenerationWorkspace());
+    } catch (workspaceError) {
+      setError(
+        workspaceError instanceof Error
+          ? workspaceError.message
+          : "Unable to refresh factory serialization workspace.",
+      );
+    } finally {
+      setIsRefreshingWorkspace(false);
+    }
+  };
+
   const createBatch = async () => {
     setError(null);
 
@@ -207,6 +322,13 @@ export function StickerWizardClient({
       return;
     }
 
+    if (requiresFactorySerialRange && !selectedProductModelHasSapBinding) {
+      setError(
+        "Factory serialization requires a product model that is linked to SAP item master.",
+      );
+      return;
+    }
+
     if (form.symbologies.length === 0) {
       setError("Select at least one symbology.");
       return;
@@ -214,6 +336,27 @@ export function StickerWizardClient({
 
     const useSerials = form.serialPrefix.trim().length > 0 || form.serialStart.trim().length > 0;
     const serialStart = useSerials ? asPositiveInteger(form.serialStart) : null;
+    const serialPadLength = form.serialPadLength.trim().length
+      ? asPositiveInteger(form.serialPadLength)
+      : null;
+
+    if (requiresFactorySerialRange && !form.serialPrefix.trim()) {
+      setError("Serial prefix is required for main-product factory serialization.");
+      return;
+    }
+
+    if (requiresFactorySerialRange && !serialStart) {
+      setError("Serial start must be a positive integer for main-product factory serialization.");
+      return;
+    }
+
+    if (
+      serialPadLength !== null &&
+      (!Number.isInteger(serialPadLength) || serialPadLength < 1 || serialPadLength > 20)
+    ) {
+      setError("Serial pad length must be an integer between 1 and 20.");
+      return;
+    }
 
     if (useSerials && !form.serialPrefix.trim()) {
       setError("Serial prefix is required when using serial generation.");
@@ -238,6 +381,7 @@ export function StickerWizardClient({
           quantity,
           serialPrefix: useSerials ? form.serialPrefix.trim() : null,
           serialStart: useSerials ? serialStart : null,
+          serialPadLength: useSerials ? serialPadLength : null,
           includeCartonRegistrationTags:
             classSupportsCartonTags(form.productClass) &&
             form.includeCartonRegistrationTags,
@@ -257,7 +401,7 @@ export function StickerWizardClient({
         throw new Error(payload.error ?? "Unable to create generation batch.");
       }
 
-      const model = initialProductModels.find(
+      const model = productModels.find(
         (productModel) => productModel.id === form.productModelId,
       );
 
@@ -292,7 +436,55 @@ export function StickerWizardClient({
         dataMatrixTags:
           current.dataMatrixTags + (row.tagCountBySymbology.data_matrix ?? 0),
         nfcTags: current.nfcTags + (row.tagCountBySymbology.nfc_uri ?? 0),
+        readyForDispatch: (current.readyForDispatch ?? 0) + row.assetsGenerated,
+        dispatchMatched: current.dispatchMatched ?? 0,
+        pendingDispatchMatches: current.pendingDispatchMatches ?? 0,
       }));
+
+      if (row.productClass === "main_product") {
+        setReadinessRows((current) => {
+          const next = [...current];
+          const existingIndex = next.findIndex(
+            (entry) => entry.productModelId === form.productModelId,
+          );
+          const baseEntry: SerializationReadinessRow = {
+            productModelId: form.productModelId,
+            productModelName: model?.name ?? "Unknown Model",
+            modelNumber: model?.modelNumber ?? "",
+            externalItemCode: model?.externalItemCode ?? null,
+            externalItemSeriesCode: model?.externalItemSeriesCode ?? null,
+            generatedAssets: 0,
+            readyForDispatch: 0,
+            dispatchMatched: 0,
+            pendingDispatchMatches: 0,
+          };
+          const currentEntry =
+            existingIndex >= 0 ? next[existingIndex] : baseEntry;
+          const updatedEntry: SerializationReadinessRow = {
+            ...currentEntry,
+            generatedAssets: currentEntry.generatedAssets + row.assetsGenerated,
+            readyForDispatch: currentEntry.readyForDispatch + row.assetsGenerated,
+          };
+
+          if (existingIndex >= 0) {
+            next[existingIndex] = updatedEntry;
+          } else {
+            next.push(updatedEntry);
+          }
+
+          return next.sort((left, right) => {
+            if (right.pendingDispatchMatches !== left.pendingDispatchMatches) {
+              return right.pendingDispatchMatches - left.pendingDispatchMatches;
+            }
+
+            if (right.generatedAssets !== left.generatedAssets) {
+              return right.generatedAssets - left.generatedAssets;
+            }
+
+            return left.productModelName.localeCompare(right.productModelName);
+          });
+        });
+      }
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -307,27 +499,132 @@ export function StickerWizardClient({
   return (
     <div>
       <PageHeader
-        title="Generate Item Labels"
-        description="Generate canonical asset identities and multi-symbology tags for main products, spares, small parts, kits, and packs."
+        title="Factory Serialization"
+        description="Create pre-dispatch serialized machine identities, generate QR and Data Matrix outputs, and keep dispatch reconciliation visible from one manufacturer workspace."
       />
+
+      <div className="mb-4 flex justify-end">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void refreshWorkspace()}
+          disabled={isRefreshingWorkspace || isLoadingWorkspace}
+        >
+          {isRefreshingWorkspace ? (
+            <>
+              <Loader2Icon className="size-4 animate-spin" />
+              Refreshing...
+            </>
+          ) : (
+            "Refresh Workspace"
+          )}
+        </Button>
+      </div>
+
+      {isLoadingWorkspace ? <ClientPageLoading rows={7} /> : null}
+
+      {!isLoadingWorkspace && error && !hasWorkspaceData ? (
+        <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
+
+      {!isLoadingWorkspace ? (
+        <>
 
       <Card>
         <CardHeader>
-          <CardTitle>Tag Generation Batch</CardTitle>
+          <CardTitle>Serialization Workflow</CardTitle>
           <CardDescription>
-            Create one generic batch and export QR, Data Matrix, NFC, and manifest outputs.
+            The main-product path is now SAP-item-linked by design: import item master first, create factory serials next, and then let serialized dispatch lines reconcile against those assets.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-md border bg-slate-50 p-4">
+            <p className="text-sm font-semibold">1. SAP item master first</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Main-product serialization only works when the selected product model is
+              already mapped to an SAP item code.
+            </p>
+          </div>
+          <div className="rounded-md border bg-slate-50 p-4">
+            <p className="text-sm font-semibold">2. Create factory serial range</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Generate serialized asset identities and output batches before the machine
+              leaves production.
+            </p>
+          </div>
+          <div className="rounded-md border bg-slate-50 p-4">
+            <p className="text-sm font-semibold">3. Reconcile dispatch automatically</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              When SAP dispatch arrives, matching serials can move out of{" "}
+              <span className="font-mono">pending_match</span> and into the installed
+              equipment lifecycle.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Serialization Batches</CardDescription>
+            <CardTitle>{summary.totalBatches.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Serialized Assets</CardDescription>
+            <CardTitle>{summary.totalAssets.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Ready For Dispatch</CardDescription>
+            <CardTitle>{(summary.readyForDispatch ?? 0).toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Dispatch Matched</CardDescription>
+            <CardTitle>{(summary.dispatchMatched ?? 0).toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Pending SAP Matches</CardDescription>
+            <CardTitle>
+              {(summary.pendingDispatchMatches ?? 0).toLocaleString()}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Tags</CardDescription>
+            <CardTitle>{summary.totalTags.toLocaleString()}</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Create Serialization Batch</CardTitle>
+          <CardDescription>
+            Generate canonical asset identities and multi-symbology outputs for main
+            products, spares, small parts, kits, and packs.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {initialProductModels.length === 0 ? (
+          {productModels.length === 0 && !isLoadingWorkspace ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Create at least one product model before generating assets and tags.
+              Create or import at least one product model before generating serialized
+              assets.
             </div>
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <label className="space-y-1 text-sm">
-              <span>Product Model</span>
+              <span>Product Series</span>
               <select
                 value={form.productModelId}
                 onChange={(event) =>
@@ -337,18 +634,21 @@ export function StickerWizardClient({
                   }))
                 }
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={isSubmitting || initialProductModels.length === 0}
+                disabled={isSubmitting || isLoadingWorkspace || productModels.length === 0}
               >
-                {initialProductModels.map((productModel) => (
+                {productModels.map((productModel) => (
                   <option key={productModel.id} value={productModel.id}>
                     {productModel.name} ({productModel.modelNumber || "No model number"})
+                    {productModel.externalItemCode
+                      ? ` • ${productModel.externalItemCode}`
+                      : " • SAP item missing"}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="space-y-1 text-sm">
-              <span>Item Class</span>
+              <span>Asset Class</span>
               <select
                 value={form.productClass}
                 onChange={(event) => {
@@ -374,7 +674,7 @@ export function StickerWizardClient({
             </label>
 
             <label className="space-y-1 text-sm">
-              <span>Quantity</span>
+              <span>Batch Quantity</span>
               <Input
                 type="number"
                 value={form.quantity}
@@ -389,7 +689,7 @@ export function StickerWizardClient({
             </label>
 
             <label className="space-y-1 text-sm">
-              <span>Serial Prefix (optional)</span>
+              <span>Serial Prefix</span>
               <Input
                 value={form.serialPrefix}
                 onChange={(event) =>
@@ -404,7 +704,7 @@ export function StickerWizardClient({
             </label>
 
             <label className="space-y-1 text-sm">
-              <span>Serial Start (optional)</span>
+              <span>Serial Start</span>
               <Input
                 type="number"
                 value={form.serialStart}
@@ -414,6 +714,23 @@ export function StickerWizardClient({
                     serialStart: event.target.value,
                   }))
                 }
+                disabled={isSubmitting}
+              />
+            </label>
+
+            <label className="space-y-1 text-sm">
+              <span>Serial Pad Length</span>
+              <Input
+                type="number"
+                value={form.serialPadLength}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    serialPadLength: event.target.value,
+                  }))
+                }
+                min="1"
+                max="20"
                 disabled={isSubmitting}
               />
             </label>
@@ -475,6 +792,52 @@ export function StickerWizardClient({
               </select>
             </label>
           </div>
+
+          {selectedProductModel ? (
+            <div className="grid gap-3 rounded-md border bg-slate-50 p-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  SAP Item Code
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {selectedProductModel.externalItemCode || "Not linked yet"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  SAP Series Code
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {selectedProductModel.externalItemSeriesCode || "Not linked yet"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Activation Mode
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {selectedProductModel.activationMode?.replace(/_/g, " ") ??
+                    "Not set"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Part Traceability
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {selectedProductModel.partTraceabilityMode?.replace(/_/g, " ") ??
+                    "Not set"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {requiresFactorySerialRange && !selectedProductModelHasSapBinding ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              This product model is not linked to SAP item master yet. Import the item
+              master first, then create the factory serialization batch.
+            </div>
+          ) : null}
 
           {classSupportsCartonTags(form.productClass) ? (
             <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
@@ -573,12 +936,12 @@ export function StickerWizardClient({
               {isSubmitting ? (
                 <>
                   <Loader2Icon className="size-4 animate-spin" />
-                  Generating...
+                  Creating batch...
                 </>
               ) : (
                 <>
                   <PackagePlusIcon className="size-4" />
-                  Create Tag Generation Batch
+                  Create Serialization Batch
                 </>
               )}
             </Button>
@@ -586,50 +949,72 @@ export function StickerWizardClient({
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Batches</CardDescription>
-            <CardTitle>{summary.totalBatches.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Assets</CardDescription>
-            <CardTitle>{summary.totalAssets.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Tags</CardDescription>
-            <CardTitle>{summary.totalTags.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>QR Tags</CardDescription>
-            <CardTitle>{summary.qrTags.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Data Matrix Tags</CardDescription>
-            <CardTitle>{summary.dataMatrixTags.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>NFC URI Tags</CardDescription>
-            <CardTitle>{summary.nfcTags.toLocaleString()}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Product Series Readiness</CardTitle>
+          <CardDescription>
+            Track which SAP-linked product models already have factory serials ready and
+            where dispatch reconciliation is still waiting for a match.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Product Series</TableHead>
+                <TableHead>SAP Item</TableHead>
+                <TableHead className="text-right">Generated</TableHead>
+                <TableHead className="text-right">Ready</TableHead>
+                <TableHead className="text-right">Matched</TableHead>
+                <TableHead className="text-right">Pending Match</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {readinessRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    No factory serialization batches exist yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                readinessRows.map((row) => (
+                  <TableRow key={row.productModelId}>
+                    <TableCell>
+                      <div className="font-medium">{row.productModelName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {row.modelNumber || "No model number"}
+                        {row.externalItemSeriesCode
+                          ? ` • Series ${row.externalItemSeriesCode}`
+                          : ""}
+                      </div>
+                    </TableCell>
+                    <TableCell>{row.externalItemCode ?? "Not linked"}</TableCell>
+                    <TableCell className="text-right">
+                      {row.generatedAssets.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.readyForDispatch.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.dispatchMatched.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.pendingDispatchMatches.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Export Outputs</CardTitle>
+          <CardTitle>Factory Output Exports</CardTitle>
           <CardDescription>
-            Download QR, Data Matrix, manifest, and NFC outputs from any generated batch.
+            Download QR, Data Matrix, manifest, and NFC outputs from any serialization
+            batch.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -746,8 +1131,10 @@ export function StickerWizardClient({
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle>Batch History</CardTitle>
-          <CardDescription>Recent tag generation batches for this manufacturer.</CardDescription>
+          <CardTitle>Serialization History</CardTitle>
+          <CardDescription>
+            Recent factory serialization batches and label outputs for this manufacturer.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -791,6 +1178,8 @@ export function StickerWizardClient({
           </Table>
         </CardContent>
       </Card>
+        </>
+      ) : null}
     </div>
   );
 }

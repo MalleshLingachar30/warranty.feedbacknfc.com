@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const items = [
   { label: "Overview", href: "/dashboard/manufacturer" },
   { label: "Products", href: "/dashboard/manufacturer/products" },
-  { label: "Stickers", href: "/dashboard/manufacturer/stickers" },
+  { label: "Serialization", href: "/dashboard/manufacturer/stickers" },
   { label: "Sales", href: "/dashboard/manufacturer/sales" },
   { label: "Installations", href: "/dashboard/manufacturer/installations" },
   { label: "Tickets", href: "/dashboard/manufacturer/tickets" },

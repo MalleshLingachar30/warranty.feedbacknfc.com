@@ -218,6 +218,13 @@ export async function POST(request: Request) {
       throw new ApiError("Selected product model was not found.", 404);
     }
 
+    if (productClass === "main_product" && !productModel.externalItemCode) {
+      throw new ApiError(
+        "Selected product model is not linked to SAP item master yet. Import the item master and retry factory serialization.",
+        409,
+      );
+    }
+
     const recommendedSymbologies = recommendedSymbologiesFromPolicy({
       productClass,
       activationMode: productModel.activationMode,
@@ -257,6 +264,13 @@ export async function POST(request: Request) {
           : 0;
 
     let serials: string[] = [];
+    if (productClass === "main_product" && serialStart === null) {
+      throw new ApiError(
+        "Factory serialization for main products requires a serial prefix and serial start.",
+        400,
+      );
+    }
+
     if (serialStart !== null) {
       serials = Array.from({ length: quantity }, (_, offset) =>
         formatSerialNumber({

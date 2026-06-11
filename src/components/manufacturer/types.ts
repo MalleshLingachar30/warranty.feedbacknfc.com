@@ -58,6 +58,8 @@ export type ManufacturerProductModel = {
   category: string;
   subCategory: string;
   modelNumber: string;
+  externalItemCode?: string;
+  externalItemSeriesCode?: string;
   description: string;
   imageUrl: string;
   warrantyDurationMonths: number;
@@ -112,6 +114,28 @@ export type TagGenerationSummary = {
   qrTags: number;
   dataMatrixTags: number;
   nfcTags: number;
+  readyForDispatch?: number;
+  dispatchMatched?: number;
+  pendingDispatchMatches?: number;
+};
+
+export type SerializationReadinessRow = {
+  productModelId: string;
+  productModelName: string;
+  modelNumber: string;
+  externalItemCode: string | null;
+  externalItemSeriesCode: string | null;
+  generatedAssets: number;
+  readyForDispatch: number;
+  dispatchMatched: number;
+  pendingDispatchMatches: number;
+};
+
+export type TagGenerationWorkspacePayload = {
+  productModels: ManufacturerProductModel[];
+  readinessRows: SerializationReadinessRow[];
+  batches: TagGenerationBatchRow[];
+  summary: TagGenerationSummary;
 };
 
 export type ServiceCenterRow = {
