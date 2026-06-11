@@ -1,6 +1,8 @@
 import { cache } from "react";
 
 import { ensureManufacturerAdmin } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { withDatabaseRetry } from "@/lib/db-retry";
 import { resolveOrganizationContext } from "@/lib/org-context";
 
 export type ManufacturerPageContext = {
@@ -28,7 +30,7 @@ export const resolveManufacturerPageContext = cache(
     let organizationName: string | null = null;
 
     if (organizationId) {
-      const organization = await import("@/lib/db").then(({ db }) =>
+      const organization = await withDatabaseRetry(() =>
         db.organization.findUnique({
           where: {
             id: organizationId,

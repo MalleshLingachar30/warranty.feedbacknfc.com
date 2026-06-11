@@ -206,6 +206,8 @@ export async function POST(request: Request) {
       select: {
         id: true,
         name: true,
+        externalItemCode: true,
+        externalItemSeriesCode: true,
         activationMode: true,
         partTraceabilityMode: true,
         smallPartTrackingMode: true,
@@ -317,6 +319,8 @@ export async function POST(request: Request) {
         metadata: {
           source: "manufacturer_tag_generation",
           sequence: index + 1,
+          externalItemCode: productModel.externalItemCode,
+          externalItemSeriesCode: productModel.externalItemSeriesCode,
         } as Prisma.InputJsonValue,
         generationBatchId: batchId,
       };
@@ -387,6 +391,8 @@ export async function POST(request: Request) {
     const requestOutputProfile = asRecord(body.outputProfile);
     const outputProfile: Record<string, unknown> = {
       symbologies,
+      externalItemCode: productModel.externalItemCode,
+      externalItemSeriesCode: productModel.externalItemSeriesCode,
     };
 
     if (serialPadLength > 0) {
@@ -431,6 +437,8 @@ export async function POST(request: Request) {
           productModel: {
             select: {
               name: true,
+              externalItemCode: true,
+              externalItemSeriesCode: true,
             },
           },
         },
@@ -461,6 +469,8 @@ export async function POST(request: Request) {
         batchCode: formatTagGenerationBatchCode(batch.id, batch.createdAt),
         createdAt: batch.createdAt.toISOString(),
         productModelName: batch.productModel.name,
+        externalItemCode: batch.productModel.externalItemCode,
+        externalItemSeriesCode: batch.productModel.externalItemSeriesCode,
         productClass: batch.productClass,
         quantity: batch.quantity,
         includeCartonRegistrationTags: batch.includeCartonRegistrationTags,
@@ -513,6 +523,8 @@ export async function GET(request: Request) {
           select: {
             id: true,
             name: true,
+            externalItemCode: true,
+            externalItemSeriesCode: true,
           },
         },
         _count: {

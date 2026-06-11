@@ -19,6 +19,10 @@ import {
   withSearchParams,
 } from "../../auth-flow-helpers";
 
+const clerkPublicAuthEnabled = Boolean(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+);
+
 const loadingState = (
   <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
     Loading sign-up...
@@ -48,6 +52,10 @@ function SignUpCard() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (!signUp) {
+    return loadingState;
+  }
 
   const isSubmitting = fetchStatus === "fetching";
   const shouldRenderClerkContinuation =
@@ -198,6 +206,20 @@ function SignUpCard() {
 }
 
 export default function SignUpPage() {
+  if (!clerkPublicAuthEnabled) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
+        <div className="w-full max-w-md rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 shadow-sm">
+          <p className="font-semibold">Authentication is not configured.</p>
+          <p className="mt-2">
+            This environment is missing the Clerk publishable key, so sign-up
+            cannot start yet.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <ClerkLoading>{loadingState}</ClerkLoading>

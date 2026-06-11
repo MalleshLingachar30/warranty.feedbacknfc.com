@@ -5,6 +5,7 @@ import type { UserRole } from "@prisma/client";
 
 import { getCachedCurrentUser } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
+import { withDatabaseRetry } from "@/lib/db-retry";
 import {
   parseAppRole,
   parseAppRoleFromClaims,
@@ -156,8 +157,8 @@ export type DbUserSnapshot = {
 
 const fetchDbUser = cache(
   async (clerkUserId: string): Promise<DbUserSnapshot | null> => {
-    return db.user
-      .findUnique({
+    return withDatabaseRetry(() =>
+      db.user.findUnique({
         where: {
           clerkId: clerkUserId,
         },
@@ -176,7 +177,7 @@ const fetchDbUser = cache(
           },
         },
       })
-      .then((row) => {
+    ).then((row) => {
         if (!row) {
           return null;
         }
@@ -202,31 +203,18 @@ const ensureDbUserForClerkUserCached = cache(
   ): Promise<DbUserSnapshot> => {
     const existing = await fetchDbUser(clerkUserId);
     if (existing) {
-      if (existing.name && existing.email && existing.phone) {
-        return existing;
-      }
+      return existing;
+    }
 
-      const clerk = await getCachedCurrentUser();
-      const name = existing.name ?? extractUserName(clerk);
-      const email = existing.email ?? extractPrimaryEmail(clerk);
-      const phone = existing.phone ?? extractPrimaryPhone(clerk);
-
-      if (
-        name === existing.name &&
-        email === existing.email &&
-        phone === existing.phone
-      ) {
-        return existing;
-      }
-
-      const updated = await db.user.update({
-        where: {
-          id: existing.id,
-        },
+    const clerk = await getCachedCurrentUser();
+    const created = await withDatabaseRetry(() =>
+      db.user.create({
         data: {
-          name,
-          email,
-          phone,
+          clerkId: clerkUserId,
+          role: defaultRole,
+          name: extractUserName(clerk),
+          email: extractPrimaryEmail(clerk),
+          phone: extractPrimaryPhone(clerk),
         },
         select: {
           id: true,
@@ -242,44 +230,8 @@ const ensureDbUserForClerkUserCached = cache(
             },
           },
         },
-      });
-
-      return {
-        id: updated.id,
-        clerkId: updated.clerkId,
-        role: updated.role,
-        organizationId: updated.organizationId,
-        email: updated.email,
-        phone: updated.phone,
-        name: updated.name,
-        technicianProfileId: updated.technicianProfile?.id ?? null,
-      };
-    }
-
-    const clerk = await getCachedCurrentUser();
-    const created = await db.user.create({
-      data: {
-        clerkId: clerkUserId,
-        role: defaultRole,
-        name: extractUserName(clerk),
-        email: extractPrimaryEmail(clerk),
-        phone: extractPrimaryPhone(clerk),
-      },
-      select: {
-        id: true,
-        clerkId: true,
-        role: true,
-        organizationId: true,
-        email: true,
-        phone: true,
-        name: true,
-        technicianProfile: {
-          select: {
-            id: true,
-          },
-        },
-      },
-    });
+      }),
+    );
 
     return {
       id: created.id,

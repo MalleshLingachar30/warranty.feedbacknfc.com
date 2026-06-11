@@ -5,11 +5,13 @@ import {
   ClerkLoaded,
   ClerkLoading,
   SignIn,
+  useAuth,
   useSignIn,
 } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { parseAppRoleFromClaims } from "@/lib/roles";
 
 import {
   continuationAppearance,
@@ -18,6 +20,10 @@ import {
   getTaskPath,
   withSearchParams,
 } from "../../auth-flow-helpers";
+
+const clerkPublicAuthEnabled = Boolean(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+);
 
 const loadingState = (
   <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
@@ -36,6 +42,7 @@ const unavailableState = (
 );
 
 function SignInCard() {
+  const { userId, isLoaded: authLoaded, sessionClaims } = useAuth();
   const { signIn, errors, fetchStatus } = useSignIn();
   const pathname = usePathname();
   const router = useRouter();
@@ -44,10 +51,46 @@ function SignInCard() {
     () => getRedirectTarget(searchParams),
     [searchParams],
   );
+  const resolvedRedirectTarget = useMemo(() => {
+    if (redirectTarget !== "/dashboard") {
+      return redirectTarget;
+    }
+
+    const role = parseAppRoleFromClaims(sessionClaims);
+
+    switch (role) {
+      case "manufacturer_admin":
+        return "/dashboard/manufacturer/integrations";
+      case "super_admin":
+        return "/dashboard/settings";
+      default:
+        return redirectTarget;
+    }
+  }, [redirectTarget, sessionClaims]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoaded || !userId) {
+      return;
+    }
+
+    router.replace(resolvedRedirectTarget);
+  }, [authLoaded, resolvedRedirectTarget, router, userId]);
+
+  if (authLoaded && userId) {
+    return (
+      <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
+        Redirecting to your account...
+      </div>
+    );
+  }
+
+  if (!signIn) {
+    return loadingState;
+  }
 
   const isSubmitting = fetchStatus === "fetching";
   const shouldRenderClerkContinuation =
@@ -68,7 +111,7 @@ function SignInCard() {
           return;
         }
 
-        const url = decorateUrl(redirectTarget);
+        const url = decorateUrl(resolvedRedirectTarget);
         if (url.startsWith("http")) {
           window.location.href = url;
           return;
@@ -112,10 +155,10 @@ function SignInCard() {
       <SignIn
         appearance={continuationAppearance}
         fallback={loadingState}
-        fallbackRedirectUrl={redirectTarget}
+        fallbackRedirectUrl={resolvedRedirectTarget}
         path="/sign-in"
         routing="path"
-        signUpFallbackRedirectUrl={redirectTarget}
+        signUpFallbackRedirectUrl={resolvedRedirectTarget}
         signUpUrl="/sign-up"
       />
     );
@@ -200,6 +243,20 @@ function SignInCard() {
 }
 
 export default function SignInPage() {
+  if (!clerkPublicAuthEnabled) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
+        <div className="w-full max-w-md rounded-lg border border-amber-300 bg-amber-50 p-6 text-sm text-amber-900 shadow-sm">
+          <p className="font-semibold">Authentication is not configured.</p>
+          <p className="mt-2">
+            This environment is missing the Clerk publishable key, so sign-in
+            cannot start yet.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <ClerkLoading>{loadingState}</ClerkLoading>

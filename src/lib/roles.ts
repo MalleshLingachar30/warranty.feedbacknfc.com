@@ -136,9 +136,25 @@ export function parseAppRoleFromClaims(sessionClaims: unknown): AppRole {
     }
   }
 
+  const camelPublicMetadata = sessionClaims.publicMetadata;
+  if (isRecord(camelPublicMetadata)) {
+    const publicRole = readRoleValue(camelPublicMetadata.role);
+    if (publicRole) {
+      return parseAppRole(publicRole);
+    }
+  }
+
   const unsafeMetadata = sessionClaims.unsafe_metadata;
   if (isRecord(unsafeMetadata)) {
     const unsafeRole = readRoleValue(unsafeMetadata.role);
+    if (unsafeRole) {
+      return parseAppRole(unsafeRole);
+    }
+  }
+
+  const camelUnsafeMetadata = sessionClaims.unsafeMetadata;
+  if (isRecord(camelUnsafeMetadata)) {
+    const unsafeRole = readRoleValue(camelUnsafeMetadata.role);
     if (unsafeRole) {
       return parseAppRole(unsafeRole);
     }

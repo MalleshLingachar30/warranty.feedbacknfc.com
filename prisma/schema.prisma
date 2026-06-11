@@ -248,11 +248,64 @@ enum PartUsageType {
   removed
 }
 
+enum IntegrationConnectorType {
+  sap
+}
+
+enum IntegrationFeedType {
+  item_master
+  distributor_master
+  serialized_dispatch
+}
+
+enum IntegrationConnectorStatus {
+  active
+  inactive
+}
+
+enum IntegrationRunStatus {
+  pending
+  running
+  completed
+  completed_with_errors
+  failed
+  cancelled
+}
+
+enum IntegrationStagingRecordStatus {
+  staged
+  normalized
+  validated
+  applied
+  failed
+  quarantined
+  replay_queued
+}
+
+enum IntegrationReplayRequestStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum DispatchReconciliationStatus {
+  pending_match
+  matched
+  applied
+  conflict
+  rejected
+  replayed
+}
+
 model Organization {
   id                    String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                  String           @db.VarChar(255)
   type                  OrganizationType
   slug                  String?          @unique @db.VarChar(100)
+  externalCode          String?          @map("external_code") @db.VarChar(120)
+  parentOrganizationId  String?          @map("parent_organization_id") @db.Uuid
   logoUrl               String?          @map("logo_url")
   address               String?
   city                  String?          @db.VarChar(100)
@@ -268,20 +321,34 @@ model Organization {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  users                User[]
-  productModels        ProductModel[]
-  allocatedStickers    Sticker[]             @relation("AllocatedOrganization")
-  products             Product[]
-  serviceCenters       ServiceCenter[]
-  manufacturerClaims   WarrantyClaim[]       @relation("ManufacturerOrganizationClaims")
-  serviceCenterClaims  WarrantyClaim[]       @relation("ServiceCenterOrganizationClaims")
-  stickerAllocations   StickerAllocation[]
-  assetIdentities      AssetIdentity[]
-  serializedSalesLines SerializedSalesLine[]
-  saleRegistrations    SaleRegistration[]
-  tagGenerationBatches TagGenerationBatch[]
-  installationJobs     InstallationJob[]     @relation("ManufacturerInstallationJobs")
+  parentOrganization               Organization?                 @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
+  childOrganizations               Organization[]                @relation("OrganizationHierarchy")
+  users                            User[]
+  productModels                    ProductModel[]
+  allocatedStickers                Sticker[]                     @relation("AllocatedOrganization")
+  products                         Product[]
+  serviceCenters                   ServiceCenter[]
+  manufacturerClaims               WarrantyClaim[]               @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims              WarrantyClaim[]               @relation("ServiceCenterOrganizationClaims")
+  stickerAllocations               StickerAllocation[]
+  assetIdentities                  AssetIdentity[]
+  serializedSalesLines             SerializedSalesLine[]
+  saleRegistrations                SaleRegistration[]
+  tagGenerationBatches             TagGenerationBatch[]
+  installationJobs                 InstallationJob[]             @relation("ManufacturerInstallationJobs")
+  integrationConnectors            IntegrationConnector[]
+  integrationFeeds                 IntegrationFeed[]
+  integrationRuns                  IntegrationRun[]
+  integrationStagingRecords        IntegrationStagingRecord[]
+  integrationReplayRequests        IntegrationReplayRequest[]
+  erpItemMasterRecords             ErpItemMasterRecord[]         @relation("OrganizationErpItemMasterRecords")
+  importedDistributorMasterRecords ErpDistributorMasterRecord[]  @relation("ManufacturerErpDistributorMasterRecords")
+  mappedDistributorMasterRecords   ErpDistributorMasterRecord[]  @relation("MappedDistributorMasterRecord")
+  erpSerializedDispatchRecords     ErpSerializedDispatchRecord[] @relation("ManufacturerErpSerializedDispatchRecords")
+  mappedSerializedDispatchRecords  ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchDistributor")
 
+  @@index([externalCode], map: "idx_organizations_external_code")
+  @@index([parentOrganizationId], map: "idx_organizations_parent_org")
   @@map("organizations")
 }
 
@@ -299,20 +366,158 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  organization                Organization?        @relation(fields: [organizationId], references: [id])
-  technicianProfile           Technician?
-  reportedTickets             Ticket[]             @relation("ReportedTickets")
-  approvedClaims              WarrantyClaim[]      @relation("ClaimApprover")
-  timelineEvents              TicketTimeline[]     @relation("TimelineActor")
-  stickerAllocations          StickerAllocation[]  @relation("AllocatedByUser")
-  createdTagGenerationBatches TagGenerationBatch[] @relation("TagGenerationBatchCreator")
-  customerAssetIdentities     AssetIdentity[]      @relation("AssetIdentityCustomer")
-  customerProducts            Product[]            @relation("CustomerProducts")
-  scanLogs                    ScanLog[]            @relation("ScanLogActor")
+  organization                 Organization?              @relation(fields: [organizationId], references: [id])
+  technicianProfile            Technician?
+  reportedTickets              Ticket[]                   @relation("ReportedTickets")
+  approvedClaims               WarrantyClaim[]            @relation("ClaimApprover")
+  timelineEvents               TicketTimeline[]           @relation("TimelineActor")
+  stickerAllocations           StickerAllocation[]        @relation("AllocatedByUser")
+  createdTagGenerationBatches  TagGenerationBatch[]       @relation("TagGenerationBatchCreator")
+  customerAssetIdentities      AssetIdentity[]            @relation("AssetIdentityCustomer")
+  customerProducts             Product[]                  @relation("CustomerProducts")
+  scanLogs                     ScanLog[]                  @relation("ScanLogActor")
   submittedInstallationReports InstallationReport[]
-  linkedPartUsages            JobPartUsage[]
+  linkedPartUsages             JobPartUsage[]
+  integrationReplayRequests    IntegrationReplayRequest[] @relation("IntegrationReplayRequestedBy")
 
   @@map("users")
+}
+
+model IntegrationConnector {
+  id             String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                     @map("organization_id") @db.Uuid
+  connectorType  IntegrationConnectorType   @map("connector_type")
+  name           String                     @db.VarChar(120)
+  status         IntegrationConnectorStatus @default(active)
+  settings       Json                       @default(dbgenerated("'{}'::jsonb"))
+  lastRunAt      DateTime?                  @map("last_run_at")
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  feeds          IntegrationFeed[]
+  runs           IntegrationRun[]
+  stagingRows    IntegrationStagingRecord[]
+  replayRequests IntegrationReplayRequest[]
+
+  @@unique([organizationId, connectorType], map: "integration_connectors_org_type_key")
+  @@index([organizationId, status], map: "idx_integration_connectors_org_status")
+  @@map("integration_connectors")
+}
+
+model IntegrationFeed {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connectorId         String              @map("connector_id") @db.Uuid
+  organizationId      String              @map("organization_id") @db.Uuid
+  feedType            IntegrationFeedType @map("feed_type")
+  sourceSystem        String              @default("sap") @map("source_system") @db.VarChar(50)
+  displayName         String              @map("display_name") @db.VarChar(150)
+  enabled             Boolean             @default(true)
+  configuration       Json                @default(dbgenerated("'{}'::jsonb"))
+  lastSuccessfulRunAt DateTime?           @map("last_successful_run_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  connector      IntegrationConnector       @relation(fields: [connectorId], references: [id])
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  runs           IntegrationRun[]
+  stagingRows    IntegrationStagingRecord[]
+  replayRequests IntegrationReplayRequest[]
+
+  @@unique([connectorId, feedType], map: "integration_feeds_connector_type_key")
+  @@index([organizationId, feedType], map: "idx_integration_feeds_org_type")
+  @@map("integration_feeds")
+}
+
+model IntegrationRun {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connectorId     String               @map("connector_id") @db.Uuid
+  feedId          String               @map("feed_id") @db.Uuid
+  organizationId  String               @map("organization_id") @db.Uuid
+  feedType        IntegrationFeedType  @map("feed_type")
+  sourceSystem    String               @default("sap") @map("source_system") @db.VarChar(50)
+  status          IntegrationRunStatus @default(pending)
+  totalRowCount   Int                  @default(0) @map("total_row_count")
+  stagedRowCount  Int                  @default(0) @map("staged_row_count")
+  appliedRowCount Int                  @default(0) @map("applied_row_count")
+  failedRowCount  Int                  @default(0) @map("failed_row_count")
+  metadata        Json                 @default(dbgenerated("'{}'::jsonb"))
+  errorSummary    Json                 @default(dbgenerated("'{}'::jsonb")) @map("error_summary")
+  startedAt       DateTime             @default(now()) @map("started_at")
+  completedAt     DateTime?            @map("completed_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  connector      IntegrationConnector       @relation(fields: [connectorId], references: [id])
+  feed           IntegrationFeed            @relation(fields: [feedId], references: [id])
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  stagingRows    IntegrationStagingRecord[]
+  replayRequests IntegrationReplayRequest[]
+
+  @@index([organizationId, feedType, startedAt], map: "idx_integration_runs_org_feed_started")
+  @@index([status, startedAt], map: "idx_integration_runs_status_started")
+  @@map("integration_runs")
+}
+
+model IntegrationStagingRecord {
+  id                String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connectorId       String                         @map("connector_id") @db.Uuid
+  feedId            String                         @map("feed_id") @db.Uuid
+  runId             String                         @map("run_id") @db.Uuid
+  organizationId    String                         @map("organization_id") @db.Uuid
+  feedType          IntegrationFeedType            @map("feed_type")
+  sourceSystem      String                         @default("sap") @map("source_system") @db.VarChar(50)
+  externalRecordKey String?                        @map("external_record_key") @db.VarChar(180)
+  rowNumber         Int?                           @map("row_number")
+  rawPayload        Json                           @map("raw_payload")
+  normalizedPayload Json?                          @map("normalized_payload")
+  status            IntegrationStagingRecordStatus @default(staged)
+  domainTargetType  String?                        @map("domain_target_type") @db.VarChar(80)
+  domainTargetId    String?                        @map("domain_target_id") @db.Uuid
+  errorCode         String?                        @map("error_code") @db.VarChar(120)
+  errorMessage      String?                        @map("error_message")
+  processedAt       DateTime?                      @map("processed_at")
+  replayRequestedAt DateTime?                      @map("replay_requested_at")
+  createdAt         DateTime                       @default(now()) @map("created_at")
+  updatedAt         DateTime                       @updatedAt @map("updated_at")
+
+  connector      IntegrationConnector       @relation(fields: [connectorId], references: [id])
+  feed           IntegrationFeed            @relation(fields: [feedId], references: [id])
+  run            IntegrationRun             @relation(fields: [runId], references: [id])
+  organization   Organization               @relation(fields: [organizationId], references: [id])
+  replayRequests IntegrationReplayRequest[]
+
+  @@index([organizationId, feedType, status], map: "idx_integration_staging_org_feed_status")
+  @@index([runId, rowNumber], map: "idx_integration_staging_run_row")
+  @@index([externalRecordKey], map: "idx_integration_staging_external_key")
+  @@map("integration_staging_records")
+}
+
+model IntegrationReplayRequest {
+  id                String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  connectorId       String                         @map("connector_id") @db.Uuid
+  feedId            String                         @map("feed_id") @db.Uuid
+  organizationId    String                         @map("organization_id") @db.Uuid
+  runId             String?                        @map("run_id") @db.Uuid
+  stagingRecordId   String?                        @map("staging_record_id") @db.Uuid
+  requestedByUserId String?                        @map("requested_by_user_id") @db.Uuid
+  status            IntegrationReplayRequestStatus @default(pending)
+  reason            String?                        @db.VarChar(255)
+  metadata          Json                           @default(dbgenerated("'{}'::jsonb"))
+  startedAt         DateTime?                      @map("started_at")
+  completedAt       DateTime?                      @map("completed_at")
+  createdAt         DateTime                       @default(now()) @map("created_at")
+  updatedAt         DateTime                       @updatedAt @map("updated_at")
+
+  connector       IntegrationConnector      @relation(fields: [connectorId], references: [id])
+  feed            IntegrationFeed           @relation(fields: [feedId], references: [id])
+  organization    Organization              @relation(fields: [organizationId], references: [id])
+  run             IntegrationRun?           @relation(fields: [runId], references: [id])
+  stagingRecord   IntegrationStagingRecord? @relation(fields: [stagingRecordId], references: [id])
+  requestedByUser User?                     @relation("IntegrationReplayRequestedBy", fields: [requestedByUserId], references: [id])
+
+  @@index([organizationId, status, createdAt], map: "idx_integration_replays_org_status_created")
+  @@map("integration_replay_requests")
 }
 
 model ChatLead {
@@ -350,6 +555,8 @@ model EndpointMonitorState {
 model ProductModel {
   id                              String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId                  String                    @map("organization_id") @db.Uuid
+  externalItemCode                String?                   @map("external_item_code") @db.VarChar(120)
+  externalItemSeriesCode          String?                   @map("external_item_series_code") @db.VarChar(120)
   name                            String                    @db.VarChar(255)
   category                        String                    @db.VarChar(100)
   subCategory                     String?                   @map("sub_category") @db.VarChar(100)
@@ -382,13 +589,77 @@ model ProductModel {
   createdAt                       DateTime                  @default(now()) @map("created_at")
   updatedAt                       DateTime                  @updatedAt @map("updated_at")
 
-  organization         Organization         @relation(fields: [organizationId], references: [id])
-  products             Product[]
-  stickerAllocations   StickerAllocation[]
-  assetIdentities      AssetIdentity[]
-  tagGenerationBatches TagGenerationBatch[]
+  organization              Organization                  @relation(fields: [organizationId], references: [id])
+  products                  Product[]
+  stickerAllocations        StickerAllocation[]
+  assetIdentities           AssetIdentity[]
+  tagGenerationBatches      TagGenerationBatch[]
+  erpItemMasterRecords      ErpItemMasterRecord[]
+  erpSerializedDispatchRows ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchProductModel")
 
+  @@unique([organizationId, externalItemCode], map: "product_models_org_external_item_code_key")
+  @@index([organizationId, externalItemSeriesCode], map: "idx_product_models_org_external_series")
   @@map("product_models")
+}
+
+model ErpItemMasterRecord {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  externalItemCode   String   @map("external_item_code") @db.VarChar(120)
+  externalSeriesCode String?  @map("external_series_code") @db.VarChar(120)
+  itemDescription    String?  @map("item_description")
+  category           String?  @db.VarChar(100)
+  subCategory        String?  @map("sub_category") @db.VarChar(100)
+  modelNumber        String?  @map("model_number") @db.VarChar(100)
+  isActive           Boolean  @default(true) @map("is_active")
+  rawPayload         Json     @map("raw_payload")
+  normalizedPayload  Json     @map("normalized_payload")
+  productModelId     String?  @map("product_model_id") @db.Uuid
+  lastRunId          String?  @map("last_run_id") @db.Uuid
+  firstImportedAt    DateTime @default(now()) @map("first_imported_at")
+  lastImportedAt     DateTime @default(now()) @map("last_imported_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  organization Organization  @relation("OrganizationErpItemMasterRecords", fields: [organizationId], references: [id])
+  productModel ProductModel? @relation(fields: [productModelId], references: [id])
+
+  @@unique([organizationId, externalItemCode], map: "erp_item_master_records_org_item_code_key")
+  @@index([organizationId, isActive], map: "idx_erp_item_master_org_active")
+  @@index([productModelId], map: "idx_erp_item_master_product_model")
+  @@map("erp_item_master_records")
+}
+
+model ErpDistributorMasterRecord {
+  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId          String   @map("organization_id") @db.Uuid
+  externalDistributorCode String   @map("external_distributor_code") @db.VarChar(120)
+  distributorName         String   @map("distributor_name") @db.VarChar(255)
+  address                 String?
+  city                    String?  @db.VarChar(100)
+  state                   String?  @db.VarChar(100)
+  country                 String?  @db.VarChar(50)
+  pincode                 String?  @db.VarChar(10)
+  contactName             String?  @map("contact_name") @db.VarChar(255)
+  contactEmail            String?  @map("contact_email") @db.VarChar(255)
+  contactPhone            String?  @map("contact_phone") @db.VarChar(20)
+  isActive                Boolean  @default(true) @map("is_active")
+  rawPayload              Json     @map("raw_payload")
+  normalizedPayload       Json     @map("normalized_payload")
+  mappedOrganizationId    String?  @map("mapped_organization_id") @db.Uuid
+  lastRunId               String?  @map("last_run_id") @db.Uuid
+  firstImportedAt         DateTime @default(now()) @map("first_imported_at")
+  lastImportedAt          DateTime @default(now()) @map("last_imported_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  organization       Organization  @relation("ManufacturerErpDistributorMasterRecords", fields: [organizationId], references: [id])
+  mappedOrganization Organization? @relation("MappedDistributorMasterRecord", fields: [mappedOrganizationId], references: [id])
+
+  @@unique([organizationId, externalDistributorCode], map: "erp_distributor_master_records_org_code_key")
+  @@index([organizationId, isActive], map: "idx_erp_distributor_master_org_active")
+  @@index([mappedOrganizationId], map: "idx_erp_distributor_master_mapped_org")
+  @@map("erp_distributor_master_records")
 }
 
 model TagGenerationBatch {
@@ -436,19 +707,20 @@ model AssetIdentity {
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
 
-  organization        Organization         @relation(fields: [organizationId], references: [id])
-  productModel        ProductModel         @relation(fields: [productModelId], references: [id])
-  customer            User?                @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
-  rootMainAsset       AssetIdentity?       @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
-  childAssets         AssetIdentity[]      @relation("AssetRootLineage")
-  generationBatch     TagGenerationBatch?  @relation(fields: [generationBatchId], references: [id])
-  serializedSalesLine SerializedSalesLine?
-  saleRegistration    SaleRegistration?
-  installationJobs    InstallationJob[]
-  installationReports InstallationReport[]
-  tags                AssetTag[]
-  usagesAsMainAsset   JobPartUsage[]      @relation("JobPartUsageMainAsset")
-  usagesAsUsedAsset   JobPartUsage[]      @relation("JobPartUsageUsedAsset")
+  organization              Organization                  @relation(fields: [organizationId], references: [id])
+  productModel              ProductModel                  @relation(fields: [productModelId], references: [id])
+  customer                  User?                         @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
+  rootMainAsset             AssetIdentity?                @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
+  childAssets               AssetIdentity[]               @relation("AssetRootLineage")
+  generationBatch           TagGenerationBatch?           @relation(fields: [generationBatchId], references: [id])
+  serializedSalesLine       SerializedSalesLine?
+  saleRegistration          SaleRegistration?
+  installationJobs          InstallationJob[]
+  installationReports       InstallationReport[]
+  tags                      AssetTag[]
+  usagesAsMainAsset         JobPartUsage[]                @relation("JobPartUsageMainAsset")
+  usagesAsUsedAsset         JobPartUsage[]                @relation("JobPartUsageUsedAsset")
+  erpSerializedDispatchRows ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchAsset")
 
   @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
   @@index([organizationId, productModelId], map: "idx_asset_identities_org_model")
@@ -503,14 +775,54 @@ model SerializedSalesLine {
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  organization     Organization      @relation(fields: [organizationId], references: [id])
-  asset            AssetIdentity     @relation(fields: [assetId], references: [id])
-  saleRegistration SaleRegistration?
+  organization                Organization                 @relation(fields: [organizationId], references: [id])
+  asset                       AssetIdentity                @relation(fields: [assetId], references: [id])
+  saleRegistration            SaleRegistration?
+  erpSerializedDispatchRecord ErpSerializedDispatchRecord? @relation("ErpSerializedDispatchSalesLine")
 
   @@unique([organizationId, sourceRecordKey], map: "serialized_sales_lines_org_source_record_key_key")
   @@index([organizationId, transactionDate], map: "idx_serialized_sales_lines_org_date")
   @@index([organizationId, serialNumber], map: "idx_serialized_sales_lines_org_serial")
   @@map("serialized_sales_lines")
+}
+
+model ErpSerializedDispatchRecord {
+  id                     String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId         String                       @map("organization_id") @db.Uuid
+  externalDocumentNumber String?                      @map("external_document_number") @db.VarChar(120)
+  externalLineNumber     String?                      @map("external_line_number") @db.VarChar(80)
+  externalRecordKey      String                       @map("external_record_key") @db.VarChar(180)
+  itemCode               String?                      @map("item_code") @db.VarChar(120)
+  serialNumber           String                       @map("serial_number") @db.VarChar(255)
+  distributorCode        String?                      @map("distributor_code") @db.VarChar(120)
+  warehouseCode          String?                      @map("warehouse_code") @db.VarChar(120)
+  transactionDate        DateTime?                    @map("transaction_date")
+  quantity               Decimal                      @default(1.00) @db.Decimal(10, 2)
+  sourceSystem           String                       @default("sap") @map("source_system") @db.VarChar(80)
+  status                 DispatchReconciliationStatus @default(pending_match)
+  rawPayload             Json                         @map("raw_payload")
+  normalizedPayload      Json                         @map("normalized_payload")
+  assetId                String?                      @map("asset_id") @db.Uuid
+  productModelId         String?                      @map("product_model_id") @db.Uuid
+  mappedDistributorId    String?                      @map("mapped_distributor_id") @db.Uuid
+  serializedSalesLineId  String?                      @unique @map("serialized_sales_line_id") @db.Uuid
+  lastRunId              String?                      @map("last_run_id") @db.Uuid
+  firstImportedAt        DateTime                     @default(now()) @map("first_imported_at")
+  lastImportedAt         DateTime                     @default(now()) @map("last_imported_at")
+  createdAt              DateTime                     @default(now()) @map("created_at")
+  updatedAt              DateTime                     @updatedAt @map("updated_at")
+
+  organization        Organization         @relation("ManufacturerErpSerializedDispatchRecords", fields: [organizationId], references: [id])
+  asset               AssetIdentity?       @relation("ErpSerializedDispatchAsset", fields: [assetId], references: [id])
+  productModel        ProductModel?        @relation("ErpSerializedDispatchProductModel", fields: [productModelId], references: [id])
+  mappedDistributor   Organization?        @relation("ErpSerializedDispatchDistributor", fields: [mappedDistributorId], references: [id])
+  serializedSalesLine SerializedSalesLine? @relation("ErpSerializedDispatchSalesLine", fields: [serializedSalesLineId], references: [id])
+
+  @@unique([organizationId, externalRecordKey], map: "erp_serialized_dispatch_records_org_record_key_key")
+  @@index([organizationId, status, lastImportedAt], map: "idx_erp_serialized_dispatch_org_status_imported")
+  @@index([organizationId, serialNumber], map: "idx_erp_serialized_dispatch_org_serial")
+  @@index([assetId], map: "idx_erp_serialized_dispatch_asset")
+  @@map("erp_serialized_dispatch_records")
 }
 
 model SaleRegistration {
@@ -556,11 +868,11 @@ model InstallationJob {
   createdAt                     DateTime              @default(now()) @map("created_at")
   updatedAt                     DateTime              @updatedAt @map("updated_at")
 
-  asset                 AssetIdentity     @relation(fields: [assetId], references: [id])
-  saleRegistration      SaleRegistration? @relation(fields: [saleRegistrationId], references: [id])
-  manufacturerOrg       Organization      @relation("ManufacturerInstallationJobs", fields: [manufacturerOrgId], references: [id])
-  assignedServiceCenter ServiceCenter?    @relation("AssignedServiceCenterInstallationJobs", fields: [assignedServiceCenterId], references: [id])
-  assignedTechnician    Technician?       @relation("AssignedTechnicianInstallationJobs", fields: [assignedTechnicianId], references: [id])
+  asset                 AssetIdentity       @relation(fields: [assetId], references: [id])
+  saleRegistration      SaleRegistration?   @relation(fields: [saleRegistrationId], references: [id])
+  manufacturerOrg       Organization        @relation("ManufacturerInstallationJobs", fields: [manufacturerOrgId], references: [id])
+  assignedServiceCenter ServiceCenter?      @relation("AssignedServiceCenterInstallationJobs", fields: [assignedServiceCenterId], references: [id])
+  assignedTechnician    Technician?         @relation("AssignedTechnicianInstallationJobs", fields: [assignedTechnicianId], references: [id])
   installationReport    InstallationReport?
   partUsages            JobPartUsage[]
 
@@ -571,34 +883,34 @@ model InstallationJob {
 }
 
 model InstallationReport {
-  id                             String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  installationJobId              String                           @unique @map("installation_job_id") @db.Uuid
-  assetId                        String                           @map("asset_id") @db.Uuid
-  submittedByUserId              String                           @map("submitted_by_user_id") @db.Uuid
-  submittedByRole                InstallationReportSubmitterRole  @map("submitted_by_role")
-  customerName                   String                           @map("customer_name") @db.VarChar(255)
-  customerPhone                  String                           @map("customer_phone") @db.VarChar(20)
-  customerEmail                  String?                          @map("customer_email") @db.VarChar(255)
-  installAddress                 String                           @map("install_address")
-  installCity                    String                           @map("install_city") @db.VarChar(100)
-  installState                   String                           @map("install_state") @db.VarChar(100)
-  installPincode                 String                           @map("install_pincode") @db.VarChar(10)
-  installationDate               DateTime                         @map("installation_date")
-  installerName                  String                           @map("installer_name") @db.VarChar(255)
-  unitSerialNumber               String                           @map("unit_serial_number") @db.VarChar(255)
-  geoLocation                    Json                             @map("geo_location")
-  customerAcknowledgementType    CustomerAcknowledgementType      @map("customer_acknowledgement_type")
-  customerAcknowledgementPayload Json                             @map("customer_acknowledgement_payload")
-  photoUrls                      String[]                         @default([]) @map("photo_urls")
-  checklistResponses             Json                             @map("checklist_responses")
-  commissioningData              Json                             @map("commissioning_data")
-  submittedAt                    DateTime                         @default(now()) @map("submitted_at")
-  createdAt                      DateTime                         @default(now()) @map("created_at")
-  updatedAt                      DateTime                         @updatedAt @map("updated_at")
+  id                             String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationJobId              String                          @unique @map("installation_job_id") @db.Uuid
+  assetId                        String                          @map("asset_id") @db.Uuid
+  submittedByUserId              String                          @map("submitted_by_user_id") @db.Uuid
+  submittedByRole                InstallationReportSubmitterRole @map("submitted_by_role")
+  customerName                   String                          @map("customer_name") @db.VarChar(255)
+  customerPhone                  String                          @map("customer_phone") @db.VarChar(20)
+  customerEmail                  String?                         @map("customer_email") @db.VarChar(255)
+  installAddress                 String                          @map("install_address")
+  installCity                    String                          @map("install_city") @db.VarChar(100)
+  installState                   String                          @map("install_state") @db.VarChar(100)
+  installPincode                 String                          @map("install_pincode") @db.VarChar(10)
+  installationDate               DateTime                        @map("installation_date")
+  installerName                  String                          @map("installer_name") @db.VarChar(255)
+  unitSerialNumber               String                          @map("unit_serial_number") @db.VarChar(255)
+  geoLocation                    Json                            @map("geo_location")
+  customerAcknowledgementType    CustomerAcknowledgementType     @map("customer_acknowledgement_type")
+  customerAcknowledgementPayload Json                            @map("customer_acknowledgement_payload")
+  photoUrls                      String[]                        @default([]) @map("photo_urls")
+  checklistResponses             Json                            @map("checklist_responses")
+  commissioningData              Json                            @map("commissioning_data")
+  submittedAt                    DateTime                        @default(now()) @map("submitted_at")
+  createdAt                      DateTime                        @default(now()) @map("created_at")
+  updatedAt                      DateTime                        @updatedAt @map("updated_at")
 
   installationJob InstallationJob @relation(fields: [installationJobId], references: [id])
-  asset           AssetIdentity    @relation(fields: [assetId], references: [id])
-  submittedByUser User             @relation(fields: [submittedByUserId], references: [id])
+  asset           AssetIdentity   @relation(fields: [assetId], references: [id])
+  submittedByUser User            @relation(fields: [submittedByUserId], references: [id])
 
   @@index([assetId], map: "idx_installation_reports_asset")
   @@index([submittedByUserId], map: "idx_installation_reports_submitted_by")
@@ -607,19 +919,19 @@ model InstallationReport {
 }
 
 model JobPartUsage {
-  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  installationJobId String?        @map("installation_job_id") @db.Uuid
-  ticketId          String?        @map("ticket_id") @db.Uuid
-  mainAssetId       String         @map("main_asset_id") @db.Uuid
-  usedAssetId       String?        @map("used_asset_id") @db.Uuid
-  usedTagId         String?        @map("used_tag_id") @db.Uuid
-  usageType         PartUsageType  @map("usage_type")
-  quantity          Decimal        @default(1.000) @db.Decimal(12, 3)
-  linkedByUserId    String         @map("linked_by_user_id") @db.Uuid
-  linkedAt          DateTime       @default(now()) @map("linked_at")
-  metadata          Json           @default(dbgenerated("'{}'::jsonb"))
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationJobId String?       @map("installation_job_id") @db.Uuid
+  ticketId          String?       @map("ticket_id") @db.Uuid
+  mainAssetId       String        @map("main_asset_id") @db.Uuid
+  usedAssetId       String?       @map("used_asset_id") @db.Uuid
+  usedTagId         String?       @map("used_tag_id") @db.Uuid
+  usageType         PartUsageType @map("usage_type")
+  quantity          Decimal       @default(1.000) @db.Decimal(12, 3)
+  linkedByUserId    String        @map("linked_by_user_id") @db.Uuid
+  linkedAt          DateTime      @default(now()) @map("linked_at")
+  metadata          Json          @default(dbgenerated("'{}'::jsonb"))
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
 
   installationJob InstallationJob? @relation(fields: [installationJobId], references: [id])
   ticket          Ticket?          @relation(fields: [ticketId], references: [id])

@@ -3,17 +3,20 @@ import "server-only";
 import { cache } from "react";
 
 import { db } from "@/lib/db";
+import { withDatabaseRetry } from "@/lib/db-retry";
 import { sessionHasRole } from "@/lib/org-context";
 
 const fetchDbUserRole = cache(async (clerkUserId: string) => {
-  return db.user.findUnique({
-    where: {
-      clerkId: clerkUserId,
-    },
-    select: {
-      role: true,
-    },
-  });
+  return withDatabaseRetry(() =>
+    db.user.findUnique({
+      where: {
+        clerkId: clerkUserId,
+      },
+      select: {
+        role: true,
+      },
+    }),
+  );
 });
 
 export async function clerkOrDbHasRole(input: {

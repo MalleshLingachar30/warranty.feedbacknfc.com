@@ -18,6 +18,7 @@ const items = [
   },
   { label: "Claims", href: "/dashboard/manufacturer/claims" },
   { label: "Analytics", href: "/dashboard/manufacturer/analytics" },
+  { label: "Integrations", href: "/dashboard/manufacturer/integrations" },
   { label: "Settings", href: "/dashboard/manufacturer/settings" },
 ];
 

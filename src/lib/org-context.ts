@@ -2,6 +2,7 @@ import { type OrganizationType } from "@prisma/client";
 import { cache } from "react";
 
 import { db } from "@/lib/db";
+import { withDatabaseRetry } from "@/lib/db-retry";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -93,21 +94,23 @@ const resolveOrganizationContextCached = cache(
     clerkOrgId: string | null,
     requiredOrganizationType: OrganizationType,
   ): Promise<OrganizationContext> => {
-    const userRecord = await db.user.findUnique({
-      where: {
-        clerkId: clerkUserId,
-      },
-      select: {
-        id: true,
-        organizationId: true,
-        organization: {
-          select: {
-            id: true,
-            type: true,
+    const userRecord = await withDatabaseRetry(() =>
+      db.user.findUnique({
+        where: {
+          clerkId: clerkUserId,
+        },
+        select: {
+          id: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              type: true,
+            },
           },
         },
-      },
-    });
+      }),
+    );
 
     const candidateOrgIds = [
       clerkOrgId,
@@ -127,17 +130,19 @@ const resolveOrganizationContextCached = cache(
     }
 
     if (uniqueCandidateOrgIds.length > 0) {
-      const organizations = await db.organization.findMany({
-        where: {
-          id: {
-            in: uniqueCandidateOrgIds,
+      const organizations = await withDatabaseRetry(() =>
+        db.organization.findMany({
+          where: {
+            id: {
+              in: uniqueCandidateOrgIds,
+            },
           },
-        },
-        select: {
-          id: true,
-          type: true,
-        },
-      });
+          select: {
+            id: true,
+            type: true,
+          },
+        }),
+      );
 
       const byId = new Map(organizations.map((org) => [org.id, org]));
 
@@ -157,17 +162,19 @@ const resolveOrganizationContextCached = cache(
     }
 
     if (process.env.NODE_ENV !== "production") {
-      const fallbackOrg = await db.organization.findFirst({
-        where: {
-          type: requiredOrganizationType,
-        },
-        orderBy: {
-          createdAt: "asc",
-        },
-        select: {
-          id: true,
-        },
-      });
+      const fallbackOrg = await withDatabaseRetry(() =>
+        db.organization.findFirst({
+          where: {
+            type: requiredOrganizationType,
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+          select: {
+            id: true,
+          },
+        }),
+      );
 
       if (fallbackOrg) {
         return {

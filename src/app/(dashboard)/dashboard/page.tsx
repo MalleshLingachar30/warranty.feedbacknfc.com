@@ -2,11 +2,15 @@ import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { getCachedAuth } from "@/lib/clerk-session";
+import { getCachedAuth, getCachedCurrentUser } from "@/lib/clerk-session";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { DevRoleSwitcher } from "@/components/dashboard/dev-role-switcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { NAVIGATION_BY_ROLE, getRoleLabel } from "@/lib/roles";
+import {
+  NAVIGATION_BY_ROLE,
+  getRoleLabel,
+  parseAppRoleFromClaims,
+} from "@/lib/roles";
 
 export default async function DashboardPage() {
   const { userId, sessionClaims } = await getCachedAuth();
@@ -15,15 +19,26 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  const { role } = await resolveAppRoleForSession({
-    clerkUserId: userId,
-    sessionClaims,
-  });
+  const claimsRole = parseAppRoleFromClaims(sessionClaims);
+  const clerkUser =
+    claimsRole === "customer" ? await getCachedCurrentUser() : null;
+  const clerkRole = clerkUser ? parseAppRoleFromClaims(clerkUser) : "customer";
+  const role =
+    claimsRole !== "customer"
+      ? claimsRole
+      : clerkRole !== "customer"
+        ? clerkRole
+      : (
+          await resolveAppRoleForSession({
+            clerkUserId: userId,
+            sessionClaims,
+          })
+        ).role;
   const navItems = NAVIGATION_BY_ROLE[role] ?? [];
   const workspaceItems = navItems.filter((item) => item.href !== "/dashboard");
 
   if (role === "manufacturer_admin") {
-    redirect("/dashboard/manufacturer");
+    redirect("/dashboard/manufacturer/integrations");
   }
 
   if (role === "customer") {
