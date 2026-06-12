@@ -135,8 +135,16 @@ export async function POST(request: Request) {
     const isInstallationDriven =
       resolvedTag.asset.productModel.activationMode === "installation_driven" ||
       resolvedTag.asset.productModel.installationRequired;
+    const isInstallationPendingLifecycle =
+      resolvedTag.asset.lifecycleState === "sold_pending_installation" ||
+      resolvedTag.asset.lifecycleState === "installation_scheduled" ||
+      resolvedTag.asset.lifecycleState === "installation_in_progress";
+    const supportsInstallationRequest =
+      isInstallationDriven ||
+      isInstallationPendingLifecycle ||
+      Boolean(resolvedTag.asset.saleRegistration);
 
-    if (!isInstallationDriven) {
+    if (!supportsInstallationRequest) {
       return NextResponse.json(
         { error: "This product does not use the installation-request flow." },
         { status: 409 },

@@ -480,6 +480,10 @@ export default async function TagResolverPage({
     const isInstallationDriven =
       resolvedTag.asset.productModel.activationMode === "installation_driven" ||
       resolvedTag.asset.productModel.installationRequired;
+    const supportsInstallationJourney =
+      isInstallationDriven ||
+      isInstallationPendingLifecycle(resolvedTag.asset.lifecycleState) ||
+      Boolean(resolvedTag.asset.saleRegistration);
 
     const installationJob =
       resolvedTag.asset.saleRegistration?.installationJob ??
@@ -487,7 +491,7 @@ export default async function TagResolverPage({
       null;
 
     if (
-      isInstallationDriven &&
+      supportsInstallationJourney &&
       (resolvedTag.asset.lifecycleState === "generated" ||
         resolvedTag.asset.lifecycleState === "packed")
     ) {
@@ -553,7 +557,7 @@ export default async function TagResolverPage({
     }
 
     if (
-      isInstallationDriven &&
+      supportsInstallationJourney &&
       (isInstallationPendingLifecycle(resolvedTag.asset.lifecycleState) ||
         Boolean(resolvedTag.asset.saleRegistration) ||
         Boolean(installationJob))
