@@ -307,6 +307,8 @@ export async function POST(
         customer,
         job: nextJob,
       };
+    }, {
+      timeout: 15_000,
     });
 
     void sendWarrantyActivatedNotification({

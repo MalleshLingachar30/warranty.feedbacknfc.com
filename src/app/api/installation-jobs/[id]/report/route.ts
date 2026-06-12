@@ -722,6 +722,8 @@ export async function POST(
         customer,
         job: nextJob,
       };
+    }, {
+      timeout: 15_000,
     });
 
     const reportId = updated.job.installationReport?.id;
