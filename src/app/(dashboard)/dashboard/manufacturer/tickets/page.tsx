@@ -26,6 +26,7 @@ import { resolveManufacturerPageContext } from "../_lib/server-context";
 
 const OPEN_STATUSES: TicketStatus[] = [
   "reported",
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -42,6 +43,8 @@ function statusClass(status: TicketStatus) {
   switch (status) {
     case "reported":
       return "border-blue-200 bg-blue-50 text-blue-700";
+    case "awaiting_technician_acceptance":
+      return "border-sky-200 bg-sky-50 text-sky-700";
     case "assigned":
     case "technician_enroute":
       return "border-indigo-200 bg-indigo-50 text-indigo-700";

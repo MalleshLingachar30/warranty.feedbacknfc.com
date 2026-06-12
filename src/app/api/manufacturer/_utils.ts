@@ -158,6 +158,7 @@ export function parseStringArray(value: unknown): string[] {
 
 export const OPEN_TICKET_STATUSES: TicketStatus[] = [
   "reported",
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",

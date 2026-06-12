@@ -14,6 +14,7 @@ const COMPLETED_STATUSES: TicketStatus[] = [
 ];
 
 const VISIBLE_JOB_STATUSES: TicketStatus[] = [
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",

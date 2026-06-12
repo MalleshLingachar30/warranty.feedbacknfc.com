@@ -200,6 +200,7 @@ export async function POST(request: Request) {
         status: {
           in: [
             "reported",
+            "awaiting_technician_acceptance",
             "assigned",
             "technician_enroute",
             "work_in_progress",
@@ -367,7 +368,10 @@ export async function POST(request: Request) {
 
     let assignment:
       | {
-          status: "assigned" | "escalated";
+          status:
+            | "awaiting_technician_acceptance"
+            | "assigned"
+            | "escalated";
           assignedTechnicianId?: string;
           assignedServiceCenterId?: string;
           reason?: string;
@@ -377,7 +381,11 @@ export async function POST(request: Request) {
     try {
       assignment = await assignTechnician(ticket.id);
 
-      if (assignment.status === "assigned" && assignment.assignedTechnicianId) {
+      if (
+        (assignment.status === "awaiting_technician_acceptance" ||
+          assignment.status === "assigned") &&
+        assignment.assignedTechnicianId
+      ) {
         const assignedTicket = await prisma.ticket.findUnique({
           where: { id: ticket.id },
           select: {

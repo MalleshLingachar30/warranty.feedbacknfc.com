@@ -41,6 +41,7 @@ const money = new Intl.NumberFormat("en-US", {
 
 const OPEN_TICKET_STATUSES: TicketStatus[] = [
   "reported",
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -67,6 +68,7 @@ function bucketOpenStatus(status: TicketStatus) {
     case "reported":
     case "reopened":
       return "new" as const;
+    case "awaiting_technician_acceptance":
     case "assigned":
     case "technician_enroute":
       return "assigned" as const;

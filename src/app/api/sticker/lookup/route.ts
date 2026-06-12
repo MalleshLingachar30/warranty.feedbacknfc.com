@@ -56,6 +56,7 @@ async function lookupSticker(stickerNumber: number) {
           status: {
             in: [
               "reported",
+              "awaiting_technician_acceptance",
               "assigned",
               "technician_enroute",
               "work_in_progress",

@@ -91,6 +91,7 @@ export function MyJobsBoard({
         body.jobs
           .filter((job) =>
             [
+              "awaiting_technician_acceptance",
               "assigned",
               "technician_enroute",
               "work_in_progress",
@@ -395,7 +396,7 @@ export function MyJobsBoard({
       >
         <TabsList className="grid h-12 w-full grid-cols-3">
           <TabsTrigger value="assigned" className="h-10 text-xs sm:text-sm">
-            Assigned ({tabCounts.assigned})
+            New & Assigned ({tabCounts.assigned})
           </TabsTrigger>
           <TabsTrigger value="in_progress" className="h-10 text-xs sm:text-sm">
             In Progress ({tabCounts.inProgress})

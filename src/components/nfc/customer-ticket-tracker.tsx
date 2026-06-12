@@ -43,6 +43,7 @@ function translateTimelineEventType(eventType: string, language: NfcLanguage) {
   const mapped: Record<string, string> = {
     created: "बनाया गया",
     reported: "रिपोर्ट किया गया",
+    awaiting_technician_acceptance: "तकनीशियन स्वीकृति लंबित",
     assigned: "असाइन किया गया",
     technician_enroute: "तकनीशियन रास्ते में",
     technician_started: "तकनीशियन ने काम शुरू किया",
@@ -68,6 +69,12 @@ export function CustomerTicketTracker({
   const copy = getNfcCopy(language);
   const trackingSteps = [
     { status: "reported", label: copy.customerTicketTracker.trackingSteps.reported },
+    {
+      status: "awaiting_technician_acceptance",
+      label:
+        copy.customerTicketTracker.trackingSteps
+          .awaiting_technician_acceptance,
+    },
     { status: "assigned", label: copy.customerTicketTracker.trackingSteps.assigned },
     {
       status: "technician_enroute",

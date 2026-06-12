@@ -1,5 +1,6 @@
 export type TechnicianTicketStatus =
   | "reported"
+  | "awaiting_technician_acceptance"
   | "assigned"
   | "technician_enroute"
   | "work_in_progress"

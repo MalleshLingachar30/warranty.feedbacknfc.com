@@ -102,7 +102,8 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          error: "Only assigned tickets can be marked as technician en route.",
+          error:
+            "Only accepted tickets can be marked as technician en route.",
         },
         { status: 409 },
       );
@@ -176,7 +177,7 @@ export async function POST(
         data: {
           ticketId: ticket.id,
           eventType: "technician_enroute",
-          eventDescription: `${technician.name} accepted the job and started navigation. ETA ${etaLabel}.`,
+          eventDescription: `${technician.name} started navigation. ETA ${etaLabel}.`,
           actorRole: "technician",
           actorName: technician.name,
         },

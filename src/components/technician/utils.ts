@@ -94,6 +94,8 @@ export function statusLabel(status: TechnicianTicketStatus): string {
 
 export function statusBadgeClass(status: TechnicianTicketStatus): string {
   switch (status) {
+    case "awaiting_technician_acceptance":
+      return "border-sky-300 bg-sky-100 text-sky-800";
     case "assigned":
       return "border-blue-300 bg-blue-100 text-blue-800";
     case "technician_enroute":
@@ -119,7 +121,11 @@ export function selectJobsByTab(
   tab: JobTabValue,
 ): TechnicianJob[] {
   if (tab === "assigned") {
-    return jobs.filter((job) => job.status === "assigned");
+    return jobs.filter(
+      (job) =>
+        job.status === "awaiting_technician_acceptance" ||
+        job.status === "assigned",
+    );
   }
 
   if (tab === "in_progress") {

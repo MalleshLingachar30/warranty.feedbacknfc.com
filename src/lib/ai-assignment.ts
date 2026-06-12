@@ -31,7 +31,7 @@ export interface TechnicianRankingItem {
 }
 
 export interface TechnicianAssignmentResult {
-  status: "assigned" | "escalated";
+  status: "awaiting_technician_acceptance" | "assigned" | "escalated";
   ticketId: string;
   assignedTechnicianId?: string;
   assignedServiceCenterId?: string;
@@ -218,7 +218,10 @@ export async function assignTechnician(
 
   if (ticket.assignedTechnicianId) {
     return {
-      status: "assigned",
+      status:
+        ticket.status === "assigned"
+          ? "assigned"
+          : "awaiting_technician_acceptance",
       ticketId,
       assignedTechnicianId: ticket.assignedTechnicianId,
       assignedServiceCenterId: ticket.assignedServiceCenterId ?? undefined,
@@ -455,7 +458,7 @@ export async function assignTechnician(
     db.ticket.update({
       where: { id: ticketId },
       data: {
-        status: "assigned",
+        status: "awaiting_technician_acceptance",
         assignedServiceCenterId: bestMatch.serviceCenterId,
         assignedTechnicianId: bestMatch.technicianId,
         assignmentMethod: "ai_auto",
@@ -474,8 +477,8 @@ export async function assignTechnician(
     db.ticketTimeline.create({
       data: {
         ticketId,
-        eventType: "assigned",
-        eventDescription: `AI assigned ${bestMatch.technicianName} from ${bestMatch.serviceCenterName}.`,
+        eventType: "awaiting_technician_acceptance",
+        eventDescription: `AI offered this job to ${bestMatch.technicianName} from ${bestMatch.serviceCenterName}. Waiting for technician acceptance.`,
         actorRole: "system",
         actorName: "AI Assignment Engine",
         metadata: {
@@ -493,7 +496,7 @@ export async function assignTechnician(
   ]);
 
   return {
-    status: "assigned",
+    status: "awaiting_technician_acceptance",
     ticketId,
     assignedTechnicianId: bestMatch.technicianId,
     assignedServiceCenterId: bestMatch.serviceCenterId,

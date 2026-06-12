@@ -2,6 +2,7 @@ export type WarrantyTicketSeverity = "low" | "medium" | "high" | "critical";
 
 export type WarrantyTicketStatus =
   | "reported"
+  | "awaiting_technician_acceptance"
   | "assigned"
   | "technician_enroute"
   | "work_in_progress"

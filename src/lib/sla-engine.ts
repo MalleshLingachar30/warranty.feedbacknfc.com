@@ -36,6 +36,7 @@ export interface SlaSweepResult {
 
 const ACTIVE_TICKET_STATUSES: TicketStatus[] = [
   "reported",
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -46,6 +47,7 @@ const ACTIVE_TICKET_STATUSES: TicketStatus[] = [
 
 const RESPONSE_SLA_TRACKED_STATUSES: TicketStatus[] = ["reported", "reopened"];
 const RESOLUTION_SLA_TRACKED_STATUSES: TicketStatus[] = [
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -108,6 +110,7 @@ function addHours(base: Date, hours: number): Date {
 function needsEscalatedStatus(status: TicketStatus): boolean {
   return (
     status === "reported" ||
+    status === "awaiting_technician_acceptance" ||
     status === "assigned" ||
     status === "technician_enroute" ||
     status === "work_in_progress" ||

@@ -23,6 +23,7 @@ import {
 
 const OPEN_STATUSES: WarrantyTicketStatus[] = [
   "reported",
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -726,7 +727,7 @@ function assignTicket(ticket: WarrantyTicket, product: WarrantyProduct, model: W
     return null;
   }
 
-  ticket.status = "assigned";
+  ticket.status = "awaiting_technician_acceptance";
   ticket.assignedTechnicianId = bestMatch.technician.id;
   ticket.assignedTechnicianName = bestMatch.technician.name;
   ticket.assignedTechnicianPhone = bestMatch.technician.phone;
@@ -737,8 +738,8 @@ function assignTicket(ticket: WarrantyTicket, product: WarrantyProduct, model: W
 
   appendTimeline(
     ticket,
-    "assigned",
-    `AI assigned ${bestMatch.technician.name} from ${bestMatch.technician.serviceCenterName}.`,
+    "awaiting_technician_acceptance",
+    `AI offered this job to ${bestMatch.technician.name} from ${bestMatch.technician.serviceCenterName}. Waiting for technician acceptance.`,
     "AI Assignment Engine",
     "system"
   );
@@ -976,7 +977,7 @@ export async function markTicketEnroute(ticketId: string, technicianId: string) 
   appendTimeline(
     ticket,
     "technician_enroute",
-    `${technician.name} accepted the job and started navigation.`,
+    `${technician.name} started navigation.`,
     technician.name,
     "technician"
   );
@@ -989,6 +990,33 @@ export async function markTicketEnroute(ticketId: string, technicianId: string) 
     technicianPhone: technician.phone,
     ticketNumber: ticket.ticketNumber,
   });
+
+  return clone(ticket);
+}
+
+export async function acceptTicket(ticketId: string, technicianId: string) {
+  const ticket = requireTicket(ticketId);
+  const technician = requireTechnician(technicianId);
+
+  if (ticket.assignedTechnicianId !== technician.id) {
+    throw new Error("Ticket is not assigned to this technician");
+  }
+
+  if (ticket.status !== "awaiting_technician_acceptance") {
+    if (ticket.status === "assigned") {
+      return clone(ticket);
+    }
+    throw new Error("Ticket is not awaiting technician acceptance");
+  }
+
+  ticket.status = "assigned";
+  appendTimeline(
+    ticket,
+    "assigned",
+    `${technician.name} accepted the service job.`,
+    technician.name,
+    "technician"
+  );
 
   return clone(ticket);
 }

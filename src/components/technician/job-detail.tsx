@@ -261,11 +261,27 @@ export function JobDetail({
     }
   };
 
-  const handleAcceptAndNavigate = async () => {
+  const handleAcceptJob = async () => {
+    await runTicketAction(
+      `/api/ticket/${job.id}/accept`,
+      {},
+      "Job accepted. Start navigation when you are ready.",
+    );
+  };
+
+  const handleRejectJob = async () => {
+    await runTicketAction(
+      `/api/ticket/${job.id}/reject`,
+      {},
+      "Job rejected. Manual reassignment is now required.",
+    );
+  };
+
+  const handleStartNavigation = async () => {
     await runTicketAction(
       `/api/ticket/${job.id}/enroute`,
       {},
-      "Job accepted. Navigation started.",
+      "Navigation started. Customer has been notified.",
     );
   };
 
@@ -947,18 +963,48 @@ export function JobDetail({
           </div>
         ) : null}
 
+        {job.status === "awaiting_technician_acceptance" ? (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button
+              className="h-12 w-full"
+              disabled={actionLoading}
+              onClick={handleAcceptJob}
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              {actionLoading ? "Updating..." : "Accept Job"}
+            </Button>
+            <Button
+              className="h-12 w-full"
+              variant="outline"
+              disabled={actionLoading}
+              onClick={handleRejectJob}
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <AlertCircle className="h-4 w-4" />
+              )}
+              {actionLoading ? "Updating..." : "Reject Job"}
+            </Button>
+          </div>
+        ) : null}
+
         {job.status === "assigned" ? (
           <Button
             className="h-12 w-full"
             disabled={actionLoading}
-            onClick={handleAcceptAndNavigate}
+            onClick={handleStartNavigation}
           >
             {actionLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <ExternalLink className="h-4 w-4" />
             )}
-            {actionLoading ? "Updating..." : "Accept & Start Navigation"}
+            {actionLoading ? "Updating..." : "Start Navigation"}
           </Button>
         ) : null}
 

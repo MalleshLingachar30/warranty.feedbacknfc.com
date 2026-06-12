@@ -17,6 +17,7 @@ interface CustomerLiveStatusCardProps {
 }
 
 const POLLABLE_STATUSES = new Set([
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -27,8 +28,15 @@ function statusToneClass(customerState: TicketLiveTrackingView["customerState"])
     return "border-emerald-200 bg-emerald-50 text-emerald-800";
   }
 
-  if (customerState === "technician_on_the_way" || customerState === "assigned") {
+  if (
+    customerState === "technician_on_the_way" ||
+    customerState === "assigned"
+  ) {
     return "border-blue-200 bg-blue-50 text-blue-800";
+  }
+
+  if (customerState === "awaiting_technician_acceptance") {
+    return "border-sky-200 bg-sky-50 text-sky-800";
   }
 
   if (customerState === "paused") {
@@ -78,6 +86,8 @@ function statusText(
   state: TicketLiveTrackingView["customerState"],
 ) {
   switch (state) {
+    case "awaiting_technician_acceptance":
+      return copy.awaitingAcceptanceStatus;
     case "assigned":
       return copy.assigned;
     case "technician_on_the_way":

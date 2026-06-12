@@ -130,6 +130,7 @@ type NfcCopy = {
   };
   customerLiveStatus: {
     title: string;
+    awaitingAcceptanceStatus: string;
     assigned: string;
     onTheWay: string;
     arrived: string;
@@ -220,7 +221,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       phoneValidationError: "Enter a valid phone number.",
       uploadLimitError: "You can upload up to 5 photos.",
       reportSuccessFallback:
-        "Service request submitted! Ticket #WRT-2026-XXXXXX. A technician will be assigned shortly.",
+        "Service request submitted! Ticket #WRT-2026-XXXXXX. Technician acceptance is being confirmed.",
       generalIssue: "General issue",
       issueCategoryFallback: "Issue",
       productLabel: "Product",
@@ -323,6 +324,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       systemActor: "System",
       trackingSteps: {
         reported: "Reported",
+        awaiting_technician_acceptance: "Awaiting Technician Acceptance",
         assigned: "Assigned",
         technician_enroute: "Technician En Route",
         work_in_progress: "Work In Progress",
@@ -332,6 +334,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
     },
     customerLiveStatus: {
       title: "Live Technician Status",
+      awaitingAcceptanceStatus: "Awaiting technician acceptance",
       assigned: "Assigned",
       onTheWay: "Technician is on the way",
       arrived: "Technician has arrived",
@@ -423,7 +426,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       phoneValidationError: "कृपया मान्य फोन नंबर दर्ज करें।",
       uploadLimitError: "आप अधिकतम 5 फोटो अपलोड कर सकते हैं।",
       reportSuccessFallback:
-        "सर्विस अनुरोध दर्ज हो गया। तकनीशियन जल्द असाइन किया जाएगा।",
+        "सर्विस अनुरोध दर्ज हो गया। तकनीशियन स्वीकृति की पुष्टि की जा रही है।",
       generalIssue: "सामान्य समस्या",
       issueCategoryFallback: "समस्या",
       productLabel: "उत्पाद",
@@ -525,6 +528,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
       systemActor: "सिस्टम",
       trackingSteps: {
         reported: "रिपोर्ट किया गया",
+        awaiting_technician_acceptance: "तकनीशियन स्वीकृति लंबित",
         assigned: "असाइन किया गया",
         technician_enroute: "तकनीशियन रास्ते में",
         work_in_progress: "काम जारी है",
@@ -534,6 +538,7 @@ const NFC_COPY: Record<NfcLanguage, NfcCopy> = {
     },
     customerLiveStatus: {
       title: "लाइव तकनीशियन स्थिति",
+      awaitingAcceptanceStatus: "तकनीशियन स्वीकृति लंबित",
       assigned: "असाइन किया गया",
       onTheWay: "तकनीशियन रास्ते में है",
       arrived: "तकनीशियन पहुंच गया है",
@@ -658,6 +663,7 @@ export function translateTicketStatus(status: string, lang: NfcLanguage): string
 
   const map: Record<string, string> = {
     reported: "रिपोर्ट किया गया",
+    awaiting_technician_acceptance: "तकनीशियन स्वीकृति लंबित",
     assigned: "असाइन किया गया",
     technician_enroute: "तकनीशियन रास्ते में",
     work_in_progress: "काम जारी है",

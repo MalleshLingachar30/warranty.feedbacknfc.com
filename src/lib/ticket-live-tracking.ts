@@ -9,6 +9,7 @@ import {
 import { db } from "@/lib/db";
 
 export const TRACKING_POLLABLE_TICKET_STATUSES: TicketStatus[] = [
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -50,6 +51,7 @@ export type TrackingFallbackReason =
   | null;
 
 export type TrackingCustomerState =
+  | "awaiting_technician_acceptance"
   | "assigned"
   | "technician_on_the_way"
   | "technician_arrived"
@@ -798,6 +800,10 @@ function resolveCustomerState(input: {
   ticketStatus: TicketStatus;
   trackingState: TicketLiveTrackingState;
 }): TrackingCustomerState {
+  if (input.ticketStatus === "awaiting_technician_acceptance") {
+    return "awaiting_technician_acceptance";
+  }
+
   if (input.ticketStatus === "assigned") {
     return "assigned";
   }
@@ -841,7 +847,8 @@ export function toCustomerSafeTrackingPayload(input: {
 
   const baseTrackingState: TicketLiveTrackingState =
     input.liveStatus?.state ??
-    (input.ticketStatus === "assigned"
+    (input.ticketStatus === "awaiting_technician_acceptance" ||
+    input.ticketStatus === "assigned"
       ? "inactive"
       : input.ticketStatus === "work_in_progress"
         ? "on_site"
@@ -885,7 +892,7 @@ export function toCustomerSafeTrackingPayload(input: {
 
   if (trackingState === "stopped") {
     fallbackReason = "tracking_stopped";
-  } else if (input.ticketStatus === "assigned") {
+  } else if (input.ticketStatus === "awaiting_technician_acceptance") {
     fallbackReason = "awaiting_acceptance";
   } else if (trackingState === "paused") {
     const pauseReason = asString(metadata.pauseReason);

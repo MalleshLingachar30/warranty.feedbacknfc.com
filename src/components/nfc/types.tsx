@@ -1,5 +1,6 @@
 export const OPEN_TICKET_STATUSES = [
   "reported",
+  "awaiting_technician_acceptance",
   "assigned",
   "technician_enroute",
   "work_in_progress",
@@ -70,6 +71,7 @@ export interface TicketLiveTrackingView {
     | "paused"
     | "stopped";
   customerState:
+    | "awaiting_technician_acceptance"
     | "assigned"
     | "technician_on_the_way"
     | "technician_arrived"

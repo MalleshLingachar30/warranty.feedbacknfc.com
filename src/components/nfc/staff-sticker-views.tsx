@@ -149,6 +149,7 @@ export function TechnicianStartWork({
   ticket,
   technicianId,
 }: TechnicianStartWorkProps) {
+  const [currentStatus, setCurrentStatus] = useState(ticket.status);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +166,10 @@ export function TechnicianStartWork({
     enabled: Boolean(technicianId) && trackingEnabled,
     phase: trackingPhase,
   });
+
+  useEffect(() => {
+    setCurrentStatus(ticket.status);
+  }, [ticket.id, ticket.status]);
 
   const liveTrackingLabel = useMemo(() => {
     switch (liveTracking.status) {
@@ -190,9 +195,10 @@ export function TechnicianStartWork({
       ticket.status === "technician_enroute" || ticket.status === "work_in_progress",
     );
     setTrackingPhase(ticket.status === "work_in_progress" ? "on_site" : "enroute");
+    setCurrentStatus(ticket.status);
   }, [ticket.id, ticket.status]);
 
-  const postAction = async (endpoint: "enroute" | "start") => {
+  const postAction = async (endpoint: "accept" | "reject" | "enroute" | "start") => {
     if (!technicianId) {
       setError("Technician profile is not available for this user.");
       return;
@@ -219,7 +225,15 @@ export function TechnicianStartWork({
         return;
       }
 
-      if (endpoint === "enroute") {
+      setCurrentStatus(payload.status ?? currentStatus);
+
+      if (endpoint === "accept") {
+        setTrackingEnabled(false);
+        setMessage("Job accepted successfully.");
+      } else if (endpoint === "reject") {
+        setTrackingEnabled(false);
+        setMessage("Job rejected. Manual reassignment is now required.");
+      } else if (endpoint === "enroute") {
         setTrackingEnabled(true);
         setTrackingPhase("enroute");
         setMessage("Marked en route successfully. Customer has been notified.");
@@ -238,7 +252,7 @@ export function TechnicianStartWork({
   return (
     <NfcPublicShell
       title="Technician Work Start"
-      description="This ticket is assigned to you. Confirm travel or begin work from this sticker scan."
+      description="This ticket is assigned to you. Accept it first, then confirm travel or begin work from this sticker scan."
       footer="Use this page after each scan to update job state quickly."
     >
       <Card className="border-slate-200">
@@ -248,7 +262,7 @@ export function TechnicianStartWork({
         <CardContent className="space-y-2 text-sm text-slate-700">
           <p>Issue: {ticket.issueDescription}</p>
           <p>Reported: {formatDate(ticket.reportedAt)}</p>
-          <p>Status: {statusLabel(ticket.status)}</p>
+          <p>Status: {statusLabel(currentStatus)}</p>
         </CardContent>
       </Card>
 
@@ -271,33 +285,63 @@ export function TechnicianStartWork({
         </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Button
-          className="h-11 gap-2"
-          variant="outline"
-          disabled={!canStart || isSubmitting}
-          onClick={() => postAction("enroute")}
-        >
-          {isSubmitting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Route className="h-4 w-4" />
-          )}
-          Mark En Route
-        </Button>
-        <Button
-          className="h-11 gap-2"
-          disabled={!canStart || isSubmitting}
-          onClick={() => postAction("start")}
-        >
-          {isSubmitting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <PlayCircle className="h-4 w-4" />
-          )}
-          Start Work
-        </Button>
-      </div>
+      {currentStatus === "awaiting_technician_acceptance" ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Button
+            className="h-11 gap-2"
+            disabled={!canStart || isSubmitting}
+            onClick={() => postAction("accept")}
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+            Accept Job
+          </Button>
+          <Button
+            className="h-11 gap-2"
+            variant="outline"
+            disabled={!canStart || isSubmitting}
+            onClick={() => postAction("reject")}
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CircleAlert className="h-4 w-4" />
+            )}
+            Reject Job
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Button
+            className="h-11 gap-2"
+            variant="outline"
+            disabled={!canStart || isSubmitting}
+            onClick={() => postAction("enroute")}
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Route className="h-4 w-4" />
+            )}
+            Start Navigation
+          </Button>
+          <Button
+            className="h-11 gap-2"
+            disabled={!canStart || isSubmitting}
+            onClick={() => postAction("start")}
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PlayCircle className="h-4 w-4" />
+            )}
+            Start Work
+          </Button>
+        </div>
+      )}
     </NfcPublicShell>
   );
 }
