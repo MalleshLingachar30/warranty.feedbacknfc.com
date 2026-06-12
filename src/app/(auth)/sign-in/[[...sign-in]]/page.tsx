@@ -1,25 +1,10 @@
 "use client";
 
-import {
-  ClerkFailed,
-  ClerkLoaded,
-  ClerkLoading,
-  SignIn,
-  useAuth,
-  useSignIn,
-} from "@clerk/nextjs";
-import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { parseAppRoleFromClaims } from "@/lib/roles";
+import { ClerkFailed, ClerkLoaded, ClerkLoading, SignIn, useAuth } from "@clerk/nextjs";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo } from "react";
 
-import {
-  continuationAppearance,
-  getErrorMessage,
-  getRedirectTarget,
-  getTaskPath,
-  withSearchParams,
-} from "../../auth-flow-helpers";
+import { parseAppRoleFromClaims } from "@/lib/roles";
 
 const clerkPublicAuthEnabled = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
@@ -41,10 +26,16 @@ const unavailableState = (
   </div>
 );
 
+function getRedirectTarget(searchParams: URLSearchParams): string {
+  return (
+    searchParams.get("redirect_url") ??
+    searchParams.get("redirectUrl") ??
+    "/dashboard"
+  );
+}
+
 function SignInCard() {
   const { userId, isLoaded: authLoaded, sessionClaims } = useAuth();
-  const { signIn, errors, fetchStatus } = useSignIn();
-  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTarget = useMemo(
@@ -68,16 +59,32 @@ function SignInCard() {
     }
   }, [redirectTarget, sessionClaims]);
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
   useEffect(() => {
     if (!authLoaded || !userId) {
       return;
     }
 
-    router.replace(resolvedRedirectTarget);
+    let isActive = true;
+
+    const bootstrapSession = async () => {
+      try {
+        await fetch("/api/auth/client-trust", {
+          method: "POST",
+        });
+      } catch (error) {
+        console.error("Failed to bootstrap Clerk user session", error);
+      }
+
+      if (isActive) {
+        router.replace(resolvedRedirectTarget);
+      }
+    };
+
+    void bootstrapSession();
+
+    return () => {
+      isActive = false;
+    };
   }, [authLoaded, resolvedRedirectTarget, router, userId]);
 
   if (authLoaded && userId) {
@@ -88,157 +95,15 @@ function SignInCard() {
     );
   }
 
-  if (!signIn) {
-    return loadingState;
-  }
-
-  const isSubmitting = fetchStatus === "fetching";
-  const shouldRenderClerkContinuation =
-    pathname !== "/sign-in" ||
-    signIn.status === "needs_second_factor" ||
-    signIn.status === "needs_client_trust" ||
-    signIn.status === "needs_new_password";
-
-  const finalizeSignIn = async () => {
-    const { error } = await signIn.finalize({
-      navigate: ({ session, decorateUrl }) => {
-        const taskPath = session?.currentTask
-          ? getTaskPath("/sign-in", session.currentTask.key)
-          : null;
-
-        if (taskPath) {
-          router.push(withSearchParams(taskPath, searchParams));
-          return;
-        }
-
-        const url = decorateUrl(resolvedRedirectTarget);
-        if (url.startsWith("http")) {
-          window.location.href = url;
-          return;
-        }
-
-        router.push(url);
-      },
-    });
-
-    if (error) {
-      setErrorMessage(
-        getErrorMessage(error, "Sign-in failed. Please try again."),
-      );
-    }
-  };
-
-  const handleCredentialsSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setErrorMessage(null);
-
-    const { error } = await signIn.password({
-      emailAddress: email.trim(),
-      password,
-    });
-
-    if (error) {
-      setErrorMessage(
-        getErrorMessage(error, "Sign-in failed. Please try again."),
-      );
-      return;
-    }
-
-    if (signIn.status === "complete") {
-      await finalizeSignIn();
-      return;
-    }
-  };
-
-  if (shouldRenderClerkContinuation) {
-    return (
-      <SignIn
-        appearance={continuationAppearance}
-        fallback={loadingState}
-        fallbackRedirectUrl={resolvedRedirectTarget}
-        path="/sign-in"
-        routing="path"
-        signUpFallbackRedirectUrl={resolvedRedirectTarget}
-        signUpUrl="/sign-up"
-      />
-    );
-  }
-
-  const fieldErrorMessage =
-    errors.fields.identifier?.message ?? errors.fields.password?.message;
-
   return (
-    <div className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="p-6">
-        <h1 className="text-center text-3xl font-semibold text-slate-900">
-          Sign in
-        </h1>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Continue with your email and password.
-        </p>
-
-        <form className="mt-6 space-y-4" onSubmit={handleCredentialsSubmit}>
-          <div className="space-y-1.5">
-            <label
-              className="text-sm font-medium text-slate-700"
-              htmlFor="email"
-            >
-              Email address
-            </label>
-            <input
-              autoComplete="email"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              id="email"
-              name="email"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-              type="email"
-              value={email}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label
-              className="text-sm font-medium text-slate-700"
-              htmlFor="password"
-            >
-              Password
-            </label>
-            <input
-              autoComplete="current-password"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-              id="password"
-              name="password"
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              type="password"
-              value={password}
-            />
-          </div>
-          {fieldErrorMessage ? (
-            <p className="text-sm text-rose-700">{fieldErrorMessage}</p>
-          ) : null}
-          {errorMessage ? (
-            <p className="text-sm text-rose-700">{errorMessage}</p>
-          ) : null}
-          <button
-            className="w-full rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isSubmitting}
-            type="submit"
-          >
-            {isSubmitting ? "Signing in..." : "Continue"}
-          </button>
-        </form>
-      </div>
-      <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 text-center text-sm text-slate-600">
-        Don&apos;t have an account?{" "}
-        <Link
-          className="font-semibold text-slate-800 hover:text-slate-950"
-          href="/sign-up"
-        >
-          Sign up
-        </Link>
-      </div>
-    </div>
+    <SignIn
+      fallback={loadingState}
+      fallbackRedirectUrl={resolvedRedirectTarget}
+      path="/sign-in"
+      routing="path"
+      signUpFallbackRedirectUrl={resolvedRedirectTarget}
+      signUpUrl="/sign-up"
+    />
   );
 }
 

@@ -6,6 +6,10 @@ import type {
   ServiceCenterOption,
   TechnicianOption,
 } from "@/components/manufacturer/types";
+import {
+  buildInstallationReportAuthorizationUrl,
+  buildInstallationReportPdfUrl,
+} from "@/lib/installation-report-links";
 
 const SALE_REGISTRATION_TAG_CLASSES: TagClass[] = [
   "unit_service",
@@ -124,6 +128,8 @@ export const installationJobSelect =
         submittedAt: true,
         submittedByRole: true,
         customerName: true,
+        customerAuthorizedAt: true,
+        customerAuthorizedByName: true,
       },
     },
   });
@@ -251,6 +257,14 @@ export function serializeInstallationJobRow(
           submittedAt: job.installationReport.submittedAt.toISOString(),
           submittedByRole: job.installationReport.submittedByRole,
           customerName: job.installationReport.customerName,
+          customerAuthorizedAt:
+            job.installationReport.customerAuthorizedAt?.toISOString() ?? null,
+          customerAuthorizedByName:
+            job.installationReport.customerAuthorizedByName ?? null,
+          pdfUrl: buildInstallationReportPdfUrl(job.installationReport.id),
+          authorizationUrl: buildInstallationReportAuthorizationUrl(
+            job.installationReport.id,
+          ),
         }
       : null,
   };

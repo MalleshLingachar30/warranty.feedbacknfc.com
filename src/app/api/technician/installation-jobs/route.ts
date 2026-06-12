@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
+import {
+  buildInstallationReportAuthorizationUrl,
+  buildInstallationReportPdfUrl,
+} from "@/lib/installation-report-links";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
@@ -171,6 +175,8 @@ export async function GET() {
             submittedAt: true,
             customerName: true,
             submittedByRole: true,
+            customerAuthorizedAt: true,
+            customerAuthorizedByName: true,
           },
         },
         partUsages: {
@@ -256,6 +262,15 @@ export async function GET() {
               id: job.installationReport.id,
               submittedAt: job.installationReport.submittedAt.toISOString(),
               customerName: job.installationReport.customerName,
+              customerAuthorizedAt:
+                job.installationReport.customerAuthorizedAt?.toISOString() ??
+                null,
+              customerAuthorizedByName:
+                job.installationReport.customerAuthorizedByName ?? null,
+              pdfUrl: buildInstallationReportPdfUrl(job.installationReport.id),
+              authorizationUrl: buildInstallationReportAuthorizationUrl(
+                job.installationReport.id,
+              ),
               submittedByRole: job.installationReport.submittedByRole,
             }
           : null,

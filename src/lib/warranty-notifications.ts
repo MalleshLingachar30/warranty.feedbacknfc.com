@@ -150,6 +150,32 @@ export async function sendCustomerWarrantyActivatedEmail(input: {
   });
 }
 
+export async function sendInstallationReportAuthorizationNotification(input: {
+  customerPhone: string;
+  customerName: string;
+  productName: string;
+  authorizationUrl: string;
+  pdfUrl: string;
+  languagePreference?: string | null;
+  customerEmail?: string | null;
+}) {
+  const smsBody = `Dear ${input.customerName}, your installation report for ${input.productName} is ready. Review and authorize here: ${input.authorizationUrl} PDF: ${input.pdfUrl}`;
+
+  await sendSMS({
+    to: input.customerPhone,
+    message: smsBody,
+    strict: true,
+  });
+
+  if (input.customerEmail) {
+    await sendEmail({
+      to: input.customerEmail,
+      subject: `${input.productName} installation report ready for approval`,
+      body: `Hi ${input.customerName}, your installation report for ${input.productName} is ready for review. Authorize here: ${input.authorizationUrl} Download PDF: ${input.pdfUrl}`,
+    });
+  }
+}
+
 export async function sendServiceCenterTicketAssignedEmail(input: {
   serviceCenterEmail: string;
   serviceCenterName: string;

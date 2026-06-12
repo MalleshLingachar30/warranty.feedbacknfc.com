@@ -3,16 +3,18 @@ import { NextResponse } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
+import {
+  buildInstallationReportAuthorizationUrl,
+  buildInstallationReportPdfUrl,
+} from "@/lib/installation-report-links";
 import { normalizePhone } from "@/lib/otp-session";
-import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
   installationJobSelect,
   serializeInstallationJobRow,
 } from "@/lib/installation-workflow-view";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import {
-  sendCustomerWarrantyActivatedEmail,
-  sendWarrantyActivatedNotification,
+  sendInstallationReportAuthorizationNotification,
 } from "@/lib/warranty-notifications";
 import {
   parsePartUsageInputs,
@@ -189,20 +191,6 @@ function buildSyntheticClerkId(phone: string) {
   return digits.length > 0
     ? `customer_phone_${digits}`
     : `customer_${crypto.randomUUID()}`;
-}
-
-function addMonths(input: Date, months: number): Date {
-  const output = new Date(input);
-  output.setMonth(output.getMonth() + months);
-  return output;
-}
-
-function formatWarrantyEndDate(date: Date) {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(date);
 }
 
 export async function POST(
@@ -521,10 +509,10 @@ export async function POST(
     }
 
     const photoUrls = [...beforePhotoUrls, ...afterPhotoUrls];
-    if (photoUrls.length < Math.max(1, minimumPhotoCount)) {
+    if (photoUrls.length < minimumPhotoCount) {
       return NextResponse.json(
         {
-          error: `At least ${Math.max(1, minimumPhotoCount)} proof photos are required.`,
+          error: `At least ${minimumPhotoCount} proof photos are required.`,
         },
         { status: 400 },
       );
@@ -563,11 +551,7 @@ export async function POST(
       );
     }
 
-    const activationAt = new Date();
-    const warrantyEndDate = addMonths(
-      activationAt,
-      job.asset.productModel.warrantyDurationMonths,
-    );
+    const submittedAt = new Date();
 
     const userLookup: Prisma.UserWhereInput[] = [];
     if (normalizedPhone) {
@@ -585,14 +569,6 @@ export async function POST(
       },
       select: {
         id: true,
-        stickerId: true,
-        metadata: true,
-        sticker: {
-          select: {
-            stickerNumber: true,
-            type: true,
-          },
-        },
       },
     });
 
@@ -606,8 +582,6 @@ export async function POST(
       );
     }
 
-    const certificatePath = `/api/products/${linkedProduct.id}/certificate?download=1`;
-    const certificateUrl = buildAbsoluteWarrantyUrl(certificatePath);
     const geoLocationJson = (geoLocation ?? {}) as unknown as Prisma.InputJsonValue;
     const acknowledgementPayloadJson =
       customerAcknowledgementPayload as unknown as Prisma.InputJsonValue;
@@ -699,7 +673,7 @@ export async function POST(
           photoUrls,
           checklistResponses: checklistResponsesJson,
           commissioningData: commissioningDataJson,
-          submittedAt: activationAt,
+          submittedAt,
         },
       });
 
@@ -714,83 +688,34 @@ export async function POST(
         });
       }
 
-      await tx.assetIdentity.update({
-        where: {
-          id: job.assetId,
-        },
-        data: {
-          lifecycleState: "active",
-          warrantyState: "active",
-          customerId: customer.id,
-          installationDate,
-          installationLocation: {
-            ...(geoLocation ?? {}),
-            address: installAddress,
-            city: installCity,
-            state: installState,
-            pincode: installPincode,
-          } satisfies Prisma.InputJsonValue,
-        },
-      });
-
-      await tx.product.update({
-        where: {
-          id: linkedProduct.id,
-        },
-        data: {
-          warrantyStartDate: activationAt,
-          warrantyEndDate,
-          warrantyStatus: "active",
-          installationDate,
-          customerId: customer.id,
-          customerName,
-          customerPhone: normalizedPhone,
-          customerPhoneVerified: true,
-          customerEmail,
-          customerAddress: installAddress,
-          customerCity: installCity,
-          customerState: installState,
-          customerPincode: installPincode,
-          activatedVia: "installation_report",
-          activatedAtLocation: installCity,
-          installationLocation: {
-            ...(geoLocation ?? {}),
-            address: installAddress,
-            city: installCity,
-            state: installState,
-            pincode: installPincode,
-          } satisfies Prisma.InputJsonValue,
-          metadata: {
-            ...asRecord(linkedProduct.metadata),
-            warrantyCertificateUrl: certificateUrl,
-            warrantyCertificatePath: certificatePath,
-            activationSource: "installation_report",
-            activatedVia: "installation_report",
-            installationJobId: job.id,
-            installationReportSubmittedAt: activationAt.toISOString(),
-          } satisfies Prisma.InputJsonValue,
-        },
-      });
-
-      await tx.sticker.update({
-        where: {
-          id: linkedProduct.stickerId,
-        },
-        data: {
-          status: "activated",
-        },
-      });
-
       const nextJob = await tx.installationJob.update({
         where: {
           id: job.id,
         },
         data: {
-          status: "completed",
-          technicianCompletedAt: activationAt,
-          activationTriggeredAt: activationAt,
+          status: "pending_customer_authorization",
+          technicianCompletedAt: submittedAt,
+          activationTriggeredAt: null,
         },
         select: installationJobSelect,
+      });
+
+      await tx.assetIdentity.update({
+        where: {
+          id: job.assetId,
+        },
+        data: {
+          lifecycleState: "installation_in_progress",
+          customerId: customer.id,
+          installationDate,
+          installationLocation: {
+            ...(geoLocation ?? {}),
+            address: installAddress,
+            city: installCity,
+            state: installState,
+            pincode: installPincode,
+          } satisfies Prisma.InputJsonValue,
+        },
       });
 
       return {
@@ -799,30 +724,29 @@ export async function POST(
       };
     });
 
-    void sendWarrantyActivatedNotification({
-      customerPhone: normalizedPhone,
-      productName: job.asset.productModel.name,
-      warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
-      stickerNumber: linkedProduct.sticker.stickerNumber,
-      stickerType: linkedProduct.sticker.type,
-      certificateUrl,
-      languagePreference: updated.customer.languagePreference,
-    });
+    const reportId = updated.job.installationReport?.id;
+    const authorizationUrl = reportId
+      ? buildInstallationReportAuthorizationUrl(reportId)
+      : null;
+    const pdfUrl = reportId ? buildInstallationReportPdfUrl(reportId) : null;
 
-    if (customerEmail) {
-      void sendCustomerWarrantyActivatedEmail({
-        customerEmail,
+    if (authorizationUrl && pdfUrl) {
+      void sendInstallationReportAuthorizationNotification({
+        customerPhone: normalizedPhone,
         customerName,
         productName: job.asset.productModel.name,
-        warrantyEndDateLabel: formatWarrantyEndDate(warrantyEndDate),
-        certificateUrl,
+        authorizationUrl,
+        pdfUrl,
+        languagePreference: updated.customer.languagePreference,
+        customerEmail,
       });
     }
 
     return NextResponse.json({
       job: serializeInstallationJobRow(updated.job),
-      activationTriggeredAt: activationAt.toISOString(),
-      certificateUrl,
+      reportSubmittedAt: submittedAt.toISOString(),
+      authorizationUrl,
+      pdfUrl,
     });
   } catch (error) {
     const message =

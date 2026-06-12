@@ -107,6 +107,7 @@ export type TechnicianInstallationJobStatus =
   | "technician_enroute"
   | "on_site"
   | "commissioning"
+  | "pending_customer_authorization"
   | "completed"
   | "cancelled"
   | "failed";
@@ -161,6 +162,10 @@ export interface TechnicianInstallationJob {
     id: string;
     submittedAt: string;
     customerName: string;
+    customerAuthorizedAt: string | null;
+    customerAuthorizedByName: string | null;
+    pdfUrl: string;
+    authorizationUrl: string;
     submittedByRole:
       | "manufacturer_engineer"
       | "dealer_engineer"

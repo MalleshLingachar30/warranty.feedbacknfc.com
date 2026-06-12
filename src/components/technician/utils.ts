@@ -162,6 +162,8 @@ export function installationStatusBadgeClass(
     case "on_site":
     case "commissioning":
       return "border-violet-300 bg-violet-100 text-violet-800";
+    case "pending_customer_authorization":
+      return "border-amber-300 bg-amber-100 text-amber-900";
     case "completed":
       return "border-emerald-300 bg-emerald-100 text-emerald-800";
     case "cancelled":

@@ -240,6 +240,10 @@ export type InstallationJobRow = {
     submittedAt: string;
     submittedByRole: InstallationReportSubmitterRole;
     customerName: string;
+    customerAuthorizedAt: string | null;
+    customerAuthorizedByName: string | null;
+    pdfUrl: string;
+    authorizationUrl: string;
   } | null;
 };
 

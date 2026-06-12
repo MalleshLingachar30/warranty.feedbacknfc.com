@@ -27,6 +27,7 @@ export const INSTALLATION_JOB_STATUSES = [
   "technician_enroute",
   "on_site",
   "commissioning",
+  "pending_customer_authorization",
   "completed",
   "cancelled",
   "failed",
@@ -79,6 +80,7 @@ export function installationJobLifecycleState(
     case "technician_enroute":
     case "on_site":
     case "commissioning":
+    case "pending_customer_authorization":
       return "installation_in_progress";
     case "completed":
       return "active";

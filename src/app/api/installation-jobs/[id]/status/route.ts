@@ -167,6 +167,7 @@ export async function POST(
     }
 
     if (
+      job.status === "pending_customer_authorization" ||
       job.status === "completed" ||
       job.status === "cancelled" ||
       job.status === "failed"

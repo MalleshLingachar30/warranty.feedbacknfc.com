@@ -96,6 +96,8 @@ function installationStatusClass(status: InstallationJobStatus) {
     case "on_site":
     case "commissioning":
       return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    case "pending_customer_authorization":
+      return "border-amber-200 bg-amber-50 text-amber-800";
     case "completed":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
     case "cancelled":

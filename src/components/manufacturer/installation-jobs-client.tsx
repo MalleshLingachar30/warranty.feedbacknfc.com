@@ -97,6 +97,8 @@ function jobStatusClass(status: InstallationJobRow["status"]) {
     case "on_site":
     case "commissioning":
       return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    case "pending_customer_authorization":
+      return "border-amber-200 bg-amber-50 text-amber-800";
     case "completed":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
     case "cancelled":
@@ -370,7 +372,13 @@ export function InstallationJobsClient({
                         {formatWorkflowLabel(job.assetLifecycleState)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatDateTime(job.activationTriggeredAt)}</TableCell>
+                    <TableCell>
+                      {job.activationTriggeredAt
+                        ? formatDateTime(job.activationTriggeredAt)
+                        : job.status === "pending_customer_authorization"
+                          ? "Awaiting customer authorization"
+                          : "-"}
+                    </TableCell>
                     <TableCell>
                       {job.installationReport ? (
                         <div className="space-y-1">
@@ -383,6 +391,33 @@ export function InstallationJobsClient({
                             )}{" "}
                             • {formatDateTime(job.installationReport.submittedAt)}
                           </p>
+                          <p className="text-xs text-muted-foreground">
+                            {job.installationReport.customerAuthorizedAt
+                              ? `Authorized ${formatDateTime(
+                                  job.installationReport.customerAuthorizedAt,
+                                )}`
+                              : "Waiting for customer authorization"}
+                          </p>
+                          <div className="flex flex-col gap-1 text-xs">
+                            <a
+                              href={job.installationReport.pdfUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                            >
+                              View PDF
+                            </a>
+                            {!job.installationReport.customerAuthorizedAt ? (
+                              <a
+                                href={job.installationReport.authorizationUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="underline"
+                              >
+                                Open authorization page
+                              </a>
+                            ) : null}
+                          </div>
                         </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">

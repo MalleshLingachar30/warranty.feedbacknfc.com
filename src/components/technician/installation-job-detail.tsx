@@ -49,6 +49,11 @@ type GeoLocationState = {
   accuracy: number;
 } | null;
 
+type SubmittedReportLinks = {
+  pdfUrl: string | null;
+  authorizationUrl: string | null;
+} | null;
+
 type InstallationPartUsageDraft = {
   id: string;
   assetCode: string;
@@ -130,6 +135,9 @@ export function InstallationJobDetail({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [submittedLinks, setSubmittedLinks] = useState<SubmittedReportLinks>(
+    null,
+  );
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -195,6 +203,14 @@ export function InstallationJobDetail({
     );
     setActionError(null);
     setActionSuccess(null);
+    setSubmittedLinks(
+      job.installationReport
+        ? {
+            pdfUrl: job.installationReport.pdfUrl,
+            authorizationUrl: job.installationReport.authorizationUrl,
+          }
+        : null,
+    );
   }, [job, technicianName]);
 
   useEffect(() => {
@@ -412,13 +428,21 @@ export function InstallationJobDetail({
         }),
       });
 
-      const payload = (await response.json()) as { error?: string };
+      const payload = (await response.json()) as {
+        error?: string;
+        pdfUrl?: string | null;
+        authorizationUrl?: string | null;
+      };
       if (!response.ok) {
         throw new Error(payload.error ?? "Unable to submit installation report.");
       }
 
+      setSubmittedLinks({
+        pdfUrl: payload.pdfUrl ?? null,
+        authorizationUrl: payload.authorizationUrl ?? null,
+      });
       setActionSuccess(
-        "Installation report submitted. Warranty activation has been triggered.",
+        "Installation report submitted. Customer authorization is now required before warranty activation.",
       );
       await onUpdated(job.id);
     } catch (error) {
@@ -458,9 +482,18 @@ export function InstallationJobDetail({
           <p>Scheduled: {formatDateTime(job.scheduledFor)}</p>
           <p>Lifecycle: {workflowLabel(job.asset.lifecycleState)}</p>
           {job.installationReport ? (
-            <p>
-              Report submitted {formatDateTime(job.installationReport.submittedAt)}
-            </p>
+            <div className="space-y-1">
+              <p>
+                Report submitted {formatDateTime(job.installationReport.submittedAt)}
+              </p>
+              <p>
+                {job.installationReport.customerAuthorizedAt
+                  ? `Customer authorized ${formatDateTime(
+                      job.installationReport.customerAuthorizedAt,
+                    )}`
+                  : "Customer authorization pending"}
+              </p>
+            </div>
           ) : null}
         </CardContent>
       </Card>
@@ -770,7 +803,7 @@ export function InstallationJobDetail({
           <Card className="border-slate-200">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">
-                Customer Acknowledgement And Geo
+                Handover Acknowledgement And Geo
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -824,6 +857,34 @@ export function InstallationJobDetail({
         <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <p>{actionSuccess}</p>
+        </div>
+      ) : null}
+
+      {submittedLinks?.pdfUrl || submittedLinks?.authorizationUrl ? (
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-900">
+          <p className="font-medium">Customer authorization links</p>
+          <div className="mt-2 flex flex-col gap-2">
+            {submittedLinks.pdfUrl ? (
+              <a
+                href={submittedLinks.pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                Open installation report PDF
+              </a>
+            ) : null}
+            {submittedLinks.authorizationUrl ? (
+              <a
+                href={submittedLinks.authorizationUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                Open customer authorization page
+              </a>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -901,6 +962,14 @@ export function InstallationJobDetail({
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
             Installation completed at {formatDateTime(job.technicianCompletedAt)}
             . Activation triggered {formatDateTime(job.activationTriggeredAt)}.
+          </div>
+        ) : null}
+
+        {job.status === "pending_customer_authorization" ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Installation report submitted at{" "}
+            {formatDateTime(job.installationReport?.submittedAt ?? null)}. Waiting
+            for customer authorization before warranty activation.
           </div>
         ) : null}
       </div>

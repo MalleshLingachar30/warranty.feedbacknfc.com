@@ -224,6 +224,7 @@ enum InstallationJobStatus {
   technician_enroute
   on_site
   commissioning
+  pending_customer_authorization
   completed
   cancelled
   failed
@@ -901,6 +902,10 @@ model InstallationReport {
   geoLocation                    Json                            @map("geo_location")
   customerAcknowledgementType    CustomerAcknowledgementType     @map("customer_acknowledgement_type")
   customerAcknowledgementPayload Json                            @map("customer_acknowledgement_payload")
+  customerAuthorizedAt           DateTime?                       @map("customer_authorized_at")
+  customerAuthorizedByName       String?                         @map("customer_authorized_by_name") @db.VarChar(255)
+  customerAuthorizedByPhone      String?                         @map("customer_authorized_by_phone") @db.VarChar(20)
+  customerAuthorizationPayload   Json?                           @map("customer_authorization_payload")
   photoUrls                      String[]                        @default([]) @map("photo_urls")
   checklistResponses             Json                            @map("checklist_responses")
   commissioningData              Json                            @map("commissioning_data")
@@ -915,6 +920,7 @@ model InstallationReport {
   @@index([assetId], map: "idx_installation_reports_asset")
   @@index([submittedByUserId], map: "idx_installation_reports_submitted_by")
   @@index([submittedAt], map: "idx_installation_reports_submitted_at")
+  @@index([customerAuthorizedAt], map: "idx_installation_reports_customer_authorized_at")
   @@map("installation_reports")
 }
 

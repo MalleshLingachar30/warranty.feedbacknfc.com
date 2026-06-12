@@ -278,7 +278,9 @@ export function MyInstallationJobsBoard({
               <p className="inline-flex items-center gap-1">
                 <Wrench className="h-3.5 w-3.5" />
                 {job.installationReport
-                  ? `Reported ${formatDateTime(job.installationReport.submittedAt)}`
+                  ? job.installationReport.customerAuthorizedAt
+                    ? `Authorized ${formatDateTime(job.installationReport.customerAuthorizedAt)}`
+                    : `Reported ${formatDateTime(job.installationReport.submittedAt)}`
                   : "Report pending"}
               </p>
             </div>
