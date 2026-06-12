@@ -1,6 +1,7 @@
 import {
   Document,
   type DocumentProps,
+  Link,
   Page,
   StyleSheet,
   Text,
@@ -23,6 +24,8 @@ interface InstallationReportPdfDocumentProps {
   installState: string;
   installPincode: string;
   installationDate: string;
+  geoLocationLabel?: string | null;
+  geoLocationUrl?: string | null;
   installerName: string;
   submittedAt: string;
   submittedByRole: string;
@@ -106,6 +109,10 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#64748b",
   },
+  link: {
+    color: "#1d4ed8",
+    textDecoration: "underline",
+  },
 });
 
 function renderPairs(rows: Array<{ label: string; value: string }>) {
@@ -180,6 +187,20 @@ export function InstallationReportPdfDocument(
               {props.installPincode}
             </Text>
           </View>
+          <View style={styles.row}>
+            <Text style={styles.label}>GPS Coordinates</Text>
+            <Text style={styles.value}>
+              {props.geoLocationLabel ?? "Not captured"}
+            </Text>
+          </View>
+          {props.geoLocationUrl ? (
+            <View style={styles.row}>
+              <Text style={styles.label}>Map Link</Text>
+              <Link src={props.geoLocationUrl} style={[styles.value, styles.link]}>
+                Open installation location
+              </Link>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.section}>

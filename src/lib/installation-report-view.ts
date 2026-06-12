@@ -1,5 +1,11 @@
 import { Prisma } from "@prisma/client";
 
+type InstallationGeoLocation = {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+};
+
 export const installationReportAuthorizationSelect =
   Prisma.validator<Prisma.InstallationReportSelect>()({
     id: true,
@@ -129,4 +135,54 @@ export function jsonRecordToPairs(
       (entry): entry is { label: string; value: string } =>
         Boolean(entry && entry.value.length > 0),
     );
+}
+
+export function parseInstallationGeoLocation(
+  value: Prisma.JsonValue,
+): InstallationGeoLocation | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const source = value as Record<string, unknown>;
+  const latitude = Number(source.latitude ?? source.lat);
+  const longitude = Number(source.longitude ?? source.lng);
+  const rawAccuracy = Number(source.accuracy ?? Number.NaN);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+    accuracy: Number.isFinite(rawAccuracy) ? rawAccuracy : null,
+  };
+}
+
+export function formatInstallationGeoLocationLabel(
+  value: Prisma.JsonValue,
+): string | null {
+  const location = parseInstallationGeoLocation(value);
+  if (!location) {
+    return null;
+  }
+
+  const coordinates = `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+  if (location.accuracy === null) {
+    return coordinates;
+  }
+
+  return `${coordinates} (accuracy ${Math.round(location.accuracy)}m)`;
+}
+
+export function buildInstallationGeoLocationUrl(
+  value: Prisma.JsonValue,
+): string | null {
+  const location = parseInstallationGeoLocation(value);
+  if (!location) {
+    return null;
+  }
+
+  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
 }

@@ -7,6 +7,8 @@ import {
   buildInstallationReportPdfUrl,
 } from "@/lib/installation-report-links";
 import {
+  buildInstallationGeoLocationUrl,
+  formatInstallationGeoLocationLabel,
   formatInstallationReportDate,
   formatInstallationReportDateTime,
   installationReportAuthorizationSelect,
@@ -75,6 +77,8 @@ export default async function InstallationReportAuthorizationPage({
       installationDateLabel={formatInstallationReportDate(
         report.installationDate,
       )}
+      geoLocationLabel={formatInstallationGeoLocationLabel(report.geoLocation)}
+      geoLocationUrl={buildInstallationGeoLocationUrl(report.geoLocation)}
       submittedAtLabel={formatInstallationReportDateTime(report.submittedAt)}
       pdfUrl={buildInstallationReportPdfUrl(report.id)}
       authorizationUrl={buildInstallationReportAuthorizationUrl(report.id)}

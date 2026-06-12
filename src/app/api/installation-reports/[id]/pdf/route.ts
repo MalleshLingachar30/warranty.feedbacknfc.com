@@ -2,7 +2,9 @@ import { renderToBuffer } from "@react-pdf/renderer";
 
 import { db } from "@/lib/db";
 import {
+  buildInstallationGeoLocationUrl,
   buildInstallationReportNumber,
+  formatInstallationGeoLocationLabel,
   formatInstallationReportDate,
   formatInstallationReportDateTime,
   installationReportAuthorizationSelect,
@@ -54,6 +56,8 @@ export async function GET(
       installState: report.installState,
       installPincode: report.installPincode,
       installationDate: formatInstallationReportDate(report.installationDate),
+      geoLocationLabel: formatInstallationGeoLocationLabel(report.geoLocation),
+      geoLocationUrl: buildInstallationGeoLocationUrl(report.geoLocation),
       installerName: report.installerName,
       submittedAt: formatInstallationReportDateTime(report.submittedAt),
       submittedByRole: report.submittedByRole.replace(/_/g, " "),

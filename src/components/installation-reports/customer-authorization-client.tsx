@@ -18,6 +18,8 @@ type CustomerInstallationReportAuthorizationProps = {
   customerName: string;
   customerPhone: string;
   installationDateLabel: string;
+  geoLocationLabel: string | null;
+  geoLocationUrl: string | null;
   submittedAtLabel: string;
   pdfUrl: string;
   authorizationUrl: string;
@@ -221,6 +223,20 @@ export function CustomerInstallationReportAuthorizationClient(
           </p>
           <p>Serial: {props.unitSerialNumber}</p>
           <p>Installation date: {props.installationDateLabel}</p>
+          <p>
+            GPS Coordinates:{" "}
+            {props.geoLocationLabel ?? "Not captured"}
+          </p>
+          {props.geoLocationUrl ? (
+            <a
+              href={props.geoLocationUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-blue-700 underline"
+            >
+              Open installation location in Maps
+            </a>
+          ) : null}
           <p>Submitted: {props.submittedAtLabel}</p>
           <div className="flex flex-col gap-3 pt-2">
             <a href={props.pdfUrl} target="_blank" rel="noreferrer">
