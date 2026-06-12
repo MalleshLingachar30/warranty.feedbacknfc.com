@@ -81,6 +81,19 @@ function createUsageDraft(): InstallationPartUsageDraft {
   };
 }
 
+function readFormString(
+  formData: FormData,
+  name: string,
+  fallback: string,
+): string {
+  const value = formData.get(name);
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return value;
+}
+
 function parseRequiredKitCodes(
   includedKitDefinition: Record<string, unknown>,
 ): string[] {
@@ -165,6 +178,7 @@ export function InstallationJobDetail({
   >({});
   const [partUsages, setPartUsages] = useState<InstallationPartUsageDraft[]>([]);
   const consumedScannedRowsRef = useRef<Set<string>>(new Set());
+  const reportFormRef = useRef<HTMLFormElement | null>(null);
 
   const requiredKitCodes = parseRequiredKitCodes(
     job.productModel.includedKitDefinition,
@@ -338,20 +352,80 @@ export function InstallationJobDetail({
     setActionSuccess(null);
 
     try {
-      if (!customerName.trim() || !customerPhone.trim()) {
+      const formData = new FormData(reportFormRef.current ?? undefined);
+
+      const resolvedCustomerName = readFormString(
+        formData,
+        "customerName",
+        customerName,
+      );
+      const resolvedCustomerPhone = readFormString(
+        formData,
+        "customerPhone",
+        customerPhone,
+      );
+      const resolvedCustomerEmail = readFormString(
+        formData,
+        "customerEmail",
+        customerEmail,
+      );
+      const resolvedInstallAddress = readFormString(
+        formData,
+        "installAddress",
+        installAddress,
+      );
+      const resolvedInstallCity = readFormString(
+        formData,
+        "installCity",
+        installCity,
+      );
+      const resolvedInstallState = readFormString(
+        formData,
+        "installState",
+        installState,
+      );
+      const resolvedInstallPincode = readFormString(
+        formData,
+        "installPincode",
+        installPincode,
+      );
+      const resolvedInstallationDate = readFormString(
+        formData,
+        "installationDate",
+        installationDate,
+      );
+      const resolvedInstallerName = readFormString(
+        formData,
+        "installerName",
+        installerName,
+      );
+      const resolvedUnitSerialNumber = readFormString(
+        formData,
+        "unitSerialNumber",
+        unitSerialNumber,
+      );
+
+      if (!resolvedCustomerName.trim() || !resolvedCustomerPhone.trim()) {
         throw new Error("Customer name and phone are required.");
       }
 
       if (
-        !installAddress.trim() ||
-        !installCity.trim() ||
-        !installState.trim() ||
-        !installPincode.trim()
+        !resolvedInstallAddress.trim() ||
+        !resolvedInstallCity.trim() ||
+        !resolvedInstallState.trim() ||
+        !resolvedInstallPincode.trim()
       ) {
         throw new Error("Complete installation address is required.");
       }
 
-      if (!installerName.trim() || !unitSerialNumber.trim()) {
+      if (!resolvedInstallationDate.trim()) {
+        throw new Error("Installation date is required.");
+      }
+
+      if (
+        !resolvedInstallerName.trim() ||
+        !resolvedUnitSerialNumber.trim()
+      ) {
         throw new Error("Installer name and unit serial number are required.");
       }
 
@@ -402,16 +476,16 @@ export function InstallationJobDetail({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          customerName,
-          customerPhone,
-          customerEmail: customerEmail || null,
-          installAddress,
-          installCity,
-          installState,
-          installPincode,
-          installationDate,
-          installerName,
-          unitSerialNumber,
+          customerName: resolvedCustomerName,
+          customerPhone: resolvedCustomerPhone,
+          customerEmail: resolvedCustomerEmail || null,
+          installAddress: resolvedInstallAddress,
+          installCity: resolvedInstallCity,
+          installState: resolvedInstallState,
+          installPincode: resolvedInstallPincode,
+          installationDate: resolvedInstallationDate,
+          installerName: resolvedInstallerName,
+          unitSerialNumber: resolvedUnitSerialNumber,
           geoLocation,
           customerAcknowledgementType: "digital_acceptance",
           customerAcknowledgementPayload: {
@@ -457,7 +531,14 @@ export function InstallationJobDetail({
   };
 
   return (
-    <div className="space-y-3 pb-28">
+    <form
+      ref={reportFormRef}
+      className="space-y-3 pb-28"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submitReport();
+      }}
+    >
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -506,32 +587,38 @@ export function InstallationJobDetail({
             </CardHeader>
             <CardContent className="space-y-3">
               <Input
+                name="customerName"
                 placeholder="Customer name"
                 value={customerName}
                 onChange={(event) => setCustomerName(event.target.value)}
               />
               <Input
+                name="customerPhone"
                 placeholder="Customer phone"
                 value={customerPhone}
                 onChange={(event) => setCustomerPhone(event.target.value)}
               />
               <Input
+                name="customerEmail"
                 placeholder="Customer email"
                 value={customerEmail}
                 onChange={(event) => setCustomerEmail(event.target.value)}
               />
               <Textarea
+                name="installAddress"
                 placeholder="Installation address"
                 value={installAddress}
                 onChange={(event) => setInstallAddress(event.target.value)}
               />
               <div className="grid grid-cols-2 gap-2">
                 <Input
+                  name="installCity"
                   placeholder="City"
                   value={installCity}
                   onChange={(event) => setInstallCity(event.target.value)}
                 />
                 <Input
+                  name="installState"
                   placeholder="State"
                   value={installState}
                   onChange={(event) => setInstallState(event.target.value)}
@@ -539,11 +626,13 @@ export function InstallationJobDetail({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Input
+                  name="installPincode"
                   placeholder="Pincode"
                   value={installPincode}
                   onChange={(event) => setInstallPincode(event.target.value)}
                 />
                 <Input
+                  name="installationDate"
                   type="date"
                   value={installationDate}
                   onChange={(event) => setInstallationDate(event.target.value)}
@@ -551,11 +640,13 @@ export function InstallationJobDetail({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <Input
+                  name="installerName"
                   placeholder="Installer name"
                   value={installerName}
                   onChange={(event) => setInstallerName(event.target.value)}
                 />
                 <Input
+                  name="unitSerialNumber"
                   placeholder="Unit serial number"
                   value={unitSerialNumber}
                   onChange={(event) => setUnitSerialNumber(event.target.value)}
@@ -945,9 +1036,9 @@ export function InstallationJobDetail({
 
         {job.status === "commissioning" ? (
           <Button
+            type="submit"
             className="h-12 w-full"
             disabled={actionLoading}
-            onClick={() => void submitReport()}
           >
             {actionLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -973,6 +1064,6 @@ export function InstallationJobDetail({
           </div>
         ) : null}
       </div>
-    </div>
+    </form>
   );
 }
