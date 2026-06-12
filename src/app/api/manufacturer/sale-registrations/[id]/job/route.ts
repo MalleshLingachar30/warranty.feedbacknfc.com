@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { createInstallationJobFromSaleRegistration } from "@/lib/installation-job-creation";
 import {
   installationJobLifecycleState,
   parseOptionalDate,
@@ -23,57 +24,6 @@ type CreateInstallationJobPayload = {
   assignedServiceCenterId?: unknown;
   scheduledFor?: unknown;
 };
-
-const MAX_JOB_NUMBER_ATTEMPTS = 5;
-
-async function generateInstallationJobNumber(tx: Prisma.TransactionClient) {
-  const year = new Date().getFullYear();
-  const prefix = `INS-${year}-`;
-
-  const latest = await tx.installationJob.findFirst({
-    where: {
-      jobNumber: {
-        startsWith: prefix,
-      },
-    },
-    orderBy: {
-      jobNumber: "desc",
-    },
-    select: {
-      jobNumber: true,
-    },
-  });
-
-  const match = latest?.jobNumber.match(new RegExp(`^INS-${year}-(\\d+)$`));
-  const nextValue = match?.[1] ? Number.parseInt(match[1], 10) + 1 : 1;
-
-  return `INS-${year}-${String(nextValue).padStart(6, "0")}`;
-}
-
-function isJobNumberUniqueCollision(error: unknown) {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  if (error.code !== "P2002") {
-    return false;
-  }
-
-  const target = error.meta?.target;
-  if (typeof target === "string") {
-    return target.includes("job_number") || target.includes("jobNumber");
-  }
-
-  if (Array.isArray(target)) {
-    return target.some(
-      (entry) =>
-        typeof entry === "string" &&
-        (entry.includes("job_number") || entry.includes("jobNumber")),
-    );
-  }
-
-  return false;
-}
 
 export async function POST(
   request: Request,
@@ -151,75 +101,43 @@ export async function POST(
       }
     }
 
-    let job = null;
+    const job = await db.$transaction(async (tx) => {
+      const created = await createInstallationJobFromSaleRegistration({
+        tx,
+        assetId: registration.assetId,
+        saleRegistrationId: registration.id,
+        manufacturerOrgId: organizationId,
+        assignedServiceCenterId,
+        scheduledFor,
+        checklistTemplateSnapshot: registration.asset.productModel
+          .installationChecklistTemplate as Prisma.InputJsonValue,
+        commissioningTemplateSnapshot: registration.asset.productModel
+          .commissioningTemplate as Prisma.InputJsonValue,
+        metadata: {
+          seededFromSaleRegistrationId: registration.id,
+        } satisfies Prisma.InputJsonValue,
+      });
 
-    for (let attempt = 0; attempt < MAX_JOB_NUMBER_ATTEMPTS; attempt += 1) {
-      try {
-        job = await db.$transaction(async (tx) => {
-          const jobNumber = await generateInstallationJobNumber(tx);
-          const status = scheduledFor
-            ? "scheduled"
-            : assignedServiceCenterId
-              ? "assigned"
-              : "pending_assignment";
+      await tx.saleRegistration.update({
+        where: {
+          id: registration.id,
+        },
+        data: {
+          status: "job_created",
+        },
+      });
 
-          const created = await tx.installationJob.create({
-            data: {
-              jobNumber,
-              assetId: registration.assetId,
-              saleRegistrationId: registration.id,
-              manufacturerOrgId: organizationId,
-              assignedServiceCenterId,
-              status,
-              scheduledFor,
-              checklistTemplateSnapshot: registration.asset.productModel
-                .installationChecklistTemplate as Prisma.InputJsonValue,
-              commissioningTemplateSnapshot: registration.asset.productModel
-                .commissioningTemplate as Prisma.InputJsonValue,
-              metadata: {
-                seededFromSaleRegistrationId: registration.id,
-              } satisfies Prisma.InputJsonValue,
-            },
-            select: installationJobSelect,
-          });
+      await tx.assetIdentity.update({
+        where: {
+          id: registration.assetId,
+        },
+        data: {
+          lifecycleState: installationJobLifecycleState(created.status),
+        },
+      });
 
-          await tx.saleRegistration.update({
-            where: {
-              id: registration.id,
-            },
-            data: {
-              status: "job_created",
-            },
-          });
-
-          await tx.assetIdentity.update({
-            where: {
-              id: registration.assetId,
-            },
-            data: {
-              lifecycleState: installationJobLifecycleState(status),
-            },
-          });
-
-          return created;
-        });
-
-        break;
-      } catch (error) {
-        if (
-          isJobNumberUniqueCollision(error) &&
-          attempt < MAX_JOB_NUMBER_ATTEMPTS - 1
-        ) {
-          continue;
-        }
-
-        throw error;
-      }
-    }
-
-    if (!job) {
-      throw new ApiError("Unable to create installation job.", 500);
-    }
+      return created;
+    });
 
     return NextResponse.json(
       {

@@ -235,6 +235,20 @@ export type InstallationJobRow = {
   } | null;
   assignedTechnicianId: string | null;
   assignedTechnicianName: string | null;
+  installationRequest: {
+    channel: string;
+    requesterName: string | null;
+    requesterPhone: string | null;
+    requesterEmail: string | null;
+    siteName: string | null;
+    installAddress: string | null;
+    installCity: string | null;
+    installState: string | null;
+    installPincode: string | null;
+    preferredDate: string | null;
+    note: string | null;
+    requestedAt: string | null;
+  } | null;
   installationReport: {
     id: string;
     submittedAt: string;

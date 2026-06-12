@@ -89,6 +89,7 @@ export const installationJobSelect =
     scheduledFor: true,
     createdAt: true,
     activationTriggeredAt: true,
+    metadata: true,
     assetId: true,
     asset: {
       select: {
@@ -137,6 +138,48 @@ export const installationJobSelect =
 type InstallationJobRecord = Prisma.InstallationJobGetPayload<{
   select: typeof installationJobSelect;
 }>;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseInstallationRequestMetadata(value: Prisma.JsonValue) {
+  const root = asRecord(value);
+  const request = asRecord(root.installationRequest);
+  const channel = asString(request.channel);
+
+  if (!channel) {
+    return null;
+  }
+
+  return {
+    channel,
+    requesterName: asString(request.requesterName),
+    requesterPhone: asString(request.requesterPhone),
+    requesterEmail: asString(request.requesterEmail),
+    siteName: asString(request.siteName),
+    installAddress: asString(request.installAddress),
+    installCity: asString(request.installCity),
+    installState: asString(request.installState),
+    installPincode: asString(request.installPincode),
+    preferredDate: asString(request.preferredDate),
+    note: asString(request.note),
+    requestedAt: asString(request.requestedAt),
+  };
+}
 
 export function serializeServiceCenterOption(input: {
   id: string;
@@ -251,6 +294,7 @@ export function serializeInstallationJobRow(
       : null,
     assignedTechnicianId: job.assignedTechnician?.id ?? null,
     assignedTechnicianName: job.assignedTechnician?.name ?? null,
+    installationRequest: parseInstallationRequestMetadata(job.metadata),
     installationReport: job.installationReport
       ? {
           id: job.installationReport.id,

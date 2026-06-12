@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { InstallationRequestClient } from "@/components/nfc/installation-request-client";
 import { formatProductClassLabel } from "@/lib/asset-generation";
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
@@ -452,10 +453,17 @@ export default async function TagResolverPage({
         })
       : null;
 
+  const hasResolverInstallationFlow =
+    isMainAsset &&
+    (isInstallationPendingLifecycle(resolvedTag.asset.lifecycleState) ||
+      Boolean(resolvedTag.asset.saleRegistration) ||
+      Boolean(resolvedTag.asset.installationJobs[0]));
+
   if (isMainAsset && linkedProduct?.sticker?.stickerNumber) {
     const shouldFollowNfcFlow =
-      linkedProduct.warrantyStatus !== "pending_activation" ||
-      resolvedTag.asset.productModel.activationMode !== "installation_driven";
+      !hasResolverInstallationFlow &&
+      (linkedProduct.warrantyStatus !== "pending_activation" ||
+        resolvedTag.asset.productModel.activationMode !== "installation_driven");
 
     if (shouldFollowNfcFlow) {
       redirect(
@@ -550,10 +558,21 @@ export default async function TagResolverPage({
         Boolean(resolvedTag.asset.saleRegistration) ||
         Boolean(installationJob))
     ) {
+      const canRequestInstallation =
+        !installationJob && Boolean(resolvedTag.asset.saleRegistration);
+
       return (
         <ResolverShell
-          title="Installation is pending"
-          description="Sale is registered for this asset. Warranty activation will happen only after installation report submission."
+          title={
+            canRequestInstallation
+              ? "Request installation"
+              : "Installation is pending"
+          }
+          description={
+            canRequestInstallation
+              ? "This machine is dispatched and QR-ready. When the site is ready, submit the installation request below."
+              : "Sale is registered for this asset. Warranty activation will happen only after installation report submission."
+          }
         >
           <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
             <p>
@@ -599,6 +618,21 @@ export default async function TagResolverPage({
                   </span>
                 </p>
               </>
+            ) : null}
+
+            {canRequestInstallation ? (
+              <InstallationRequestClient
+                tagCode={resolvedTag.publicCode}
+                assetCode={resolvedTag.asset.publicCode}
+                productName={resolvedTag.asset.productModel.name}
+                modelNumber={resolvedTag.asset.productModel.modelNumber}
+                serialNumber={resolvedTag.asset.serialNumber}
+                saleRegisteredAtLabel={
+                  resolvedTag.asset.saleRegistration
+                    ? formatDateTime(resolvedTag.asset.saleRegistration.registeredAt)
+                    : null
+                }
+              />
             ) : null}
 
             {staffForAssetOrg ? (

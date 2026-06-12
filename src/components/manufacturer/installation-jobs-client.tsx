@@ -86,6 +86,33 @@ function toDateTimeLocalValue(value: string | null) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function formatRequestChannel(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatPreferredDate(value: string | null) {
+  if (!value) {
+    return "-";
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  return formatDateTime(value);
+}
+
 function jobStatusClass(status: InstallationJobRow["status"]) {
   switch (status) {
     case "pending_assignment":
@@ -248,7 +275,7 @@ export function InstallationJobsClient({
         <MetricCard
           title="Open Jobs"
           value={jobs.length.toLocaleString()}
-          description="All seeded installation jobs"
+          description="All installation jobs in planning or execution"
           icon={WrenchIcon}
         />
         <MetricCard
@@ -317,11 +344,17 @@ export function InstallationJobsClient({
                       <div className="space-y-1">
                         <p className="font-medium">{job.jobNumber}</p>
                         <p className="text-xs text-muted-foreground">
-                          Seeded {formatDateTime(job.createdAt)}
+                          Created {formatDateTime(job.createdAt)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Sale reg {formatDateTime(job.saleRegisteredAt)}
                         </p>
+                        {job.installationRequest ? (
+                          <p className="text-xs text-muted-foreground">
+                            Request {formatRequestChannel(job.installationRequest.channel)}{" "}
+                            • {formatDateTime(job.installationRequest.requestedAt)}
+                          </p>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -336,6 +369,21 @@ export function InstallationJobsClient({
                         <p className="text-xs text-muted-foreground">
                           Serial {job.serialNumber}
                         </p>
+                        {job.installationRequest?.siteName ? (
+                          <p className="text-xs text-muted-foreground">
+                            Site {job.installationRequest.siteName}
+                          </p>
+                        ) : null}
+                        {job.installationRequest?.requesterName ||
+                        job.installationRequest?.requesterPhone ? (
+                          <p className="text-xs text-muted-foreground">
+                            Contact{" "}
+                            {job.installationRequest.requesterName ?? "Unknown"}
+                            {job.installationRequest.requesterPhone
+                              ? ` • ${job.installationRequest.requesterPhone}`
+                              : ""}
+                          </p>
+                        ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -348,6 +396,11 @@ export function InstallationJobsClient({
                           <p className="text-xs text-muted-foreground">
                             Technician {job.assignedTechnicianName ?? "Pending"}
                           </p>
+                          {job.installationRequest?.preferredDate ? (
+                            <p className="text-xs text-muted-foreground">
+                              Preferred {formatPreferredDate(job.installationRequest.preferredDate)}
+                            </p>
+                          ) : null}
                         </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">
