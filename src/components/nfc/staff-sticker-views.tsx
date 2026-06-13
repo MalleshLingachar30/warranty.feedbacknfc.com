@@ -313,11 +313,12 @@ export function TechnicianStartWork({
             Reject Job
           </Button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      ) : null}
+
+      {currentStatus === "assigned" ? (
+        <div className="grid grid-cols-1 gap-3">
           <Button
             className="h-11 gap-2"
-            variant="outline"
             disabled={!canStart || isSubmitting}
             onClick={() => postAction("enroute")}
           >
@@ -328,6 +329,11 @@ export function TechnicianStartWork({
             )}
             Start Navigation
           </Button>
+        </div>
+      ) : null}
+
+      {currentStatus === "technician_enroute" ? (
+        <div className="grid grid-cols-1 gap-3">
           <Button
             className="h-11 gap-2"
             disabled={!canStart || isSubmitting}
@@ -341,7 +347,7 @@ export function TechnicianStartWork({
             Start Work
           </Button>
         </div>
-      )}
+      ) : null}
     </NfcPublicShell>
   );
 }
