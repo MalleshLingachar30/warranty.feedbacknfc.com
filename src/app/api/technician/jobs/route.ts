@@ -213,6 +213,12 @@ function parseReceivedSpareItems(
       | "partially_reconciled"
       | "cancelled";
     metadata: Prisma.JsonValue;
+    spareAsset: {
+      publicCode: string;
+    } | null;
+    spareTag: {
+      publicCode: string;
+    } | null;
     dispatch: {
       dispatchNumber: string;
       status:
@@ -244,8 +250,9 @@ function parseReceivedSpareItems(
       partNumber: entry.partNumber ?? "",
       quantity: Math.max(1, toNumber(entry.quantity, 1)),
       unitCost: toNumber(entry.unitCost, 0),
-      assetCode: asNonEmptyString(metadata.assetCode),
-      tagCode: asNonEmptyString(metadata.tagCode),
+      assetCode:
+        entry.spareAsset?.publicCode ?? asNonEmptyString(metadata.assetCode),
+      tagCode: entry.spareTag?.publicCode ?? asNonEmptyString(metadata.tagCode),
     } satisfies ReceivedSpareItem;
   });
 }
@@ -501,6 +508,16 @@ export async function GET() {
                 unitCost: true,
                 status: true,
                 metadata: true,
+                spareAsset: {
+                  select: {
+                    publicCode: true,
+                  },
+                },
+                spareTag: {
+                  select: {
+                    publicCode: true,
+                  },
+                },
               },
             },
           },
