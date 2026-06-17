@@ -5,8 +5,8 @@ import {
   ApiError,
   jsonError,
   parseJsonBody,
-  requireServiceCenterContext,
-} from "@/app/api/service-center/_utils";
+  requireManufacturerContext,
+} from "@/app/api/manufacturer/_utils";
 import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -30,7 +30,7 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const serviceCenter = await requireServiceCenterContext();
+    const manufacturer = await requireManufacturerContext();
     const { id } = await context.params;
     const body = parseJsonBody<UpdateReturnStatusRequest>(await request.json());
     const action = asString(body.action);
@@ -40,18 +40,17 @@ export async function POST(
       throw new ApiError("Return id is required.");
     }
 
-    if (
-      action !== "receive_service_center" &&
-      action !== "cancel"
-    ) {
+    if (action !== "receive_manufacturer" && action !== "close") {
       throw new ApiError("Unsupported return action.");
     }
 
     const partReturn = await db.ticketPartReturn.findFirst({
       where: {
         id,
-        serviceCenter: {
-          organizationId: serviceCenter.organizationId,
+        ticket: {
+          product: {
+            organizationId: manufacturer.organizationId,
+          },
         },
       },
       select: {
@@ -64,15 +63,22 @@ export async function POST(
     });
 
     if (!partReturn) {
-      throw new ApiError("Removed-part return not found for this service center.", 404);
+      throw new ApiError("Removed-part return not found for this manufacturer.", 404);
     }
 
     if (
-      action === "receive_service_center" &&
-      partReturn.status !== "collected_by_technician"
+      action === "receive_manufacturer" &&
+      partReturn.status !== "received_at_service_center"
     ) {
       throw new ApiError(
-        "Only technician-collected returns can be marked as received at the service center.",
+        "Only service-center-received returns can be marked as received by manufacturer.",
+        409,
+      );
+    }
+
+    if (action === "close" && partReturn.status !== "received_by_manufacturer") {
+      throw new ApiError(
+        "Only manufacturer-received returns can be closed.",
         409,
       );
     }
@@ -81,33 +87,34 @@ export async function POST(
 
     await db.$transaction(async (tx) => {
       const nextStatus =
-        action === "receive_service_center"
-          ? "received_at_service_center"
-          : "cancelled";
+        action === "receive_manufacturer"
+          ? "received_by_manufacturer"
+          : "closed";
 
       await tx.ticketPartReturn.update({
         where: { id: partReturn.id },
         data: {
           status: nextStatus,
           collectionNotes: notes ?? partReturn.collectionNotes,
-          receivedAtServiceCenterAt:
-            action === "receive_service_center" ? now : undefined,
-          closedAt: action === "cancel" ? now : undefined,
+          receivedByManufacturerAt:
+            action === "receive_manufacturer" ? now : undefined,
+          closedAt: action === "close" ? now : undefined,
         },
       });
 
       const description =
-        action === "receive_service_center"
-          ? `Removed-part return ${partReturn.returnNumber} received at service center.`
-          : `Removed-part return ${partReturn.returnNumber} cancelled.`;
+        action === "receive_manufacturer"
+          ? `Removed-part return ${partReturn.returnNumber} received by manufacturer/depot.`
+          : `Removed-part return ${partReturn.returnNumber} closed by manufacturer/depot.`;
 
       await tx.ticketTimeline.create({
         data: {
           ticketId: partReturn.ticketId,
           eventType: "removed_part_return_updated",
           eventDescription: description,
-          actorRole: "service_center_admin",
-          actorName: "Service Center",
+          actorUserId: manufacturer.dbUserId,
+          actorRole: "manufacturer_admin",
+          actorName: "Manufacturer",
           metadata: {
             returnNumber: partReturn.returnNumber,
             action,

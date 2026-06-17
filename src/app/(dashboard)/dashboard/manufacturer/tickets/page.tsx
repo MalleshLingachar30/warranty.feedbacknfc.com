@@ -2,6 +2,7 @@ import { Prisma, type TicketStatus } from "@prisma/client";
 import { AlertTriangle, Clock3, TicketCheck, TimerReset } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
+import { PartReturnsClient } from "@/components/manufacturer/part-returns-client";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -214,6 +215,62 @@ export default async function ManufacturerTicketsPage() {
     `),
   ]);
 
+  const partReturns = await db.ticketPartReturn.findMany({
+    where: {
+      ticket: {
+        product: {
+          organizationId,
+        },
+      },
+      status: {
+        in: ["received_at_service_center", "received_by_manufacturer"],
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 120,
+    select: {
+      id: true,
+      returnNumber: true,
+      status: true,
+      partName: true,
+      partNumber: true,
+      quantity: true,
+      collectionNotes: true,
+      collectedAt: true,
+      receivedAtServiceCenterAt: true,
+      receivedByManufacturerAt: true,
+      closedAt: true,
+      ticket: {
+        select: {
+          ticketNumber: true,
+          product: {
+            select: {
+              serialNumber: true,
+              productModel: {
+                select: {
+                  name: true,
+                  modelNumber: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      serviceCenter: {
+        select: {
+          name: true,
+        },
+      },
+      technician: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
   const openCount = aggregate
     .filter((entry) => OPEN_STATUSES.includes(entry.status))
     .reduce((sum, entry) => sum + entry._count._all, 0);
@@ -370,6 +427,31 @@ export default async function ManufacturerTicketsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <PartReturnsClient
+        rows={partReturns.map((partReturn) => ({
+          id: partReturn.id,
+          returnNumber: partReturn.returnNumber,
+          status: partReturn.status,
+          ticketNumber: partReturn.ticket.ticketNumber,
+          serviceCenterName: partReturn.serviceCenter?.name ?? null,
+          technicianName: partReturn.technician?.name ?? null,
+          productModelName: partReturn.ticket.product.productModel.name,
+          productModelNumber:
+            partReturn.ticket.product.productModel.modelNumber ?? null,
+          serialNumber: partReturn.ticket.product.serialNumber ?? null,
+          partName: partReturn.partName,
+          partNumber: partReturn.partNumber,
+          quantity: Number(partReturn.quantity.toString()),
+          collectionNotes: partReturn.collectionNotes,
+          collectedAt: partReturn.collectedAt?.toISOString() ?? null,
+          receivedAtServiceCenterAt:
+            partReturn.receivedAtServiceCenterAt?.toISOString() ?? null,
+          receivedByManufacturerAt:
+            partReturn.receivedByManufacturerAt?.toISOString() ?? null,
+          closedAt: partReturn.closedAt?.toISOString() ?? null,
+        }))}
+      />
     </div>
   );
 }

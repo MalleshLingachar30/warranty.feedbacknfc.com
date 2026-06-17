@@ -205,20 +205,12 @@ export function TicketLogisticsClient({
 
   const returnAction = async (
     returnId: string,
-    action:
-      | "receive_service_center"
-      | "receive_manufacturer"
-      | "close"
-      | "cancel",
+    action: "receive_service_center" | "cancel",
   ) => {
     const label =
       action === "receive_service_center"
         ? "Return received at service center."
-        : action === "receive_manufacturer"
-          ? "Return handed to manufacturer."
-          : action === "close"
-            ? "Return closed."
-            : "Return cancelled.";
+        : "Return cancelled.";
 
     await postJson(
       `/api/service-center/part-returns/${returnId}/status`,
@@ -587,33 +579,6 @@ export function TicketLogisticsClient({
                       disabled={Boolean(loading)}
                     >
                       Receive at Service Center
-                    </Button>
-                  ) : null}
-                  {partReturn.status === "received_at_service_center" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        void returnAction(
-                          partReturn.id,
-                          "receive_manufacturer",
-                        )
-                      }
-                      disabled={Boolean(loading)}
-                    >
-                      Receive by Manufacturer
-                    </Button>
-                  ) : null}
-                  {partReturn.status === "received_by_manufacturer" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void returnAction(partReturn.id, "close")}
-                      disabled={Boolean(loading)}
-                    >
-                      Close Return
                     </Button>
                   ) : null}
                 </div>
