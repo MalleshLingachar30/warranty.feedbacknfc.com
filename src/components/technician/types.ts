@@ -35,6 +35,33 @@ export interface TechnicianPartUsed {
   tagCode?: string | null;
 }
 
+export interface TechnicianReceivedSpareItem {
+  dispatchItemId: string;
+  dispatchNumber: string;
+  dispatchStatus:
+    | "planned"
+    | "dispatched"
+    | "received_by_technician"
+    | "partially_reconciled"
+    | "fully_reconciled"
+    | "cancelled";
+  itemStatus:
+    | "planned"
+    | "dispatched"
+    | "received_by_technician"
+    | "installed"
+    | "consumed"
+    | "returned_unused"
+    | "partially_reconciled"
+    | "cancelled";
+  partName: string;
+  partNumber: string;
+  quantity: number;
+  unitCost: number;
+  assetCode: string | null;
+  tagCode: string | null;
+}
+
 export interface TechnicianServiceHistoryItem {
   id: string;
   ticketNumber: string;
@@ -71,6 +98,7 @@ export interface TechnicianJob {
   resolutionPhotos: string[];
   resolutionNotes: string | null;
   partsUsed: TechnicianPartUsed[];
+  receivedSpareItems: TechnicianReceivedSpareItem[];
   partsCatalog: TechnicianPartCatalogItem[];
   aiSuggestedParts: TechnicianPartCatalogItem[];
   serviceHistory: TechnicianServiceHistoryItem[];

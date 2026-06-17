@@ -44,6 +44,33 @@ type PartUsed = {
   tagCode: string | null;
 };
 
+type ReceivedSpareItem = {
+  dispatchItemId: string;
+  dispatchNumber: string;
+  dispatchStatus:
+    | "planned"
+    | "dispatched"
+    | "received_by_technician"
+    | "partially_reconciled"
+    | "fully_reconciled"
+    | "cancelled";
+  itemStatus:
+    | "planned"
+    | "dispatched"
+    | "received_by_technician"
+    | "installed"
+    | "consumed"
+    | "returned_unused"
+    | "partially_reconciled"
+    | "cancelled";
+  partName: string;
+  partNumber: string;
+  quantity: number;
+  unitCost: number;
+  assetCode: string | null;
+  tagCode: string | null;
+};
+
 type JobServiceHistoryItem = {
   id: string;
   ticketNumber: string;
@@ -167,6 +194,60 @@ function parsePartsUsed(
       } satisfies PartUsed;
     })
     .filter((entry): entry is PartUsed => Boolean(entry));
+}
+
+function parseReceivedSpareItems(
+  value: Array<{
+    id: string;
+    partName: string;
+    partNumber: string | null;
+    quantity: Prisma.Decimal;
+    unitCost: Prisma.Decimal | null;
+    status:
+      | "planned"
+      | "dispatched"
+      | "received_by_technician"
+      | "installed"
+      | "consumed"
+      | "returned_unused"
+      | "partially_reconciled"
+      | "cancelled";
+    metadata: Prisma.JsonValue;
+    dispatch: {
+      dispatchNumber: string;
+      status:
+        | "planned"
+        | "dispatched"
+        | "received_by_technician"
+        | "partially_reconciled"
+        | "fully_reconciled"
+        | "cancelled";
+    };
+  }>,
+): ReceivedSpareItem[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [];
+  }
+
+  return value.map((entry) => {
+    const metadata =
+      entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+        ? (entry.metadata as Record<string, unknown>)
+        : {};
+
+    return {
+      dispatchItemId: entry.id,
+      dispatchNumber: entry.dispatch.dispatchNumber,
+      dispatchStatus: entry.dispatch.status,
+      itemStatus: entry.status,
+      partName: entry.partName,
+      partNumber: entry.partNumber ?? "",
+      quantity: Math.max(1, toNumber(entry.quantity, 1)),
+      unitCost: toNumber(entry.unitCost, 0),
+      assetCode: asNonEmptyString(metadata.assetCode),
+      tagCode: asNonEmptyString(metadata.tagCode),
+    } satisfies ReceivedSpareItem;
+  });
 }
 
 function sanitizeStringArray(values: string[]): string[] {
@@ -381,6 +462,49 @@ export async function GET() {
             },
           },
         },
+        partDispatches: {
+          where: {
+            status: {
+              in: [
+                "planned",
+                "dispatched",
+                "received_by_technician",
+                "partially_reconciled",
+              ],
+            },
+          },
+          orderBy: {
+            plannedAt: "desc",
+          },
+          select: {
+            dispatchNumber: true,
+            status: true,
+            items: {
+              where: {
+                status: {
+                  in: [
+                    "planned",
+                    "dispatched",
+                    "received_by_technician",
+                    "partially_reconciled",
+                  ],
+                },
+              },
+              orderBy: {
+                createdAt: "asc",
+              },
+              select: {
+                id: true,
+                partName: true,
+                partNumber: true,
+                quantity: true,
+                unitCost: true,
+                status: true,
+                metadata: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -429,6 +553,17 @@ export async function GET() {
         ticket.product.productModel.partsCatalog,
       );
       const partsUsed = parsePartsUsed(ticket.partUsages);
+      const receivedSpareItems = parseReceivedSpareItems(
+        ticket.partDispatches.flatMap((dispatch) =>
+          dispatch.items.map((item) => ({
+            ...item,
+            dispatch: {
+              dispatchNumber: dispatch.dispatchNumber,
+              status: dispatch.status,
+            },
+          })),
+        ),
+      );
       const claimValue = computeClaimValueFromTicket({
         claim: ticket.claim,
         claimById: ticket.claimById,
@@ -462,6 +597,7 @@ export async function GET() {
         resolutionPhotos: sanitizeStringArray(ticket.resolutionPhotos),
         resolutionNotes: ticket.resolutionNotes,
         partsUsed,
+        receivedSpareItems,
         partsCatalog,
         aiSuggestedParts: suggestParts(
           ticket.issueCategory ?? "",

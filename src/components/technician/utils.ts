@@ -120,6 +120,12 @@ export function selectJobsByTab(
   jobs: TechnicianJob[],
   tab: JobTabValue,
 ): TechnicianJob[] {
+  const isCompletionSubmitted = (job: TechnicianJob) =>
+    job.status === "pending_confirmation" ||
+    job.status === "resolved" ||
+    job.status === "closed" ||
+    Boolean(job.technicianCompletedAt);
+
   if (tab === "assigned") {
     return jobs.filter(
       (job) =>
@@ -131,18 +137,16 @@ export function selectJobsByTab(
   if (tab === "in_progress") {
     return jobs.filter(
       (job) =>
-        job.status === "technician_enroute" ||
-        job.status === "work_in_progress" ||
-        job.status === "reopened" ||
-        job.status === "escalated",
+        !isCompletionSubmitted(job) &&
+        (job.status === "technician_enroute" ||
+          job.status === "work_in_progress" ||
+          job.status === "reopened" ||
+          job.status === "escalated"),
     );
   }
 
   return jobs.filter(
-    (job) =>
-      job.status === "pending_confirmation" ||
-      job.status === "resolved" ||
-      job.status === "closed",
+    (job) => isCompletionSubmitted(job),
   );
 }
 

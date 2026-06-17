@@ -40,7 +40,6 @@ const ACTIVE_TICKET_STATUSES: TicketStatus[] = [
   "assigned",
   "technician_enroute",
   "work_in_progress",
-  "pending_confirmation",
   "reopened",
   "escalated",
 ];
@@ -51,7 +50,6 @@ const RESOLUTION_SLA_TRACKED_STATUSES: TicketStatus[] = [
   "assigned",
   "technician_enroute",
   "work_in_progress",
-  "pending_confirmation",
   "reopened",
   "escalated",
 ];
@@ -114,7 +112,6 @@ function needsEscalatedStatus(status: TicketStatus): boolean {
     status === "assigned" ||
     status === "technician_enroute" ||
     status === "work_in_progress" ||
-    status === "pending_confirmation" ||
     status === "reopened"
   );
 }

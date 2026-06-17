@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   AlertCircle,
@@ -18,6 +18,7 @@ import {
 import type {
   TechnicianJob,
   TechnicianPartCatalogItem,
+  TechnicianReceivedSpareItem,
 } from "@/components/technician/types";
 import {
   formatCurrency,
@@ -63,6 +64,16 @@ interface PartSelection {
   quantity: string;
 }
 
+type PartAttachmentInput = {
+  assetCode: string;
+  tagCode: string;
+  partName?: string | null;
+  partNumber?: string | null;
+  cost?: number;
+  quantity?: number;
+  usageType?: PartSelection["usageType"];
+};
+
 interface JobDetailProps {
   job: TechnicianJob;
   technicianId?: string | null;
@@ -84,6 +95,29 @@ function createSelectionFromCatalog(
     cost: String(part?.typicalCost ?? 0),
     quantity: "1",
   };
+}
+
+function findMatchingCatalogPart(
+  catalog: TechnicianPartCatalogItem[],
+  input: {
+    partName?: string | null;
+    partNumber?: string | null;
+  },
+): TechnicianPartCatalogItem | undefined {
+  const normalizedPartNumber = input.partNumber?.toLowerCase() ?? null;
+  const normalizedPartName = input.partName?.toLowerCase() ?? null;
+
+  return (
+    catalog.find((catalogPart) => {
+      const byNumber =
+        normalizedPartNumber &&
+        catalogPart.partNumber.toLowerCase() === normalizedPartNumber;
+      const byName =
+        normalizedPartName &&
+        catalogPart.name.toLowerCase() === normalizedPartName;
+      return Boolean(byNumber || byName);
+    }) ?? catalog[0]
+  );
 }
 
 export function JobDetail({
@@ -109,6 +143,7 @@ export function JobDetail({
     QueuedPhotoRecord[]
   >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
+  const [showReceivedSparePicker, setShowReceivedSparePicker] = useState(false);
   const consumedScannedRowsRef = useRef<Set<string>>(new Set());
   const trackingEnabled =
     Boolean(technicianId) &&
@@ -128,6 +163,7 @@ export function JobDetail({
     setAfterPhotos([]);
     setQueuedBeforePhotos([]);
     setQueuedAfterPhotos([]);
+    setShowReceivedSparePicker(false);
     setActionError(null);
     setActionSuccess(null);
 
@@ -150,35 +186,14 @@ export function JobDetail({
     };
   }, [job]);
 
-  useEffect(() => {
-    if (!scannedPart) {
-      return;
-    }
-
-    const rowKey = `${job.id}:${partScanSignature(scannedPart)}`;
-    if (consumedScannedRowsRef.current.has(rowKey)) {
-      return;
-    }
-
-    const normalizedPartNumber = scannedPart.partNumber?.toLowerCase() ?? null;
-    const normalizedPartName = scannedPart.partName?.toLowerCase() ?? null;
-    const matchedCatalogPart =
-      job.partsCatalog.find((catalogPart) => {
-        const byNumber =
-          normalizedPartNumber &&
-          catalogPart.partNumber.toLowerCase() === normalizedPartNumber;
-        const byName =
-          normalizedPartName &&
-          catalogPart.name.toLowerCase() === normalizedPartName;
-        return Boolean(byNumber || byName);
-      }) ?? job.partsCatalog[0];
+  const attachPartToDrafts = useCallback((input: PartAttachmentInput) => {
+    const matchedCatalogPart = findMatchingCatalogPart(job.partsCatalog, input);
 
     setParts((previous) => {
       const duplicate = previous.some(
         (part) =>
-          part.assetCode.trim().toLowerCase() ===
-            scannedPart.assetCode.toLowerCase() &&
-          part.tagCode.trim().toLowerCase() === scannedPart.tagCode.toLowerCase(),
+          part.assetCode.trim().toLowerCase() === input.assetCode.toLowerCase() &&
+          part.tagCode.trim().toLowerCase() === input.tagCode.toLowerCase(),
       );
 
       if (duplicate) {
@@ -189,10 +204,32 @@ export function JobDetail({
         ...previous,
         {
           ...createSelectionFromCatalog(matchedCatalogPart),
-          assetCode: scannedPart.assetCode,
-          tagCode: scannedPart.tagCode,
+          assetCode: input.assetCode,
+          tagCode: input.tagCode,
+          usageType: input.usageType ?? "installed",
+          cost: String(input.cost ?? matchedCatalogPart?.typicalCost ?? 0),
+          quantity: String(input.quantity ?? 1),
         },
       ];
+    });
+  }, [job.partsCatalog]);
+
+  useEffect(() => {
+    if (!scannedPart) {
+      return;
+    }
+
+    const rowKey = `${job.id}:${partScanSignature(scannedPart)}`;
+    if (consumedScannedRowsRef.current.has(rowKey)) {
+      return;
+    }
+
+    attachPartToDrafts({
+      assetCode: scannedPart.assetCode,
+      tagCode: scannedPart.tagCode,
+      partName: scannedPart.partName,
+      partNumber: scannedPart.partNumber,
+      usageType: "installed",
     });
 
     consumedScannedRowsRef.current.add(rowKey);
@@ -200,7 +237,65 @@ export function JobDetail({
     setActionSuccess(
       `Scanned part ${scannedPart.assetCode} (${scannedPart.tagCode}) added to this ticket.`,
     );
-  }, [job.id, job.partsCatalog, scannedPart]);
+  }, [attachPartToDrafts, job.id, scannedPart]);
+
+  const availableReceivedSpareItems = useMemo(() => {
+    const currentSelections = new Set(
+      parts.map((part) => `${part.assetCode.trim().toLowerCase()}::${part.tagCode.trim().toLowerCase()}`),
+    );
+    const alreadyUsed = new Set(
+      job.partsUsed.map(
+        (part) =>
+          `${(part.assetCode ?? "").trim().toLowerCase()}::${(part.tagCode ?? "").trim().toLowerCase()}`,
+      ),
+    );
+
+    return job.receivedSpareItems.filter((item) => {
+      if (!item.assetCode || !item.tagCode) {
+        return false;
+      }
+
+      const key = `${item.assetCode.trim().toLowerCase()}::${item.tagCode.trim().toLowerCase()}`;
+      return !currentSelections.has(key) && !alreadyUsed.has(key);
+    });
+  }, [job.partsUsed, job.receivedSpareItems, parts]);
+
+  const handleAddPart = () => {
+    setActionError(null);
+    setActionSuccess(null);
+
+    if (availableReceivedSpareItems.length > 0) {
+      setShowReceivedSparePicker((previous) => !previous);
+      return;
+    }
+
+    setParts((prev) => [
+      ...prev,
+      createSelectionFromCatalog(job.partsCatalog[0]),
+    ]);
+  };
+
+  const handleAttachReceivedSpare = (item: TechnicianReceivedSpareItem) => {
+    if (!item.assetCode || !item.tagCode) {
+      setActionError("This received spare is missing asset/tag identity.");
+      return;
+    }
+
+    attachPartToDrafts({
+      assetCode: item.assetCode,
+      tagCode: item.tagCode,
+      partName: item.partName,
+      partNumber: item.partNumber,
+      cost: item.unitCost,
+      quantity: item.quantity,
+      usageType: "installed",
+    });
+    setShowReceivedSparePicker(false);
+    setActionError(null);
+    setActionSuccess(
+      `Received spare ${item.assetCode} (${item.tagCode}) added to this ticket.`,
+    );
+  };
 
   const mapLink = useMemo(
     () => googleMapsUrl(job.customerAddress),
@@ -779,17 +874,69 @@ export function JobDetail({
                     size="sm"
                     variant="outline"
                     className="h-9"
-                    onClick={() =>
-                      setParts((prev) => [
-                        ...prev,
-                        createSelectionFromCatalog(job.partsCatalog[0]),
-                      ])
-                    }
+                    onClick={handleAddPart}
                   >
                     <Plus className="h-4 w-4" />
                     Add Part
                   </Button>
                 </div>
+
+                {job.receivedSpareItems.length > 0 ? (
+                  <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                    <p className="font-medium">
+                      Received spares for this ticket: {job.receivedSpareItems.length}
+                    </p>
+                    <p className="mt-1 text-sky-800">
+                      Tap `Add Part` to choose from the spares already dispatched to this job.
+                    </p>
+                  </div>
+                ) : null}
+
+                {showReceivedSparePicker && availableReceivedSpareItems.length > 0 ? (
+                  <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                    <p className="text-sm font-medium text-slate-900">
+                      Select a received spare
+                    </p>
+                    {availableReceivedSpareItems.map((item) => (
+                      <div
+                        key={item.dispatchItemId}
+                        className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900">
+                            {item.partName}
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            {item.partNumber || "Part number unavailable"}
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            {item.assetCode} {item.tagCode ? `• ${item.tagCode}` : ""}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {item.dispatchNumber}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-9"
+                          onClick={() => handleAttachReceivedSpare(item)}
+                        >
+                          Attach
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9"
+                      onClick={() => setShowReceivedSparePicker(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : null}
 
                 {scannedPartError ? (
                   <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
@@ -1025,7 +1172,9 @@ export function JobDetail({
         ) : null}
 
         {job.status === "work_in_progress" ||
-        (job.status === "escalated" && Boolean(job.technicianStartedAt)) ? (
+        (job.status === "escalated" &&
+          Boolean(job.technicianStartedAt) &&
+          !job.technicianCompletedAt) ? (
           <Button
             className="h-12 w-full"
             disabled={actionLoading}
@@ -1044,6 +1193,13 @@ export function JobDetail({
           <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Work completed at {formatDateTime(job.technicianCompletedAt)}.
             Waiting for customer confirmation.
+          </div>
+        ) : null}
+
+        {job.status === "escalated" && job.technicianCompletedAt ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Work was submitted at {formatDateTime(job.technicianCompletedAt)}.
+            Waiting for customer confirmation while the SLA breach remains recorded.
           </div>
         ) : null}
 

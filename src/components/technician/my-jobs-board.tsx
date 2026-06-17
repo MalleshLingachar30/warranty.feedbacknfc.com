@@ -15,6 +15,8 @@ import {
   formatRelativeTime,
   selectJobsByTab,
   severityBadgeClass,
+  statusBadgeClass,
+  statusLabel,
 } from "@/components/technician/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -438,6 +440,15 @@ export function MyJobsBoard({
                 <p className="mt-2 text-sm text-slate-900">
                   {job.issueCategory}
                 </p>
+
+                <div className="mt-2">
+                  <Badge
+                    variant="outline"
+                    className={statusBadgeClass(job.status)}
+                  >
+                    {statusLabel(job.status)}
+                  </Badge>
+                </div>
 
                 <div className="mt-3 space-y-1 text-xs text-slate-600">
                   <p className="font-medium text-slate-800">
