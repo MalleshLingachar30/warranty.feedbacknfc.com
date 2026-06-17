@@ -22,19 +22,25 @@ export function CustomerConfirmResolution({
   languageToggle,
 }: CustomerConfirmResolutionProps) {
   const copy = getNfcCopy(language);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"confirm" | "reopen" | null>(null);
+  const [ticketStatus, setTicketStatus] = useState(ticket.status);
   const [serviceRating, setServiceRating] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isClosedForAction = ticketStatus !== "pending_confirmation";
 
   const submitAction = async (action: "confirm" | "reopen") => {
+    if (pendingAction || isClosedForAction) {
+      return;
+    }
+
     if (action === "confirm" && serviceRating === null) {
       setError(copy.customerConfirmResolution.ratingRequiredError);
       setMessage(null);
       return;
     }
 
-    setIsSubmitting(true);
+    setPendingAction(action);
     setError(null);
     setMessage(null);
 
@@ -60,11 +66,12 @@ export function CustomerConfirmResolution({
         return;
       }
 
+      setTicketStatus(action === "confirm" ? "resolved" : "reopened");
       setMessage(payload.message ?? copy.customerConfirmResolution.updateSuccess);
     } catch {
       setError(copy.customerConfirmResolution.networkError);
     } finally {
-      setIsSubmitting(false);
+      setPendingAction(null);
     }
   };
 
@@ -182,7 +189,7 @@ export function CustomerConfirmResolution({
                     setServiceRating(value);
                     setError(null);
                   }}
-                  disabled={isSubmitting}
+                  disabled={pendingAction !== null || isClosedForAction}
                   aria-label={`${value} star${value === 1 ? "" : "s"}`}
                 >
                   <Star
@@ -210,25 +217,41 @@ export function CustomerConfirmResolution({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Button
-          className="h-11 gap-2 bg-emerald-600 hover:bg-emerald-700"
-          disabled={isSubmitting}
-          onClick={() => submitAction("confirm")}
-        >
-          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          {copy.customerConfirmResolution.confirmResolution}
-        </Button>
-        <Button
-          variant="destructive"
-          className="h-11 gap-2"
-          disabled={isSubmitting}
-          onClick={() => submitAction("reopen")}
-        >
-          {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-          {copy.customerConfirmResolution.issueNotResolved}
-        </Button>
-      </div>
+      {ticketStatus === "pending_confirmation" ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Button
+            className="h-11 gap-2 bg-emerald-600 hover:bg-emerald-700"
+            disabled={pendingAction !== null}
+            onClick={() => submitAction("confirm")}
+          >
+            {pendingAction === "confirm" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" />
+            )}
+            {copy.customerConfirmResolution.confirmResolution}
+          </Button>
+          <Button
+            variant="destructive"
+            className="h-11 gap-2"
+            disabled={pendingAction !== null}
+            onClick={() => submitAction("reopen")}
+          >
+            {pendingAction === "reopen" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCcw className="h-4 w-4" />
+            )}
+            {copy.customerConfirmResolution.issueNotResolved}
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+          {ticketStatus === "resolved"
+            ? "Customer confirmation has been recorded. This service request is now closed."
+            : "This ticket has been reopened for further service action."}
+        </div>
+      )}
 
       <p className="inline-flex items-center gap-2 text-xs text-slate-500">
         <ShieldAlert className="h-4 w-4" />
