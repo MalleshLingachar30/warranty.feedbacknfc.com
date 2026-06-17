@@ -76,6 +76,29 @@ export const viewport: Viewport = {
 const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 const clerkProxyUrl = process.env.NEXT_PUBLIC_CLERK_PROXY_URL;
 const clerkEnabled = Boolean(clerkPublishableKey);
+const clerkLocalization = {
+  signIn: {
+    start: {
+      title: "Sign in to FeedbackNFC Warranty",
+      titleCombined: "Sign in to FeedbackNFC Warranty",
+      subtitle: "Welcome back. Please sign in to continue.",
+      subtitleCombined: "Welcome back. Please sign in to continue.",
+    },
+  },
+  signUp: {
+    start: {
+      title: "Create your Warranty account",
+      titleCombined: "Create your Warranty account",
+      subtitle: "Set up your FeedbackNFC Warranty credentials to continue.",
+      subtitleCombined:
+        "Set up your FeedbackNFC Warranty credentials to continue.",
+    },
+    continue: {
+      title: "Complete your Warranty account",
+      subtitle: "Add the remaining details to continue.",
+    },
+  },
+} as const;
 
 export default function RootLayout({
   children,
@@ -106,6 +129,7 @@ export default function RootLayout({
         <ClerkProvider
           publishableKey={clerkPublishableKey}
           {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
+          localization={clerkLocalization}
           signInUrl="/sign-in"
           signUpUrl="/sign-up"
           signInFallbackRedirectUrl="/dashboard"
