@@ -250,6 +250,35 @@ enum PartUsageType {
   removed
 }
 
+enum TicketPartDispatchStatus {
+  planned
+  dispatched
+  received_by_technician
+  partially_reconciled
+  fully_reconciled
+  cancelled
+}
+
+enum TicketPartDispatchItemStatus {
+  planned
+  dispatched
+  received_by_technician
+  installed
+  consumed
+  returned_unused
+  partially_reconciled
+  cancelled
+}
+
+enum TicketPartReturnStatus {
+  awaiting_collection
+  collected_by_technician
+  received_at_service_center
+  received_by_manufacturer
+  closed
+  cancelled
+}
+
 enum IntegrationConnectorType {
   sap
 }
@@ -380,6 +409,8 @@ model User {
   scanLogs                     ScanLog[]                  @relation("ScanLogActor")
   submittedInstallationReports InstallationReport[]
   linkedPartUsages             JobPartUsage[]
+  createdPartDispatches        TicketPartDispatch[]       @relation("TicketPartDispatchCreator")
+  createdPartReturns           TicketPartReturn[]         @relation("TicketPartReturnCreator")
   integrationReplayRequests    IntegrationReplayRequest[] @relation("IntegrationReplayRequestedBy")
 
   @@map("users")
@@ -722,6 +753,9 @@ model AssetIdentity {
   tags                      AssetTag[]
   usagesAsMainAsset         JobPartUsage[]                @relation("JobPartUsageMainAsset")
   usagesAsUsedAsset         JobPartUsage[]                @relation("JobPartUsageUsedAsset")
+  dispatchedPartItems       TicketPartDispatchItem[]      @relation("TicketPartDispatchItemAsset")
+  mainAssetPartReturns      TicketPartReturn[]            @relation("TicketPartReturnMainAsset")
+  removedAssetPartReturns   TicketPartReturn[]            @relation("TicketPartReturnRemovedAsset")
   erpSerializedDispatchRows ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchAsset")
 
   @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
@@ -746,9 +780,11 @@ model AssetTag {
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
 
-  asset           AssetIdentity       @relation(fields: [assetId], references: [id])
-  generationBatch TagGenerationBatch? @relation(fields: [generationBatchId], references: [id])
-  partUsages      JobPartUsage[]
+  asset               AssetIdentity            @relation(fields: [assetId], references: [id])
+  generationBatch     TagGenerationBatch?      @relation(fields: [generationBatchId], references: [id])
+  partUsages          JobPartUsage[]
+  dispatchedPartItems TicketPartDispatchItem[] @relation("TicketPartDispatchItemTag")
+  removedPartReturns  TicketPartReturn[]       @relation("TicketPartReturnRemovedTag")
 
   @@index([assetId], map: "idx_asset_tags_asset")
   @@index([generationBatchId], map: "idx_asset_tags_batch")
@@ -932,6 +968,7 @@ model JobPartUsage {
   mainAssetId       String        @map("main_asset_id") @db.Uuid
   usedAssetId       String?       @map("used_asset_id") @db.Uuid
   usedTagId         String?       @map("used_tag_id") @db.Uuid
+  dispatchItemId    String?       @map("dispatch_item_id") @db.Uuid
   usageType         PartUsageType @map("usage_type")
   quantity          Decimal       @default(1.000) @db.Decimal(12, 3)
   linkedByUserId    String        @map("linked_by_user_id") @db.Uuid
@@ -940,19 +977,84 @@ model JobPartUsage {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
-  installationJob InstallationJob? @relation(fields: [installationJobId], references: [id])
-  ticket          Ticket?          @relation(fields: [ticketId], references: [id])
-  mainAsset       AssetIdentity    @relation("JobPartUsageMainAsset", fields: [mainAssetId], references: [id])
-  usedAsset       AssetIdentity?   @relation("JobPartUsageUsedAsset", fields: [usedAssetId], references: [id])
-  usedTag         AssetTag?        @relation(fields: [usedTagId], references: [id])
-  linkedByUser    User             @relation(fields: [linkedByUserId], references: [id])
+  installationJob InstallationJob?        @relation(fields: [installationJobId], references: [id])
+  ticket          Ticket?                 @relation(fields: [ticketId], references: [id])
+  mainAsset       AssetIdentity           @relation("JobPartUsageMainAsset", fields: [mainAssetId], references: [id])
+  usedAsset       AssetIdentity?          @relation("JobPartUsageUsedAsset", fields: [usedAssetId], references: [id])
+  usedTag         AssetTag?               @relation(fields: [usedTagId], references: [id])
+  linkedByUser    User                    @relation(fields: [linkedByUserId], references: [id])
+  dispatchItem    TicketPartDispatchItem? @relation(fields: [dispatchItemId], references: [id])
+  generatedReturn TicketPartReturn?       @relation("TicketPartReturnSourceUsage")
 
   @@index([installationJobId], map: "idx_job_part_usages_installation_job")
   @@index([ticketId], map: "idx_job_part_usages_ticket")
   @@index([mainAssetId], map: "idx_job_part_usages_main_asset")
   @@index([usedAssetId], map: "idx_job_part_usages_used_asset")
+  @@index([dispatchItemId], map: "idx_job_part_usages_dispatch_item")
   @@index([linkedAt], map: "idx_job_part_usages_linked_at")
   @@map("job_part_usages")
+}
+
+model TicketPartDispatch {
+  id                     String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId               String                   @map("ticket_id") @db.Uuid
+  serviceCenterId        String                   @map("service_center_id") @db.Uuid
+  assignedTechnicianId   String?                  @map("assigned_technician_id") @db.Uuid
+  createdByUserId        String                   @map("created_by_user_id") @db.Uuid
+  dispatchNumber         String                   @unique @map("dispatch_number") @db.VarChar(30)
+  status                 TicketPartDispatchStatus @default(planned)
+  plannedAt              DateTime                 @default(now()) @map("planned_at")
+  dispatchedAt           DateTime?                @map("dispatched_at")
+  receivedByTechnicianAt DateTime?                @map("received_by_technician_at")
+  reconciledAt           DateTime?                @map("reconciled_at")
+  closedAt               DateTime?                @map("closed_at")
+  notes                  String?                  @db.VarChar(500)
+  metadata               Json                     @default(dbgenerated("'{}'::jsonb"))
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+
+  ticket             Ticket                   @relation(fields: [ticketId], references: [id])
+  serviceCenter      ServiceCenter            @relation(fields: [serviceCenterId], references: [id])
+  assignedTechnician Technician?              @relation("TicketPartDispatchTechnician", fields: [assignedTechnicianId], references: [id])
+  createdByUser      User                     @relation("TicketPartDispatchCreator", fields: [createdByUserId], references: [id])
+  items              TicketPartDispatchItem[]
+
+  @@index([ticketId, status], map: "idx_ticket_part_dispatches_ticket_status")
+  @@index([serviceCenterId, status], map: "idx_ticket_part_dispatches_service_center_status")
+  @@index([assignedTechnicianId, status], map: "idx_ticket_part_dispatches_technician_status")
+  @@index([plannedAt], map: "idx_ticket_part_dispatches_planned_at")
+  @@map("ticket_part_dispatches")
+}
+
+model TicketPartDispatchItem {
+  id                     String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dispatchId             String                       @map("dispatch_id") @db.Uuid
+  catalogPartId          String?                      @map("catalog_part_id") @db.VarChar(120)
+  partName               String                       @map("part_name") @db.VarChar(255)
+  partNumber             String?                      @map("part_number") @db.VarChar(120)
+  spareAssetId           String?                      @map("spare_asset_id") @db.Uuid
+  spareTagId             String?                      @map("spare_tag_id") @db.Uuid
+  quantity               Decimal                      @default(1.000) @db.Decimal(12, 3)
+  unitCost               Decimal?                     @map("unit_cost") @db.Decimal(12, 2)
+  status                 TicketPartDispatchItemStatus @default(planned)
+  dispatchedAt           DateTime?                    @map("dispatched_at")
+  receivedByTechnicianAt DateTime?                    @map("received_by_technician_at")
+  reconciledAt           DateTime?                    @map("reconciled_at")
+  notes                  String?                      @db.VarChar(500)
+  metadata               Json                         @default(dbgenerated("'{}'::jsonb"))
+  createdAt              DateTime                     @default(now()) @map("created_at")
+  updatedAt              DateTime                     @updatedAt @map("updated_at")
+
+  dispatch   TicketPartDispatch @relation(fields: [dispatchId], references: [id])
+  spareAsset AssetIdentity?     @relation("TicketPartDispatchItemAsset", fields: [spareAssetId], references: [id])
+  spareTag   AssetTag?          @relation("TicketPartDispatchItemTag", fields: [spareTagId], references: [id])
+  partUsages JobPartUsage[]
+
+  @@index([dispatchId, status], map: "idx_ticket_part_dispatch_items_dispatch_status")
+  @@index([spareAssetId], map: "idx_ticket_part_dispatch_items_spare_asset")
+  @@index([spareTagId], map: "idx_ticket_part_dispatch_items_spare_tag")
+  @@index([partNumber], map: "idx_ticket_part_dispatch_items_part_number")
+  @@map("ticket_part_dispatch_items")
 }
 
 model Sticker {
@@ -1039,10 +1141,12 @@ model ServiceCenter {
   createdAt                  DateTime              @default(now()) @map("created_at")
   updatedAt                  DateTime              @updatedAt @map("updated_at")
 
-  organization     Organization      @relation(fields: [organizationId], references: [id])
+  organization     Organization         @relation(fields: [organizationId], references: [id])
   technicians      Technician[]
-  assignedTickets  Ticket[]          @relation("AssignedServiceCenterTickets")
-  installationJobs InstallationJob[] @relation("AssignedServiceCenterInstallationJobs")
+  assignedTickets  Ticket[]             @relation("AssignedServiceCenterTickets")
+  installationJobs InstallationJob[]    @relation("AssignedServiceCenterInstallationJobs")
+  partDispatches   TicketPartDispatch[]
+  partReturns      TicketPartReturn[]
 
   @@index([organizationId], map: "idx_service_centers_organization")
   @@index([location], type: Gist, map: "idx_service_centers_location")
@@ -1066,11 +1170,13 @@ model Technician {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
 
-  user             User               @relation(fields: [userId], references: [id])
-  serviceCenter    ServiceCenter      @relation(fields: [serviceCenterId], references: [id])
-  assignedTickets  Ticket[]           @relation("AssignedTechnicianTickets")
-  installationJobs InstallationJob[]  @relation("AssignedTechnicianInstallationJobs")
+  user             User                 @relation(fields: [userId], references: [id])
+  serviceCenter    ServiceCenter        @relation(fields: [serviceCenterId], references: [id])
+  assignedTickets  Ticket[]             @relation("AssignedTechnicianTickets")
+  installationJobs InstallationJob[]    @relation("AssignedTechnicianInstallationJobs")
   liveStatuses     TicketLiveStatus[]
+  partDispatches   TicketPartDispatch[] @relation("TicketPartDispatchTechnician")
+  partReturns      TicketPartReturn[]   @relation("TicketPartReturnTechnician")
 
   @@index([serviceCenterId], map: "idx_technicians_service_center")
   @@map("technicians")
@@ -1116,22 +1222,65 @@ model Ticket {
   createdAt               DateTime         @default(now()) @map("created_at")
   updatedAt               DateTime         @updatedAt @map("updated_at")
 
-  product               Product           @relation(fields: [productId], references: [id])
-  sticker               Sticker           @relation(fields: [stickerId], references: [id])
-  reportedByUser        User?             @relation("ReportedTickets", fields: [reportedByUserId], references: [id])
-  assignedServiceCenter ServiceCenter?    @relation("AssignedServiceCenterTickets", fields: [assignedServiceCenterId], references: [id])
-  assignedTechnician    Technician?       @relation("AssignedTechnicianTickets", fields: [assignedTechnicianId], references: [id])
+  product               Product              @relation(fields: [productId], references: [id])
+  sticker               Sticker              @relation(fields: [stickerId], references: [id])
+  reportedByUser        User?                @relation("ReportedTickets", fields: [reportedByUserId], references: [id])
+  assignedServiceCenter ServiceCenter?       @relation("AssignedServiceCenterTickets", fields: [assignedServiceCenterId], references: [id])
+  assignedTechnician    Technician?          @relation("AssignedTechnicianTickets", fields: [assignedTechnicianId], references: [id])
   liveStatus            TicketLiveStatus?
   timelineEntries       TicketTimeline[]
-  claimById             WarrantyClaim?    @relation("TicketClaimPointer", fields: [claimId], references: [id])
-  claim                 WarrantyClaim?    @relation("TicketToWarrantyClaim")
+  claimById             WarrantyClaim?       @relation("TicketClaimPointer", fields: [claimId], references: [id])
+  claim                 WarrantyClaim?       @relation("TicketToWarrantyClaim")
   partUsages            JobPartUsage[]
+  partDispatches        TicketPartDispatch[]
+  partReturns           TicketPartReturn[]
 
   @@index([status], map: "idx_tickets_status")
   @@index([productId], map: "idx_tickets_product")
   @@index([assignedTechnicianId], map: "idx_tickets_technician")
   @@index([assignedServiceCenterId], map: "idx_tickets_service_center")
   @@map("tickets")
+}
+
+model TicketPartReturn {
+  id                        String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId                  String                 @map("ticket_id") @db.Uuid
+  sourceUsageId             String?                @unique @map("source_usage_id") @db.Uuid
+  mainAssetId               String                 @map("main_asset_id") @db.Uuid
+  removedAssetId            String?                @map("removed_asset_id") @db.Uuid
+  removedTagId              String?                @map("removed_tag_id") @db.Uuid
+  serviceCenterId           String?                @map("service_center_id") @db.Uuid
+  technicianId              String?                @map("technician_id") @db.Uuid
+  createdByUserId           String                 @map("created_by_user_id") @db.Uuid
+  returnNumber              String                 @unique @map("return_number") @db.VarChar(30)
+  status                    TicketPartReturnStatus @default(awaiting_collection)
+  partName                  String                 @map("part_name") @db.VarChar(255)
+  partNumber                String?                @map("part_number") @db.VarChar(120)
+  quantity                  Decimal                @default(1.000) @db.Decimal(12, 3)
+  collectionNotes           String?                @map("collection_notes") @db.VarChar(500)
+  collectedAt               DateTime?              @map("collected_at")
+  receivedAtServiceCenterAt DateTime?              @map("received_at_service_center_at")
+  receivedByManufacturerAt  DateTime?              @map("received_by_manufacturer_at")
+  closedAt                  DateTime?              @map("closed_at")
+  metadata                  Json                   @default(dbgenerated("'{}'::jsonb"))
+  createdAt                 DateTime               @default(now()) @map("created_at")
+  updatedAt                 DateTime               @updatedAt @map("updated_at")
+
+  ticket        Ticket         @relation(fields: [ticketId], references: [id])
+  sourceUsage   JobPartUsage?  @relation("TicketPartReturnSourceUsage", fields: [sourceUsageId], references: [id])
+  mainAsset     AssetIdentity  @relation("TicketPartReturnMainAsset", fields: [mainAssetId], references: [id])
+  removedAsset  AssetIdentity? @relation("TicketPartReturnRemovedAsset", fields: [removedAssetId], references: [id])
+  removedTag    AssetTag?      @relation("TicketPartReturnRemovedTag", fields: [removedTagId], references: [id])
+  serviceCenter ServiceCenter? @relation(fields: [serviceCenterId], references: [id])
+  technician    Technician?    @relation("TicketPartReturnTechnician", fields: [technicianId], references: [id])
+  createdByUser User           @relation("TicketPartReturnCreator", fields: [createdByUserId], references: [id])
+
+  @@index([ticketId, status], map: "idx_ticket_part_returns_ticket_status")
+  @@index([serviceCenterId, status], map: "idx_ticket_part_returns_service_center_status")
+  @@index([technicianId, status], map: "idx_ticket_part_returns_technician_status")
+  @@index([mainAssetId], map: "idx_ticket_part_returns_main_asset")
+  @@index([removedAssetId], map: "idx_ticket_part_returns_removed_asset")
+  @@map("ticket_part_returns")
 }
 
 model TicketLiveStatus {

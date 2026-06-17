@@ -153,11 +153,14 @@ export function TechnicianStartWork({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isEscalatedOnSite = ticket.status === "escalated";
   const [trackingEnabled, setTrackingEnabled] = useState(
-    ticket.status === "technician_enroute" || ticket.status === "work_in_progress",
+    ticket.status === "technician_enroute" ||
+      ticket.status === "work_in_progress" ||
+      isEscalatedOnSite,
   );
   const [trackingPhase, setTrackingPhase] = useState<"enroute" | "on_site">(
-    ticket.status === "work_in_progress" ? "on_site" : "enroute",
+    ticket.status === "work_in_progress" || isEscalatedOnSite ? "on_site" : "enroute",
   );
 
   const canStart = Boolean(technicianId);
@@ -192,9 +195,15 @@ export function TechnicianStartWork({
 
   useEffect(() => {
     setTrackingEnabled(
-      ticket.status === "technician_enroute" || ticket.status === "work_in_progress",
+      ticket.status === "technician_enroute" ||
+        ticket.status === "work_in_progress" ||
+        ticket.status === "escalated",
     );
-    setTrackingPhase(ticket.status === "work_in_progress" ? "on_site" : "enroute");
+    setTrackingPhase(
+      ticket.status === "work_in_progress" || ticket.status === "escalated"
+        ? "on_site"
+        : "enroute",
+    );
     setCurrentStatus(ticket.status);
   }, [ticket.id, ticket.status]);
 
@@ -315,7 +324,7 @@ export function TechnicianStartWork({
         </div>
       ) : null}
 
-      {currentStatus === "assigned" ? (
+      {currentStatus === "assigned" || currentStatus === "escalated" ? (
         <div className="grid grid-cols-1 gap-3">
           <Button
             className="h-11 gap-2"
@@ -383,7 +392,9 @@ export function TechnicianCompleteWork({
   );
   const liveTracking = useTechnicianLiveTracking({
     ticketId: ticket.id,
-    enabled: Boolean(technicianId) && ticket.status === "work_in_progress",
+    enabled:
+      Boolean(technicianId) &&
+      (ticket.status === "work_in_progress" || ticket.status === "escalated"),
     phase: "on_site",
   });
   const liveTrackingLabel = useMemo(() => {

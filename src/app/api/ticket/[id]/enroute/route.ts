@@ -98,7 +98,8 @@ export async function POST(
 
     if (
       ticket.status !== "assigned" &&
-      ticket.status !== "technician_enroute"
+      ticket.status !== "technician_enroute" &&
+      ticket.status !== "escalated"
     ) {
       return NextResponse.json(
         {

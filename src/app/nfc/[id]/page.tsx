@@ -938,11 +938,13 @@ export default async function NfcStickerPage({
       );
     }
 
-    if (
+    const technicianShouldUseStartSurface =
       openTicket.status === "awaiting_technician_acceptance" ||
       openTicket.status === "assigned" ||
-      openTicket.status === "technician_enroute"
-    ) {
+      openTicket.status === "technician_enroute" ||
+      (openTicket.status === "escalated" && !openTicket.technicianStartedAt);
+
+    if (technicianShouldUseStartSurface) {
       after(async () => {
         await writeScanLog({
           stickerNumber: sticker.stickerNumber,
@@ -961,7 +963,10 @@ export default async function NfcStickerPage({
       );
     }
 
-    if (openTicket.status === "work_in_progress") {
+    if (
+      openTicket.status === "work_in_progress" ||
+      (openTicket.status === "escalated" && Boolean(openTicket.technicianStartedAt))
+    ) {
       after(async () => {
         await writeScanLog({
           stickerNumber: sticker.stickerNumber,

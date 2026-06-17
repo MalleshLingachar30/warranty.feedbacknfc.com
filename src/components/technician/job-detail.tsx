@@ -993,7 +993,8 @@ export function JobDetail({
           </div>
         ) : null}
 
-        {job.status === "assigned" ? (
+        {job.status === "assigned" ||
+        (job.status === "escalated" && !job.technicianStartedAt) ? (
           <Button
             className="h-12 w-full"
             disabled={actionLoading}
@@ -1023,7 +1024,8 @@ export function JobDetail({
           </Button>
         ) : null}
 
-        {job.status === "work_in_progress" ? (
+        {job.status === "work_in_progress" ||
+        (job.status === "escalated" && Boolean(job.technicianStartedAt)) ? (
           <Button
             className="h-12 w-full"
             disabled={actionLoading}

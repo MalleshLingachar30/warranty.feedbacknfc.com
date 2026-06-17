@@ -84,7 +84,8 @@ export async function POST(
     if (
       ticket.status !== "assigned" &&
       ticket.status !== "technician_enroute" &&
-      ticket.status !== "work_in_progress"
+      ticket.status !== "work_in_progress" &&
+      ticket.status !== "escalated"
     ) {
       return NextResponse.json(
         { error: "Ticket cannot be started from the current status." },

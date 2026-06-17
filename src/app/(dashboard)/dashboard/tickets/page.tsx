@@ -1,5 +1,6 @@
 import { Prisma, type TicketStatus } from "@prisma/client";
 import { AlertTriangle, Clock3, TicketCheck, TimerReset } from "lucide-react";
+import Link from "next/link";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -400,7 +401,12 @@ export default async function ServiceCenterTicketsPage() {
                 tickets.map((ticket) => (
                   <TableRow key={ticket.id}>
                     <TableCell className="font-medium">
-                      {ticket.ticketNumber}
+                      <Link
+                        href={`/dashboard/tickets/${ticket.id}`}
+                        className="text-indigo-700 hover:underline"
+                      >
+                        {ticket.ticketNumber}
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <div className="space-y-0.5">

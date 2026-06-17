@@ -13,6 +13,14 @@ import {
 import { clerkOrDbHasRole } from "@/lib/rbac";
 import { writeScanLog } from "@/lib/scan-log";
 import { runSlaSweep } from "@/lib/sla-engine";
+import {
+  derivePartNameFromUsage,
+  derivePartNumberFromUsage,
+  findDispatchItemMatchesForUsages,
+  generateTicketPartReturnNumber,
+  mapUsageTypeToDispatchItemStatus,
+  summarizeDispatchStatus,
+} from "@/lib/ticket-part-logistics";
 import { stopTrackingForTicket } from "@/lib/ticket-live-tracking";
 import { sendCustomerCompletionPrompt } from "@/lib/warranty-notifications";
 
@@ -190,10 +198,13 @@ export async function POST(
       return NextResponse.json({ error: "Ticket not found." }, { status: 404 });
     }
 
-    if (ticket.status !== "work_in_progress") {
+    if (
+      ticket.status !== "work_in_progress" &&
+      ticket.status !== "escalated"
+    ) {
       return NextResponse.json(
         {
-          error: "Only tickets in work_in_progress can be completed.",
+          error: "Only active work tickets can be completed.",
         },
         { status: 409 },
       );
@@ -286,6 +297,13 @@ export async function POST(
       const partsCost = ticketPartsSnapshot.partsCost;
       const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
       const claimValue = Number((partsCost + laborCost).toFixed(2));
+      const dispatchItemMatches =
+        mainAsset && resolvedPartUsages.length > 0
+          ? await findDispatchItemMatchesForUsages(tx, {
+              ticketId: ticket.id,
+              usages: resolvedPartUsages,
+            })
+          : new Map<number, string>();
 
       await tx.ticket.update({
         where: { id: ticket.id },
@@ -305,6 +323,10 @@ export async function POST(
               laborCost,
               estimatedClaimValue: claimValue,
               partUsageCount: resolvedPartUsages.length,
+              reconciledDispatchLineCount: dispatchItemMatches.size,
+              removedPartReturnCount: resolvedPartUsages.filter(
+                (usage) => usage.input.usageType === "removed",
+              ).length,
               completedAt: completedAt.toISOString(),
             },
           },
@@ -326,14 +348,136 @@ export async function POST(
       });
 
       if (mainAsset && resolvedPartUsages.length > 0) {
-        await tx.jobPartUsage.createMany({
-          data: toJobPartUsageCreateManyInput({
-            mainAssetId: mainAsset.id,
-            ticketId: ticket.id,
-            linkedByUserId: technician.userId,
-            resolvedUsages: resolvedPartUsages,
-          }),
+        const usageCreateInputs = toJobPartUsageCreateManyInput({
+          mainAssetId: mainAsset.id,
+          ticketId: ticket.id,
+          linkedByUserId: technician.userId,
+          resolvedUsages: resolvedPartUsages,
         });
+
+        const updatedDispatchIds = new Set<string>();
+        const removedPartReturns: Array<{
+          returnNumber: string;
+          partName: string;
+        }> = [];
+
+        for (const [index, usageInput] of usageCreateInputs.entries()) {
+          const createdUsage = await tx.jobPartUsage.create({
+            data: {
+              ...usageInput,
+              dispatchItemId: dispatchItemMatches.get(index) ?? null,
+            },
+            select: {
+              id: true,
+              dispatchItemId: true,
+            },
+          });
+
+          const usage = resolvedPartUsages[index];
+          const dispatchItemId = createdUsage.dispatchItemId;
+
+          if (dispatchItemId) {
+            const updatedItem = await tx.ticketPartDispatchItem.update({
+              where: { id: dispatchItemId },
+              data: {
+                status: mapUsageTypeToDispatchItemStatus(usage.input.usageType),
+                reconciledAt: completedAt,
+              },
+              select: {
+                dispatchId: true,
+              },
+            });
+
+            updatedDispatchIds.add(updatedItem.dispatchId);
+          }
+
+          if (usage.input.usageType === "removed") {
+            const returnNumber = await generateTicketPartReturnNumber(tx);
+            await tx.ticketPartReturn.create({
+              data: {
+                ticketId: ticket.id,
+                sourceUsageId: createdUsage.id,
+                mainAssetId: mainAsset.id,
+                removedAssetId: usage.usedAsset.id,
+                removedTagId: usage.usedTag?.id ?? null,
+                serviceCenterId:
+                  ticket.assignedServiceCenterId ?? technician.serviceCenterId,
+                technicianId: technician.id,
+                createdByUserId: technician.userId,
+                returnNumber,
+                status: "collected_by_technician",
+                partName: derivePartNameFromUsage(usage),
+                partNumber: derivePartNumberFromUsage(usage),
+                quantity: usage.input.quantity,
+                collectionNotes: usage.input.note,
+                collectedAt: completedAt,
+                metadata: {
+                  fromTicketCompletion: true,
+                  technicianName: technician.name,
+                  linkedUsageType: usage.input.usageType,
+                  removedAssetCode: usage.usedAsset.publicCode,
+                  removedTagCode: usage.usedTag?.publicCode ?? null,
+                } satisfies Prisma.InputJsonValue,
+              },
+            });
+
+            removedPartReturns.push({
+              returnNumber,
+              partName: derivePartNameFromUsage(usage),
+            });
+          }
+        }
+
+        for (const dispatchId of updatedDispatchIds) {
+          const items = await tx.ticketPartDispatchItem.findMany({
+            where: { dispatchId },
+            select: { status: true },
+          });
+          const summaryStatus = summarizeDispatchStatus(
+            items.map((item) => item.status),
+          );
+
+          await tx.ticketPartDispatch.update({
+            where: { id: dispatchId },
+            data: {
+              status: summaryStatus,
+              reconciledAt:
+                summaryStatus === "fully_reconciled" ||
+                summaryStatus === "partially_reconciled"
+                  ? completedAt
+                  : undefined,
+              closedAt:
+                summaryStatus === "fully_reconciled" ? completedAt : undefined,
+            },
+          });
+        }
+
+        if (dispatchItemMatches.size > 0) {
+          await tx.ticketTimeline.create({
+            data: {
+              ticketId: ticket.id,
+              eventType: "parts_reconciled",
+              eventDescription: `${dispatchItemMatches.size} dispatched spare line(s) were reconciled during work completion.`,
+              actorRole: "technician",
+              actorName: technician.name,
+            },
+          });
+        }
+
+        if (removedPartReturns.length > 0) {
+          await tx.ticketTimeline.create({
+            data: {
+              ticketId: ticket.id,
+              eventType: "removed_parts_collected",
+              eventDescription: `${removedPartReturns.length} removed part return record(s) were created for service-center custody.`,
+              actorRole: "technician",
+              actorName: technician.name,
+              metadata: {
+                returns: removedPartReturns,
+              } as Prisma.InputJsonValue,
+            },
+          });
+        }
       }
 
       await tx.technician.update({
