@@ -260,246 +260,252 @@ export async function POST(
     const traceabilityRequired =
       ticket.product.productModel.partTraceabilityMode !== "none";
 
-    const completionResult = await db.$transaction(async (tx) => {
-      const mainAsset = await resolveMainAssetForTicket(tx, {
-        organizationId: ticket.product.organizationId,
-        productModelId: ticket.product.productModelId,
-        serialNumber: ticket.product.serialNumber,
-      });
-
-      const resolvedPartUsages = await resolvePartUsages(tx, {
-        organizationId: ticket.product.organizationId,
-        parsedUsages: parsedPartUsages,
-      });
-
-      if ((traceabilityRequired || resolvedPartUsages.length > 0) && !mainAsset) {
-        throw new Error(
-          "Main product asset could not be resolved for this ticket. Ensure the product is linked to a serialized asset before recording part usage.",
-        );
-      }
-
-      if (mainAsset) {
-        await validatePartUsagePolicy(tx, {
-          policy: {
-            partTraceabilityMode: ticket.product.productModel.partTraceabilityMode,
-            smallPartTrackingMode:
-              ticket.product.productModel.smallPartTrackingMode,
-            includedKitDefinition: {} as Prisma.JsonObject,
-          },
-          mainAssetId: mainAsset.id,
-          resolvedUsages: resolvedPartUsages,
-          workObjectLabel: `ticket ${ticket.ticketNumber}`,
-          requireCaptureForPolicy: traceabilityRequired,
+    const completionResult = await db.$transaction(
+      async (tx) => {
+        const mainAsset = await resolveMainAssetForTicket(tx, {
+          organizationId: ticket.product.organizationId,
+          productModelId: ticket.product.productModelId,
+          serialNumber: ticket.product.serialNumber,
         });
-      }
 
-      const ticketPartsSnapshot = toTicketPartsSnapshot(resolvedPartUsages);
-      const partsCost = ticketPartsSnapshot.partsCost;
-      const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
-      const claimValue = Number((partsCost + laborCost).toFixed(2));
-      const dispatchItemMatches =
-        mainAsset && resolvedPartUsages.length > 0
-          ? await findDispatchItemMatchesForUsages(tx, {
-              ticketId: ticket.id,
-              usages: resolvedPartUsages,
-            })
-          : new Map<number, string>();
+        const resolvedPartUsages = await resolvePartUsages(tx, {
+          organizationId: ticket.product.organizationId,
+          parsedUsages: parsedPartUsages,
+        });
 
-      await tx.ticket.update({
-        where: { id: ticket.id },
-        data: {
-          status: "pending_confirmation",
-          resolutionNotes,
-          resolutionPhotos: [...beforePhotos, ...afterPhotos],
-          partsUsed: ticketPartsSnapshot.partsUsedJson,
-          laborHours,
-          technicianCompletedAt: completedAt,
-          metadata: {
-            ...existingMetadata,
-            completion: {
-              beforePhotos,
-              afterPhotos,
-              partsCost,
-              laborCost,
-              estimatedClaimValue: claimValue,
-              partUsageCount: resolvedPartUsages.length,
-              reconciledDispatchLineCount: dispatchItemMatches.size,
-              removedPartReturnCount: resolvedPartUsages.filter(
-                (usage) => usage.input.usageType === "removed",
-              ).length,
-              completedAt: completedAt.toISOString(),
+        if ((traceabilityRequired || resolvedPartUsages.length > 0) && !mainAsset) {
+          throw new Error(
+            "Main product asset could not be resolved for this ticket. Ensure the product is linked to a serialized asset before recording part usage.",
+          );
+        }
+
+        if (mainAsset) {
+          await validatePartUsagePolicy(tx, {
+            policy: {
+              partTraceabilityMode: ticket.product.productModel.partTraceabilityMode,
+              smallPartTrackingMode:
+                ticket.product.productModel.smallPartTrackingMode,
+              includedKitDefinition: {} as Prisma.JsonObject,
             },
-          },
-        },
-      });
+            mainAssetId: mainAsset.id,
+            resolvedUsages: resolvedPartUsages,
+            workObjectLabel: `ticket ${ticket.ticketNumber}`,
+            requireCaptureForPolicy: traceabilityRequired,
+          });
+        }
 
-      await tx.ticketTimeline.create({
-        data: {
-          ticketId: ticket.id,
-          eventType: "work_completed",
-          eventDescription: `${technician.name} marked work as complete. Awaiting customer confirmation.`,
-          actorRole: "technician",
-          actorName: technician.name,
-          metadata: {
+        const ticketPartsSnapshot = toTicketPartsSnapshot(resolvedPartUsages);
+        const partsCost = ticketPartsSnapshot.partsCost;
+        const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
+        const claimValue = Number((partsCost + laborCost).toFixed(2));
+        const dispatchItemMatches =
+          mainAsset && resolvedPartUsages.length > 0
+            ? await findDispatchItemMatchesForUsages(tx, {
+                ticketId: ticket.id,
+                usages: resolvedPartUsages,
+              })
+            : new Map<number, string>();
+
+        await tx.ticket.update({
+          where: { id: ticket.id },
+          data: {
+            status: "pending_confirmation",
+            resolutionNotes,
+            resolutionPhotos: [...beforePhotos, ...afterPhotos],
+            partsUsed: ticketPartsSnapshot.partsUsedJson,
             laborHours,
-            partUsages: ticketPartsSnapshot.partsUsedJson,
-          } as unknown as Prisma.InputJsonValue,
-        },
-      });
-
-      if (mainAsset && resolvedPartUsages.length > 0) {
-        const usageCreateInputs = toJobPartUsageCreateManyInput({
-          mainAssetId: mainAsset.id,
-          ticketId: ticket.id,
-          linkedByUserId: technician.userId,
-          resolvedUsages: resolvedPartUsages,
+            technicianCompletedAt: completedAt,
+            metadata: {
+              ...existingMetadata,
+              completion: {
+                beforePhotos,
+                afterPhotos,
+                partsCost,
+                laborCost,
+                estimatedClaimValue: claimValue,
+                partUsageCount: resolvedPartUsages.length,
+                reconciledDispatchLineCount: dispatchItemMatches.size,
+                removedPartReturnCount: resolvedPartUsages.filter(
+                  (usage) => usage.input.usageType === "removed",
+                ).length,
+                completedAt: completedAt.toISOString(),
+              },
+            },
+          },
         });
 
-        const updatedDispatchIds = new Set<string>();
-        const removedPartReturns: Array<{
-          returnNumber: string;
-          partName: string;
-        }> = [];
+        await tx.ticketTimeline.create({
+          data: {
+            ticketId: ticket.id,
+            eventType: "work_completed",
+            eventDescription: `${technician.name} marked work as complete. Awaiting customer confirmation.`,
+            actorRole: "technician",
+            actorName: technician.name,
+            metadata: {
+              laborHours,
+              partUsages: ticketPartsSnapshot.partsUsedJson,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
 
-        for (const [index, usageInput] of usageCreateInputs.entries()) {
-          const createdUsage = await tx.jobPartUsage.create({
-            data: {
-              ...usageInput,
-              dispatchItemId: dispatchItemMatches.get(index) ?? null,
-            },
-            select: {
-              id: true,
-              dispatchItemId: true,
-            },
+        if (mainAsset && resolvedPartUsages.length > 0) {
+          const usageCreateInputs = toJobPartUsageCreateManyInput({
+            mainAssetId: mainAsset.id,
+            ticketId: ticket.id,
+            linkedByUserId: technician.userId,
+            resolvedUsages: resolvedPartUsages,
           });
 
-          const usage = resolvedPartUsages[index];
-          const dispatchItemId = createdUsage.dispatchItemId;
+          const updatedDispatchIds = new Set<string>();
+          const removedPartReturns: Array<{
+            returnNumber: string;
+            partName: string;
+          }> = [];
 
-          if (dispatchItemId) {
-            const updatedItem = await tx.ticketPartDispatchItem.update({
-              where: { id: dispatchItemId },
+          for (const [index, usageInput] of usageCreateInputs.entries()) {
+            const createdUsage = await tx.jobPartUsage.create({
               data: {
-                status: mapUsageTypeToDispatchItemStatus(usage.input.usageType),
-                reconciledAt: completedAt,
+                ...usageInput,
+                dispatchItemId: dispatchItemMatches.get(index) ?? null,
               },
               select: {
-                dispatchId: true,
+                id: true,
+                dispatchItemId: true,
               },
             });
 
-            updatedDispatchIds.add(updatedItem.dispatchId);
+            const usage = resolvedPartUsages[index];
+            const dispatchItemId = createdUsage.dispatchItemId;
+
+            if (dispatchItemId) {
+              const updatedItem = await tx.ticketPartDispatchItem.update({
+                where: { id: dispatchItemId },
+                data: {
+                  status: mapUsageTypeToDispatchItemStatus(usage.input.usageType),
+                  reconciledAt: completedAt,
+                },
+                select: {
+                  dispatchId: true,
+                },
+              });
+
+              updatedDispatchIds.add(updatedItem.dispatchId);
+            }
+
+            if (usage.input.usageType === "removed") {
+              const returnNumber = await generateTicketPartReturnNumber(tx);
+              await tx.ticketPartReturn.create({
+                data: {
+                  ticketId: ticket.id,
+                  sourceUsageId: createdUsage.id,
+                  mainAssetId: mainAsset.id,
+                  removedAssetId: usage.usedAsset.id,
+                  removedTagId: usage.usedTag?.id ?? null,
+                  serviceCenterId:
+                    ticket.assignedServiceCenterId ?? technician.serviceCenterId,
+                  technicianId: technician.id,
+                  createdByUserId: technician.userId,
+                  returnNumber,
+                  status: "collected_by_technician",
+                  partName: derivePartNameFromUsage(usage),
+                  partNumber: derivePartNumberFromUsage(usage),
+                  quantity: usage.input.quantity,
+                  collectionNotes: usage.input.note,
+                  collectedAt: completedAt,
+                  metadata: {
+                    fromTicketCompletion: true,
+                    technicianName: technician.name,
+                    linkedUsageType: usage.input.usageType,
+                    removedAssetCode: usage.usedAsset.publicCode,
+                    removedTagCode: usage.usedTag?.publicCode ?? null,
+                  } satisfies Prisma.InputJsonValue,
+                },
+              });
+
+              removedPartReturns.push({
+                returnNumber,
+                partName: derivePartNameFromUsage(usage),
+              });
+            }
           }
 
-          if (usage.input.usageType === "removed") {
-            const returnNumber = await generateTicketPartReturnNumber(tx);
-            await tx.ticketPartReturn.create({
+          for (const dispatchId of updatedDispatchIds) {
+            const items = await tx.ticketPartDispatchItem.findMany({
+              where: { dispatchId },
+              select: { status: true },
+            });
+            const summaryStatus = summarizeDispatchStatus(
+              items.map((item) => item.status),
+            );
+
+            await tx.ticketPartDispatch.update({
+              where: { id: dispatchId },
+              data: {
+                status: summaryStatus,
+                reconciledAt:
+                  summaryStatus === "fully_reconciled" ||
+                  summaryStatus === "partially_reconciled"
+                    ? completedAt
+                    : undefined,
+                closedAt:
+                  summaryStatus === "fully_reconciled" ? completedAt : undefined,
+              },
+            });
+          }
+
+          if (dispatchItemMatches.size > 0) {
+            await tx.ticketTimeline.create({
               data: {
                 ticketId: ticket.id,
-                sourceUsageId: createdUsage.id,
-                mainAssetId: mainAsset.id,
-                removedAssetId: usage.usedAsset.id,
-                removedTagId: usage.usedTag?.id ?? null,
-                serviceCenterId:
-                  ticket.assignedServiceCenterId ?? technician.serviceCenterId,
-                technicianId: technician.id,
-                createdByUserId: technician.userId,
-                returnNumber,
-                status: "collected_by_technician",
-                partName: derivePartNameFromUsage(usage),
-                partNumber: derivePartNumberFromUsage(usage),
-                quantity: usage.input.quantity,
-                collectionNotes: usage.input.note,
-                collectedAt: completedAt,
-                metadata: {
-                  fromTicketCompletion: true,
-                  technicianName: technician.name,
-                  linkedUsageType: usage.input.usageType,
-                  removedAssetCode: usage.usedAsset.publicCode,
-                  removedTagCode: usage.usedTag?.publicCode ?? null,
-                } satisfies Prisma.InputJsonValue,
+                eventType: "parts_reconciled",
+                eventDescription: `${dispatchItemMatches.size} dispatched spare line(s) were reconciled during work completion.`,
+                actorRole: "technician",
+                actorName: technician.name,
               },
             });
+          }
 
-            removedPartReturns.push({
-              returnNumber,
-              partName: derivePartNameFromUsage(usage),
+          if (removedPartReturns.length > 0) {
+            await tx.ticketTimeline.create({
+              data: {
+                ticketId: ticket.id,
+                eventType: "removed_parts_collected",
+                eventDescription: `${removedPartReturns.length} removed part return record(s) were created for service-center custody.`,
+                actorRole: "technician",
+                actorName: technician.name,
+                metadata: {
+                  returns: removedPartReturns,
+                } as Prisma.InputJsonValue,
+              },
             });
           }
         }
 
-        for (const dispatchId of updatedDispatchIds) {
-          const items = await tx.ticketPartDispatchItem.findMany({
-            where: { dispatchId },
-            select: { status: true },
-          });
-          const summaryStatus = summarizeDispatchStatus(
-            items.map((item) => item.status),
-          );
-
-          await tx.ticketPartDispatch.update({
-            where: { id: dispatchId },
-            data: {
-              status: summaryStatus,
-              reconciledAt:
-                summaryStatus === "fully_reconciled" ||
-                summaryStatus === "partially_reconciled"
-                  ? completedAt
-                  : undefined,
-              closedAt:
-                summaryStatus === "fully_reconciled" ? completedAt : undefined,
+        await tx.technician.update({
+          where: { id: technician.id },
+          data: {
+            totalJobsCompleted: {
+              increment: 1,
             },
-          });
-        }
-
-        if (dispatchItemMatches.size > 0) {
-          await tx.ticketTimeline.create({
-            data: {
-              ticketId: ticket.id,
-              eventType: "parts_reconciled",
-              eventDescription: `${dispatchItemMatches.size} dispatched spare line(s) were reconciled during work completion.`,
-              actorRole: "technician",
-              actorName: technician.name,
-            },
-          });
-        }
-
-        if (removedPartReturns.length > 0) {
-          await tx.ticketTimeline.create({
-            data: {
-              ticketId: ticket.id,
-              eventType: "removed_parts_collected",
-              eventDescription: `${removedPartReturns.length} removed part return record(s) were created for service-center custody.`,
-              actorRole: "technician",
-              actorName: technician.name,
-              metadata: {
-                returns: removedPartReturns,
-              } as Prisma.InputJsonValue,
-            },
-          });
-        }
-      }
-
-      await tx.technician.update({
-        where: { id: technician.id },
-        data: {
-          totalJobsCompleted: {
-            increment: 1,
+            ...(technician.activeJobCount > 0
+              ? {
+                  activeJobCount: {
+                    decrement: 1,
+                  },
+                }
+              : {}),
           },
-          ...(technician.activeJobCount > 0
-            ? {
-                activeJobCount: {
-                  decrement: 1,
-                },
-              }
-            : {}),
-        },
-      });
+        });
 
-      return {
-        claimValue,
-      };
-    });
+        return {
+          claimValue,
+        };
+      },
+      {
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
+    );
 
     await stopTrackingForTicket({
       ticketId: ticket.id,
