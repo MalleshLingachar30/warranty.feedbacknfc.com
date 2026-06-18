@@ -393,6 +393,7 @@ export function TechnicianCompleteWork({
     QueuedPhotoRecord[]
   >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
+  const [showReceivedSparePicker, setShowReceivedSparePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -437,6 +438,7 @@ export function TechnicianCompleteWork({
     setQueuedBeforePhotos([]);
     setQueuedAfterPhotos([]);
     setParts([]);
+    setShowReceivedSparePicker(false);
     setMessage(null);
     setError(null);
 
@@ -655,7 +657,40 @@ export function TechnicianCompleteWork({
     [parts],
   );
 
+  const availableReceivedSpareItems = useMemo(() => {
+    const currentSelections = new Set(
+      parts.map(
+        (part) =>
+          `${part.assetCode.trim().toLowerCase()}::${part.tagCode.trim().toLowerCase()}`,
+      ),
+    );
+    const alreadyUsed = new Set(
+      ticket.partsUsed.map(
+        (part) =>
+          `${(part.assetCode ?? "").trim().toLowerCase()}::${(part.tagCode ?? "").trim().toLowerCase()}`,
+      ),
+    );
+
+    return ticket.receivedSpareItems.filter((item) => {
+      if (!item.assetCode || !item.tagCode) {
+        return false;
+      }
+
+      const key = `${item.assetCode.trim().toLowerCase()}::${item.tagCode.trim().toLowerCase()}`;
+      return !currentSelections.has(key) && !alreadyUsed.has(key);
+    });
+  }, [parts, ticket.partsUsed, ticket.receivedSpareItems]);
+
   const handleAddReplacementPart = () => {
+    setError(null);
+    setMessage(null);
+
+    if (availableReceivedSpareItems.length > 0) {
+      setShowReceivedSparePicker((previous) => !previous);
+      return;
+    }
+
+    setShowReceivedSparePicker(false);
     setParts((previous) => [
       ...previous,
       createPartSelectionWithUsage(ticket.partsCatalog[0], "installed"),
@@ -663,6 +698,9 @@ export function TechnicianCompleteWork({
   };
 
   const handleAddRemovedPart = () => {
+    setError(null);
+    setMessage(null);
+    setShowReceivedSparePicker(false);
     setParts((previous) => [
       ...previous,
       createPartSelectionWithUsage(ticket.partsCatalog[0], "removed"),
@@ -670,10 +708,65 @@ export function TechnicianCompleteWork({
   };
 
   const handleAddOtherPart = () => {
+    setError(null);
+    setMessage(null);
+    setShowReceivedSparePicker(false);
     setParts((previous) => [
       ...previous,
       createPartSelection(ticket.partsCatalog[0]),
     ]);
+  };
+
+  const handleAttachReceivedSpare = (item: TicketView["receivedSpareItems"][number]) => {
+    if (!item.assetCode || !item.tagCode) {
+      setError("This received spare is missing asset/tag identity.");
+      return;
+    }
+
+    const assetCode = item.assetCode;
+    const tagCode = item.tagCode;
+
+    const normalizedPartNumber = item.partNumber.toLowerCase();
+    const normalizedPartName = item.partName.toLowerCase();
+    const matchedCatalogPart =
+      ticket.partsCatalog.find((catalogPart) => {
+        const byNumber =
+          normalizedPartNumber &&
+          catalogPart.partNumber.toLowerCase() === normalizedPartNumber;
+        const byName =
+          normalizedPartName &&
+          catalogPart.name.toLowerCase() === normalizedPartName;
+        return Boolean(byNumber || byName);
+      }) ?? ticket.partsCatalog[0];
+
+    setParts((previous) => {
+      const duplicate = previous.some(
+        (part) =>
+          part.assetCode.trim().toLowerCase() === assetCode.toLowerCase() &&
+          part.tagCode.trim().toLowerCase() === tagCode.toLowerCase(),
+      );
+
+      if (duplicate) {
+        return previous;
+      }
+
+      return [
+        ...previous,
+        {
+          ...createPartSelectionWithUsage(matchedCatalogPart, "installed"),
+          assetCode,
+          tagCode,
+          cost: String(item.unitCost),
+          quantity: String(item.quantity),
+        },
+      ];
+    });
+
+    setShowReceivedSparePicker(false);
+    setError(null);
+    setMessage(
+      `Received spare ${assetCode} (${tagCode}) added to this completion.`,
+    );
   };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1088,6 +1181,63 @@ export function TechnicianCompleteWork({
                 Add Replacement
               </Button>
             </div>
+
+            {ticket.receivedSpareItems.length > 0 ? (
+              <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                <p className="font-medium">
+                  Received traced spares on this ticket: {ticket.receivedSpareItems.length}
+                </p>
+                <p className="mt-1 text-sky-800">
+                  Tap `Add Replacement` to choose from the spares already dispatched to this job.
+                </p>
+              </div>
+            ) : null}
+
+            {showReceivedSparePicker && availableReceivedSpareItems.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                <p className="text-sm font-medium text-slate-900">
+                  Select a received spare to mark as installed
+                </p>
+                {availableReceivedSpareItems.map((item) => (
+                  <div
+                    key={item.dispatchItemId}
+                    className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">
+                        {item.partName}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        {item.partNumber || "Part number unavailable"}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        {item.assetCode} {item.tagCode ? `• ${item.tagCode}` : ""}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {item.dispatchNumber}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-9"
+                      onClick={() => handleAttachReceivedSpare(item)}
+                    >
+                      Add as Replacement
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => setShowReceivedSparePicker(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
 
             {replacementParts.length === 0 ? (
               <p className="text-xs text-emerald-900">

@@ -28,6 +28,15 @@ export function CustomerConfirmResolution({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isClosedForAction = ticketStatus !== "pending_confirmation";
+  const installedParts = ticket.partsUsed.filter(
+    (part) => part.usageType === "installed",
+  );
+  const removedParts = ticket.partsUsed.filter(
+    (part) => part.usageType === "removed",
+  );
+  const otherParts = ticket.partsUsed.filter(
+    (part) => part.usageType !== "installed" && part.usageType !== "removed",
+  );
 
   const submitAction = async (action: "confirm" | "reopen") => {
     if (pendingAction || isClosedForAction) {
@@ -142,22 +151,63 @@ export function CustomerConfirmResolution({
 
           <div className="space-y-2">
             <p className="font-medium text-slate-900">
-              {copy.customerConfirmResolution.partsUsed}
+              Replacement Parts Installed
             </p>
-            {ticket.partsUsed.length === 0 ? (
+            {installedParts.length === 0 ? (
               <p className="text-slate-500">{copy.customerConfirmResolution.noParts}</p>
             ) : (
               <ul className="space-y-1">
-                {ticket.partsUsed.map((part, index) => (
+                {installedParts.map((part, index) => (
                   <li key={`${part.partName ?? "part"}-${index}`}>
                     {part.partName ?? "Part"}
                     {part.partNumber ? ` (${part.partNumber})` : ""}
-                    {typeof part.cost === "number" ? ` - INR ${part.cost}` : ""}
+                    {typeof part.quantity === "number" ? ` • Qty ${part.quantity}` : ""}
+                    {part.assetCode ? ` • ${part.assetCode}` : ""}
+                    {typeof part.cost === "number" ? ` • INR ${part.cost}` : ""}
                   </li>
                 ))}
               </ul>
             )}
           </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-slate-900">
+              Old Parts Collected For Return
+            </p>
+            {removedParts.length === 0 ? (
+              <p className="text-slate-500">No removed parts were recorded.</p>
+            ) : (
+              <ul className="space-y-1">
+                {removedParts.map((part, index) => (
+                  <li key={`${part.partName ?? "removed"}-${index}`}>
+                    {part.partName ?? "Part"}
+                    {part.partNumber ? ` (${part.partNumber})` : ""}
+                    {typeof part.quantity === "number" ? ` • Qty ${part.quantity}` : ""}
+                    {part.assetCode ? ` • ${part.assetCode}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {otherParts.length > 0 ? (
+            <div className="space-y-2">
+              <p className="font-medium text-slate-900">
+                {copy.customerConfirmResolution.partsUsed}
+              </p>
+              <ul className="space-y-1">
+                {otherParts.map((part, index) => (
+                  <li key={`${part.partName ?? "other"}-${index}`}>
+                    {part.partName ?? "Part"}
+                    {part.partNumber ? ` (${part.partNumber})` : ""}
+                    {typeof part.quantity === "number" ? ` • Qty ${part.quantity}` : ""}
+                    {part.assetCode ? ` • ${part.assetCode}` : ""}
+                    {typeof part.cost === "number" ? ` • INR ${part.cost}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

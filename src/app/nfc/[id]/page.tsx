@@ -172,34 +172,169 @@ function readEtaLabel(metadata: unknown): string | null {
   return etaLabel ?? null;
 }
 
-function parsePartsUsed(value: unknown): WarrantyTicketPartUsed[] {
+function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (value && typeof value === "object" && "toString" in value) {
+    const parsed = Number.parseFloat(String(value));
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+}
+
+function parsePartsUsedFromSnapshot(value: unknown): WarrantyTicketPartUsed[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value
-    .map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-        return null;
-      }
+  const parts: WarrantyTicketPartUsed[] = [];
 
-      const record = entry as Record<string, unknown>;
-      const partName = asString(record.partName);
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
 
-      if (!partName) {
-        return null;
-      }
+    const record = entry as Record<string, unknown>;
+    const partName = asString(record.partName);
 
-      return {
-        partName,
-        partNumber: asString(record.partNumber) ?? "",
-        cost:
-          typeof record.cost === "number" && Number.isFinite(record.cost)
-            ? record.cost
-            : 0,
-      } satisfies WarrantyTicketPartUsed;
-    })
-    .filter((entry): entry is WarrantyTicketPartUsed => Boolean(entry));
+    if (!partName) {
+      continue;
+    }
+
+    parts.push({
+      partName,
+      partNumber: asString(record.partNumber) ?? "",
+      cost: toNumber(record.cost, 0),
+      quantity: Math.max(1, toNumber(record.quantity, 1)),
+      usageType:
+        record.usageType === "installed" ||
+        record.usageType === "consumed" ||
+        record.usageType === "returned_unused" ||
+        record.usageType === "removed"
+          ? record.usageType
+          : undefined,
+      assetCode: asString(record.assetCode),
+      tagCode: asString(record.tagCode),
+    });
+  }
+
+  return parts;
+}
+
+function parsePartsUsedFromUsageRows(
+  value: Array<{
+    usageType: "installed" | "consumed" | "returned_unused" | "removed";
+    quantity: unknown;
+    metadata: unknown;
+    usedAsset: {
+      publicCode: string;
+      metadata: unknown;
+    } | null;
+    usedTag: {
+      publicCode: string;
+    } | null;
+  }>,
+): WarrantyTicketPartUsed[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [];
+  }
+
+  const parts: WarrantyTicketPartUsed[] = [];
+
+  for (const entry of value) {
+    const metadata =
+      entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+        ? (entry.metadata as Record<string, unknown>)
+        : {};
+    const usedAssetMetadata =
+      entry.usedAsset?.metadata &&
+      typeof entry.usedAsset.metadata === "object" &&
+      !Array.isArray(entry.usedAsset.metadata)
+        ? (entry.usedAsset.metadata as Record<string, unknown>)
+        : {};
+
+    const partName =
+      asString(metadata.partName) ??
+      asString(metadata.name) ??
+      asString(usedAssetMetadata.partName) ??
+      asString(usedAssetMetadata.name) ??
+      entry.usedAsset?.publicCode ??
+      null;
+
+    if (!partName) {
+      continue;
+    }
+
+    parts.push({
+      partName,
+      partNumber:
+        asString(metadata.partNumber) ??
+        asString(metadata.partCode) ??
+        asString(usedAssetMetadata.partNumber) ??
+        asString(usedAssetMetadata.partCode) ??
+        "",
+      cost: toNumber(metadata.unitCost, toNumber(metadata.cost, 0)),
+      quantity: Math.max(1, toNumber(entry.quantity, 1)),
+      usageType: entry.usageType,
+      assetCode: entry.usedAsset?.publicCode ?? null,
+      tagCode: entry.usedTag?.publicCode ?? null,
+    });
+  }
+
+  return parts;
+}
+
+function parseReceivedSpareItems(
+  value: Array<{
+    id: string;
+    partName: string;
+    partNumber: string | null;
+    quantity: unknown;
+    unitCost: unknown;
+    status:
+      | "planned"
+      | "dispatched"
+      | "received_by_technician"
+      | "installed"
+      | "consumed"
+      | "returned_unused"
+      | "partially_reconciled"
+      | "cancelled";
+    spareAsset: { publicCode: string } | null;
+    spareTag: { publicCode: string } | null;
+    dispatch: {
+      dispatchNumber: string;
+      status:
+        | "planned"
+        | "dispatched"
+        | "received_by_technician"
+        | "partially_reconciled"
+        | "fully_reconciled"
+        | "cancelled";
+    };
+  }>,
+) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [];
+  }
+
+  return value.map((entry) => ({
+    dispatchItemId: entry.id,
+    dispatchNumber: entry.dispatch.dispatchNumber,
+    dispatchStatus: entry.dispatch.status,
+    itemStatus: entry.status,
+    partName: entry.partName,
+    partNumber: entry.partNumber ?? "",
+    quantity: Math.max(1, toNumber(entry.quantity, 1)),
+    unitCost: toNumber(entry.unitCost, 0),
+    assetCode: entry.spareAsset?.publicCode ?? null,
+    tagCode: entry.spareTag?.publicCode ?? null,
+  }));
 }
 
 function toWarrantySeverity(value: string): WarrantyTicketSeverity {
@@ -280,6 +415,46 @@ function mapTicketToView(
     resolutionNotes: string | null;
     resolutionPhotos: string[];
     partsUsed: unknown;
+    partUsages: Array<{
+      usageType: "installed" | "consumed" | "returned_unused" | "removed";
+      quantity: unknown;
+      metadata: unknown;
+      usedAsset: {
+        publicCode: string;
+        metadata: unknown;
+      } | null;
+      usedTag: {
+        publicCode: string;
+      } | null;
+    }>;
+    partDispatches: Array<{
+      dispatchNumber: string;
+      status:
+        | "planned"
+        | "dispatched"
+        | "received_by_technician"
+        | "partially_reconciled"
+        | "fully_reconciled"
+        | "cancelled";
+      items: Array<{
+        id: string;
+        partName: string;
+        partNumber: string | null;
+        quantity: unknown;
+        unitCost: unknown;
+        status:
+          | "planned"
+          | "dispatched"
+          | "received_by_technician"
+          | "installed"
+          | "consumed"
+          | "returned_unused"
+          | "partially_reconciled"
+          | "cancelled";
+        spareAsset: { publicCode: string } | null;
+        spareTag: { publicCode: string } | null;
+      }>;
+    }>;
     metadata: unknown;
     timelineEntries: Array<{
       id: string;
@@ -313,7 +488,21 @@ function mapTicketToView(
     reportedAt: ticket.reportedAt.toISOString(),
     resolutionNotes: ticket.resolutionNotes,
     resolutionPhotos: ticket.resolutionPhotos,
-    partsUsed: parsePartsUsed(ticket.partsUsed),
+    partsUsed:
+      ticket.partUsages.length > 0
+        ? parsePartsUsedFromUsageRows(ticket.partUsages)
+        : parsePartsUsedFromSnapshot(ticket.partsUsed),
+    receivedSpareItems: parseReceivedSpareItems(
+      ticket.partDispatches.flatMap((dispatch) =>
+        dispatch.items.map((item) => ({
+          ...item,
+          dispatch: {
+            dispatchNumber: dispatch.dispatchNumber,
+            status: dispatch.status,
+          },
+        })),
+      ),
+    ),
     assignedTechnicianId: ticket.assignedTechnician?.id ?? null,
     assignedTechnicianName: ticket.assignedTechnician?.name ?? null,
     assignedTechnicianPhone: ticket.assignedTechnician?.phone ?? null,
@@ -489,6 +678,18 @@ function mapWarrantyTicket(ticket: {
   resolutionNotes: string | null;
   resolutionPhotos: string[];
   partsUsed: unknown;
+  partUsages: Array<{
+    usageType: "installed" | "consumed" | "returned_unused" | "removed";
+    quantity: unknown;
+    metadata: unknown;
+    usedAsset: {
+      publicCode: string;
+      metadata: unknown;
+    } | null;
+    usedTag: {
+      publicCode: string;
+    } | null;
+  }>;
   laborHours: unknown;
   technicianStartedAt: Date | null;
   technicianCompletedAt: Date | null;
@@ -521,7 +722,10 @@ function mapWarrantyTicket(ticket: {
     customerPhotos: ticket.issuePhotos,
     resolutionNotes: ticket.resolutionNotes,
     resolutionPhotos: ticket.resolutionPhotos,
-    partsUsed: parsePartsUsed(ticket.partsUsed),
+    partsUsed:
+      ticket.partUsages.length > 0
+        ? parsePartsUsedFromUsageRows(ticket.partUsages)
+        : parsePartsUsedFromSnapshot(ticket.partsUsed),
     laborHours:
       typeof ticket.laborHours === "number" ? ticket.laborHours : null,
     aiSuggestedParts: [],
@@ -726,6 +930,48 @@ export default async function NfcStickerPage({
           id: true,
           name: true,
           phone: true,
+        },
+      },
+      partUsages: {
+        include: {
+          usedAsset: {
+            select: {
+              publicCode: true,
+              metadata: true,
+            },
+          },
+          usedTag: {
+            select: {
+              publicCode: true,
+            },
+          },
+        },
+        orderBy: {
+          linkedAt: "asc",
+        },
+      },
+      partDispatches: {
+        include: {
+          items: {
+            include: {
+              spareAsset: {
+                select: {
+                  publicCode: true,
+                },
+              },
+              spareTag: {
+                select: {
+                  publicCode: true,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+        },
+        orderBy: {
+          plannedAt: "asc",
         },
       },
       liveStatus: {

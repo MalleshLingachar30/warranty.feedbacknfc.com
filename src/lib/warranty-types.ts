@@ -103,6 +103,10 @@ export interface WarrantyTicketPartUsed {
   partName: string;
   partNumber: string;
   cost: number;
+  quantity?: number;
+  usageType?: "installed" | "consumed" | "returned_unused" | "removed";
+  assetCode?: string | null;
+  tagCode?: string | null;
 }
 
 export interface WarrantyTicket {

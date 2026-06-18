@@ -115,7 +115,41 @@ export interface TicketView {
   reportedAt: Date | string;
   resolutionNotes: string | null;
   resolutionPhotos: string[];
-  partsUsed: Array<{ partName?: string; partNumber?: string; cost?: number }>;
+  partsUsed: Array<{
+    partName?: string;
+    partNumber?: string;
+    cost?: number;
+    quantity?: number;
+    usageType?: "installed" | "consumed" | "returned_unused" | "removed";
+    assetCode?: string | null;
+    tagCode?: string | null;
+  }>;
+  receivedSpareItems: Array<{
+    dispatchItemId: string;
+    dispatchNumber: string;
+    dispatchStatus:
+      | "planned"
+      | "dispatched"
+      | "received_by_technician"
+      | "partially_reconciled"
+      | "fully_reconciled"
+      | "cancelled";
+    itemStatus:
+      | "planned"
+      | "dispatched"
+      | "received_by_technician"
+      | "installed"
+      | "consumed"
+      | "returned_unused"
+      | "partially_reconciled"
+      | "cancelled";
+    partName: string;
+    partNumber: string;
+    quantity: number;
+    unitCost: number;
+    assetCode: string | null;
+    tagCode: string | null;
+  }>;
   assignedTechnicianId: string | null;
   assignedTechnicianName: string | null;
   assignedTechnicianPhone: string | null;
