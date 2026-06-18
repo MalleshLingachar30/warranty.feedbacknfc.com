@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowRightCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +45,6 @@ export function InwardReceiptClient({
   serviceCenterLocked = false,
   organizationContextLabel,
 }: InwardReceiptClientProps) {
-  const router = useRouter();
   const [assetReference, setAssetReference] = useState("");
   const [serviceCenterId, setServiceCenterId] = useState(defaultServiceCenterId ?? "");
   const [initiationSource, setInitiationSource] = useState("manual_admin");
@@ -54,10 +53,12 @@ export function InwardReceiptClient({
   const [reportedFault, setReportedFault] = useState("");
   const [inwardConditionNotes, setInwardConditionNotes] = useState("");
   const [accessoriesReceived, setAccessoriesReceived] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionState, setSubmissionState] = useState<"idle" | "creating" | "opening">("idle");
+  const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const recentAssetButtons = useMemo(() => assetSuggestions.slice(0, 6), [assetSuggestions]);
+  const isBusy = submissionState !== "idle";
 
   const createOrder = async () => {
     if (!assetReference.trim()) {
@@ -70,8 +71,10 @@ export function InwardReceiptClient({
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmissionState("creating");
+    setCreatedOrderNumber(null);
     setError(null);
+    const toastId = toast.loading("Creating internal-service order…");
 
     try {
       const response = await fetch(submitUrl, {
@@ -103,16 +106,30 @@ export function InwardReceiptClient({
         throw new Error(payload.error ?? "Unable to create internal service order.");
       }
 
-      router.push(`${orderBaseHref}/${payload.order.id}`);
-      router.refresh();
+      const nextHref = `${orderBaseHref}/${payload.order.id}`;
+      setCreatedOrderNumber(payload.order.orderNumber);
+      setSubmissionState("opening");
+      toast.success(`${payload.order.orderNumber} created. Opening depot order…`, {
+        id: toastId,
+      });
+
+      // Use a full navigation so the freshly created order detail always loads
+      // against the latest server state instead of feeling like a client-side no-op.
+      window.location.assign(nextHref);
     } catch (requestError) {
+      setSubmissionState("idle");
+      setCreatedOrderNumber(null);
+      toast.error(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create internal service order.",
+        { id: toastId },
+      );
       setError(
         requestError instanceof Error
           ? requestError.message
           : "Unable to create internal service order.",
       );
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -135,6 +152,7 @@ export function InwardReceiptClient({
               value={assetReference}
               onChange={(event) => setAssetReference(event.target.value)}
               placeholder="Scan or type AST-..., serial number, or TAG-..."
+              disabled={isBusy}
             />
             <p className="text-xs text-slate-500">
               Use the existing traceability identity. Do not create a new customer-facing ticket here.
@@ -150,7 +168,7 @@ export function InwardReceiptClient({
                 value={serviceCenterId}
                 onChange={(event) => setServiceCenterId(event.target.value)}
                 className={fieldClassName}
-                disabled={serviceCenterLocked}
+                disabled={serviceCenterLocked || isBusy}
               >
                 <option value="">Select owning depot</option>
                 {serviceCenters.map((center) => (
@@ -169,6 +187,7 @@ export function InwardReceiptClient({
                 value={initiationSource}
                 onChange={(event) => setInitiationSource(event.target.value)}
                 className={fieldClassName}
+                disabled={isBusy}
               >
                 <option value="manual_admin">Manual admin</option>
                 <option value="customer_return">Customer return</option>
@@ -185,6 +204,7 @@ export function InwardReceiptClient({
                 value={serviceType}
                 onChange={(event) => setServiceType(event.target.value)}
                 className={fieldClassName}
+                disabled={isBusy}
               >
                 <option value="depot_repair">Depot repair</option>
                 <option value="preventive_maintenance">Preventive maintenance</option>
@@ -202,6 +222,7 @@ export function InwardReceiptClient({
                 value={priority}
                 onChange={(event) => setPriority(event.target.value)}
                 className={fieldClassName}
+                disabled={isBusy}
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -218,6 +239,7 @@ export function InwardReceiptClient({
               onChange={(event) => setReportedFault(event.target.value)}
               placeholder="Describe the incoming problem, failure mode, or return reason."
               rows={4}
+              disabled={isBusy}
             />
           </div>
 
@@ -230,6 +252,7 @@ export function InwardReceiptClient({
               onChange={(event) => setInwardConditionNotes(event.target.value)}
               placeholder="Physical condition, missing parts, damage, packaging state, or intake observations."
               rows={4}
+              disabled={isBusy}
             />
           </div>
 
@@ -241,6 +264,7 @@ export function InwardReceiptClient({
               value={accessoriesReceived}
               onChange={(event) => setAccessoriesReceived(event.target.value)}
               placeholder="Power cable, sensor, probe, bracket"
+              disabled={isBusy}
             />
             <p className="text-xs text-slate-500">
               Comma-separated. These will be stored on the internal order as inward context.
@@ -253,10 +277,22 @@ export function InwardReceiptClient({
             </div>
           ) : null}
 
+          {submissionState === "opening" ? (
+            <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {createdOrderNumber
+                ? `${createdOrderNumber} has been created. Opening the depot order now…`
+                : "Internal-service order created. Opening the depot order now…"}
+            </div>
+          ) : null}
+
           <div className="flex justify-end">
-            <Button onClick={createOrder} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : <ArrowRightCircle className="size-4" />}
-              Create Internal Service Order
+            <Button onClick={createOrder} disabled={isBusy}>
+              {isBusy ? <Loader2 className="size-4 animate-spin" /> : <ArrowRightCircle className="size-4" />}
+              {submissionState === "creating"
+                ? "Creating Internal Service Order…"
+                : submissionState === "opening"
+                  ? `Opening ${createdOrderNumber ?? "Depot Order"}…`
+                  : "Create Internal Service Order"}
             </Button>
           </div>
         </div>
@@ -279,6 +315,7 @@ export function InwardReceiptClient({
                   key={`${asset.publicCode}-${asset.serialNumber ?? "none"}`}
                   type="button"
                   onClick={() => setAssetReference(asset.serialNumber ?? asset.publicCode)}
+                  disabled={isBusy}
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50"
                 >
                   <div className="font-medium text-slate-900">{asset.modelName}</div>

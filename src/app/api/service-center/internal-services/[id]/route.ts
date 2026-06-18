@@ -365,14 +365,27 @@ export async function PATCH(
     const transition = buildTransition(action, order.status, finalDisposition, now);
 
     const updated = await db.$transaction(async (tx) => {
+      const assignedTechnicianPatch: Prisma.InternalServiceOrderUpdateInput["assignedTechnician"] =
+        action === "assign_engineer"
+          ? assignedTechnicianId
+            ? {
+                connect: {
+                  id: assignedTechnicianId,
+                },
+              }
+            : {
+                disconnect: true,
+              }
+          : assignedTechnicianId
+            ? {
+                connect: {
+                  id: assignedTechnicianId,
+                },
+              }
+            : undefined;
+
       const basePatch: Prisma.InternalServiceOrderUpdateInput = {
-        assignedTechnician: assignedTechnicianId
-          ? {
-              connect: {
-                id: assignedTechnicianId,
-              },
-            }
-          : undefined,
+        assignedTechnician: assignedTechnicianPatch,
         reportedFault,
         diagnosisNotes,
         resolutionNotes,

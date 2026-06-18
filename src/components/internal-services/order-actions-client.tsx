@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,13 @@ type InternalServiceOrderActionsClientProps = {
   technicians: TechnicianOption[];
 };
 
+type WorkflowButton = {
+  action: string;
+  label: string;
+  variant?: "default" | "outline";
+  requiresEngineer?: boolean;
+};
+
 const DISPOSITION_OPTIONS = [
   "returned_to_customer",
   "returned_to_distributor",
@@ -40,6 +48,16 @@ const DISPOSITION_OPTIONS = [
   "cannibalized",
   "no_fault_found_return",
 ] as const;
+
+const ACTIONS_REQUIRING_ENGINEER = new Set([
+  "start_diagnosis",
+  "await_parts",
+  "start_repair",
+  "submit_to_qc",
+  "fail_qc",
+  "pass_qc",
+  "complete_disposition",
+]);
 
 async function submitDepotAction(
   orderId: string,
@@ -98,7 +116,6 @@ export function InternalServiceOrderActionsClient({
   technicians,
 }: InternalServiceOrderActionsClientProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [assignedTechnicianId, setAssignedTechnicianId] = useState(
     currentAssignedTechnicianId ?? "",
   );
@@ -108,31 +125,64 @@ export function InternalServiceOrderActionsClient({
   const [finalDisposition, setFinalDisposition] = useState(
     "returned_to_stock",
   );
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const workflowButtons = useMemo(() => {
+  const assignmentDirty =
+    assignedTechnicianId !== (currentAssignedTechnicianId ?? "");
+  const notesDirty =
+    reportedFault !== currentReportedFault ||
+    diagnosisNotes !== currentDiagnosisNotes ||
+    resolutionNotes !== currentResolutionNotes;
+  const hasDraftChanges = assignmentDirty || notesDirty;
+  const isPending = pendingAction !== null;
+
+  const workflowButtons = useMemo<WorkflowButton[]>(() => {
     switch (status) {
       case "inward_received":
         return [{ action: "mark_triaged", label: "Mark Triaged" }];
       case "awaiting_triage":
-        return [{ action: "start_diagnosis", label: "Start Diagnosis" }];
+        return [
+          {
+            action: "start_diagnosis",
+            label: "Start Diagnosis",
+            requiresEngineer: true,
+          },
+        ];
       case "under_diagnosis":
         return [
           { action: "await_parts", label: "Await Parts", variant: "outline" as const },
-          { action: "start_repair", label: "Start Repair" },
+          { action: "start_repair", label: "Start Repair", requiresEngineer: true },
         ];
       case "awaiting_parts":
-        return [{ action: "start_repair", label: "Resume Repair" }];
+        return [{ action: "start_repair", label: "Resume Repair", requiresEngineer: true }];
       case "repair_in_progress":
-        return [{ action: "submit_to_qc", label: "Submit To QC" }];
+        return [{ action: "submit_to_qc", label: "Submit To QC", requiresEngineer: true }];
       case "awaiting_qc":
         return [
-          { action: "fail_qc", label: "Fail QC", variant: "outline" as const },
-          { action: "pass_qc", label: "Pass QC" },
+          {
+            action: "fail_qc",
+            label: "Fail QC",
+            variant: "outline" as const,
+            requiresEngineer: true,
+          },
+          { action: "pass_qc", label: "Pass QC", requiresEngineer: true },
         ];
       case "qa_failed":
-        return [{ action: "start_diagnosis", label: "Restart Diagnosis" }];
+        return [
+          {
+            action: "start_diagnosis",
+            label: "Restart Diagnosis",
+            requiresEngineer: true,
+          },
+        ];
       case "ready_for_disposition":
-        return [{ action: "complete_disposition", label: "Complete Disposition" }];
+        return [
+          {
+            action: "complete_disposition",
+            label: "Complete Disposition",
+            requiresEngineer: true,
+          },
+        ];
       case "completed":
         return [{ action: "close_order", label: "Close Order" }];
       default:
@@ -140,30 +190,50 @@ export function InternalServiceOrderActionsClient({
     }
   }, [status]);
 
-  const runAction = (action: string) => {
-    startTransition(async () => {
-      const toastId = toast.loading("Saving depot action…");
+  const runAction = async (action: string) => {
+    setPendingAction(action);
+    const isWorkflowAction =
+      action !== "save_notes" && action !== "assign_engineer";
+    const toastLabel =
+      action === "assign_engineer"
+        ? assignedTechnicianId
+          ? "Saving engineer assignment…"
+          : "Clearing engineer assignment…"
+        : action === "save_notes"
+          ? "Saving depot notes…"
+          : "Saving depot action…";
+    const toastId = toast.loading(toastLabel);
 
-      try {
-        await submitDepotAction(orderId, {
-          action,
-          assignedTechnicianId: assignedTechnicianId || undefined,
-          reportedFault,
-          diagnosisNotes,
-          resolutionNotes,
-          finalDisposition:
-            action === "complete_disposition" ? finalDisposition : undefined,
-        });
+    try {
+      await submitDepotAction(orderId, {
+        action,
+        assignedTechnicianId: assignedTechnicianId || undefined,
+        reportedFault,
+        diagnosisNotes,
+        resolutionNotes,
+        finalDisposition:
+          action === "complete_disposition" ? finalDisposition : undefined,
+      });
 
-        toast.success("Internal-service order updated.", { id: toastId });
-        router.refresh();
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Unable to update order.",
-          { id: toastId },
-        );
-      }
-    });
+      toast.success(
+        action === "assign_engineer"
+          ? assignedTechnicianId
+            ? "Engineer assignment saved."
+            : "Engineer assignment cleared."
+          : isWorkflowAction
+            ? "Depot workflow updated."
+            : "Depot notes saved.",
+        { id: toastId },
+      );
+      router.refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to update order.",
+        { id: toastId },
+      );
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   return (
@@ -176,6 +246,20 @@ export function InternalServiceOrderActionsClient({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="space-y-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            Notes and engineer selection travel with every depot workflow action. Use
+            the save buttons when you want to checkpoint edits without changing status.
+          </div>
+          {assignmentDirty || notesDirty ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {assignmentDirty
+                ? "Engineer assignment has changed and is not saved yet. Save it now, or it will be saved with the next depot action."
+                : "You have unsaved depot notes. Save them now, or they will be saved with the next depot action."}
+            </div>
+          ) : null}
+        </div>
+
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-900">
@@ -194,6 +278,10 @@ export function InternalServiceOrderActionsClient({
                 </option>
               ))}
             </select>
+            <p className="text-xs text-slate-500">
+              Diagnosis, repair, QC, and disposition actions require an assigned engineer.
+              Choose one here and save it explicitly, or let the next workflow action persist it.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -262,31 +350,75 @@ export function InternalServiceOrderActionsClient({
           <Button
             type="button"
             variant="outline"
-            disabled={isPending}
-            onClick={() => runAction("save_notes")}
+            disabled={isPending || !notesDirty}
+            onClick={() => void runAction("save_notes")}
           >
-            {isPending ? "Saving…" : "Save Notes"}
+            {pendingAction === "save_notes" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Saving Notes…
+              </>
+            ) : (
+              "Save Notes"
+            )}
           </Button>
           <Button
             type="button"
             variant="outline"
-            disabled={isPending}
-            onClick={() => runAction("assign_engineer")}
+            disabled={isPending || !assignmentDirty}
+            onClick={() => void runAction("assign_engineer")}
           >
-            {isPending ? "Saving…" : "Save Assignment"}
+            {pendingAction === "assign_engineer" ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Saving Assignment…
+              </>
+            ) : (
+              "Save Assignment"
+            )}
           </Button>
           {workflowButtons.map((button) => (
             <Button
               key={button.action}
               type="button"
               variant={button.variant ?? "default"}
-              disabled={isPending}
-              onClick={() => runAction(button.action)}
+              disabled={
+                isPending ||
+                ((button.requiresEngineer ||
+                  ACTIONS_REQUIRING_ENGINEER.has(button.action)) &&
+                  !assignedTechnicianId)
+              }
+              onClick={() => void runAction(button.action)}
             >
-              {isPending ? "Saving…" : button.label}
+              {pendingAction === button.action ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                button.label
+              )}
             </Button>
           ))}
         </div>
+
+        {!assignedTechnicianId &&
+        workflowButtons.some(
+          (button) =>
+            button.requiresEngineer ||
+            ACTIONS_REQUIRING_ENGINEER.has(button.action),
+        ) ? (
+          <p className="text-xs text-amber-700">
+            Select an engineer before running the next depot execution step.
+          </p>
+        ) : null}
+
+        {hasDraftChanges && !isPending ? (
+          <p className="text-xs text-slate-500">
+            Current edits are local until you save them or use the next depot workflow
+            action.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
