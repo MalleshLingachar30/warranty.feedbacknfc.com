@@ -438,7 +438,7 @@ export function TechnicianCompleteWork({
     setQueuedBeforePhotos([]);
     setQueuedAfterPhotos([]);
     setParts([]);
-    setShowReceivedSparePicker(false);
+    setShowReceivedSparePicker(ticket.receivedSpareItems.length > 0);
     setMessage(null);
     setError(null);
 
@@ -686,11 +686,13 @@ export function TechnicianCompleteWork({
     setMessage(null);
 
     if (availableReceivedSpareItems.length > 0) {
-      setShowReceivedSparePicker((previous) => !previous);
+      setShowReceivedSparePicker(true);
       return;
     }
 
-    setShowReceivedSparePicker(false);
+    setShowReceivedSparePicker(
+      availableReceivedSpareItems.length > 1 || ticket.receivedSpareItems.length > 1,
+    );
     setParts((previous) => [
       ...previous,
       createPartSelectionWithUsage(ticket.partsCatalog[0], "installed"),
@@ -1188,7 +1190,8 @@ export function TechnicianCompleteWork({
                   Received traced spares on this ticket: {ticket.receivedSpareItems.length}
                 </p>
                 <p className="mt-1 text-sky-800">
-                  Tap `Add Replacement` to choose from the spares already dispatched to this job.
+                  The received spare list is shown below. Use `Add as Replacement`
+                  on the exact traced spare fitted into the equipment.
                 </p>
               </div>
             ) : null}
