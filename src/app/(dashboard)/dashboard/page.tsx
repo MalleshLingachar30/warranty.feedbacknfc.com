@@ -42,7 +42,7 @@ export default async function DashboardPage() {
   }
 
   if (role === "service_center_admin") {
-    redirect("/dashboard/service-center");
+    redirect("/dashboard/service-center-overview");
   }
 
   if (role === "customer") {

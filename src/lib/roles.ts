@@ -52,7 +52,7 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
     { label: "Settings", href: "/dashboard/manufacturer/settings", icon: Settings },
   ],
   service_center_admin: [
-    { label: "Dashboard", href: "/dashboard/service-center", icon: Gauge },
+    { label: "Dashboard", href: "/dashboard/service-center-overview", icon: Gauge },
     { label: "Tickets", href: "/dashboard/tickets", icon: Ticket },
     { label: "Technicians", href: "/dashboard/technicians", icon: Wrench },
     { label: "Claims", href: "/dashboard/claims", icon: ClipboardList },
