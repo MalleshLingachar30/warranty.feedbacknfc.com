@@ -76,6 +76,17 @@ function createPartSelection(part?: {
   };
 }
 
+function createPartSelectionWithUsage(
+  part: { id: string; typicalCost: number } | undefined,
+  usageType: PartSelection["usageType"],
+): PartSelection {
+  return {
+    ...createPartSelection(part),
+    usageType,
+    cost: usageType === "removed" ? "0" : String(part?.typicalCost ?? 0),
+  };
+}
+
 interface TechnicianAssetInfoProps {
   product: ProductView;
   openTicket: TicketView | null;
@@ -625,6 +636,46 @@ export function TechnicianCompleteWork({
     );
   };
 
+  const replacementParts = useMemo(
+    () => parts.filter((part) => part.usageType === "installed"),
+    [parts],
+  );
+
+  const removedParts = useMemo(
+    () => parts.filter((part) => part.usageType === "removed"),
+    [parts],
+  );
+
+  const additionalParts = useMemo(
+    () =>
+      parts.filter(
+        (part) =>
+          part.usageType !== "installed" && part.usageType !== "removed",
+      ),
+    [parts],
+  );
+
+  const handleAddReplacementPart = () => {
+    setParts((previous) => [
+      ...previous,
+      createPartSelectionWithUsage(ticket.partsCatalog[0], "installed"),
+    ]);
+  };
+
+  const handleAddRemovedPart = () => {
+    setParts((previous) => [
+      ...previous,
+      createPartSelectionWithUsage(ticket.partsCatalog[0], "removed"),
+    ]);
+  };
+
+  const handleAddOtherPart = () => {
+    setParts((previous) => [
+      ...previous,
+      createPartSelection(ticket.partsCatalog[0]),
+    ]);
+  };
+
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -767,6 +818,102 @@ export function TechnicianCompleteWork({
     }
   };
 
+  const renderPartRow = (part: PartSelection) => (
+    <div key={part.id} className="rounded-md border border-slate-200 p-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {ticket.partsCatalog.length > 0 ? (
+          <select
+            value={part.catalogPartId}
+            onChange={(event) =>
+              handlePartChange(part.id, {
+                catalogPartId: event.target.value,
+              })
+            }
+            className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+          >
+            {ticket.partsCatalog.map((catalogPart) => (
+              <option key={catalogPart.id} value={catalogPart.id}>
+                {catalogPart.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            value="No catalog part selected"
+            readOnly
+            className="text-slate-500"
+          />
+        )}
+        <Input
+          placeholder="Part/kit/pack asset code"
+          value={part.assetCode}
+          onChange={(event) =>
+            handlePartChange(part.id, {
+              assetCode: event.target.value,
+            })
+          }
+        />
+      </div>
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <select
+          value={part.usageType}
+          onChange={(event) =>
+            handlePartChange(part.id, {
+              usageType: event.target.value as PartSelection["usageType"],
+            })
+          }
+          className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+        >
+          <option value="consumed">Consumed</option>
+          <option value="installed">Installed</option>
+          <option value="returned_unused">Returned Unused</option>
+          <option value="removed">Removed</option>
+        </select>
+        <Input
+          type="number"
+          min="0"
+          step="0.01"
+          value={part.cost}
+          onChange={(event) =>
+            handlePartChange(part.id, { cost: event.target.value })
+          }
+        />
+        <Input
+          type="number"
+          min="0.001"
+          step="0.001"
+          value={part.quantity}
+          onChange={(event) =>
+            handlePartChange(part.id, { quantity: event.target.value })
+          }
+        />
+      </div>
+      <Input
+        className="mt-2"
+        placeholder="Tag code (for unit scan mandatory mode)"
+        value={part.tagCode}
+        onChange={(event) =>
+          handlePartChange(part.id, {
+            tagCode: event.target.value,
+          })
+        }
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        className="mt-2 h-8 gap-1 px-2 text-xs text-rose-600 hover:text-rose-700"
+        onClick={() =>
+          setParts((previous) =>
+            previous.filter((entry) => entry.id !== part.id),
+          )
+        }
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        Remove
+      </Button>
+    </div>
+  );
+
   const renderPhotoSelection = (
     files: File[],
     queuedPhotos: QueuedPhotoRecord[],
@@ -884,31 +1031,138 @@ export function TechnicianCompleteWork({
           <div className="flex items-center justify-between">
             <div>
               <label className="text-sm font-medium text-slate-800">
-                Parts Used
+                Replacement and Return Parts
               </label>
               <p className="text-xs text-slate-500">
                 Traceability mode: {ticket.partTraceabilityMode} • Small-part mode:{" "}
                 {ticket.smallPartTrackingMode}
               </p>
               <p className="text-xs text-slate-500">
-                Primary flow: scan generated part tags through `/r/[code]` and
-                return using the resolver action links.
+                Capture the new parts fitted into the unit and the old failed
+                parts taken back from site as separate service events.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-8 gap-1 px-2 text-xs"
-              onClick={() =>
-                setParts((previous) => [
-                  ...previous,
-                  createPartSelection(ticket.partsCatalog[0]),
-                ])
-              }
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Part
-            </Button>
+          </div>
+
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            <p className="font-medium text-slate-900">Repair capture summary</p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <p className="font-medium text-emerald-900">
+                  Replacement parts fitted
+                </p>
+                <p className="mt-1 text-emerald-800">{replacementParts.length}</p>
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                <p className="font-medium text-amber-900">
+                  Old parts removed for return
+                </p>
+                <p className="mt-1 text-amber-800">{removedParts.length}</p>
+              </div>
+              <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2">
+                <p className="font-medium text-sky-900">
+                  Other consumables / unused
+                </p>
+                <p className="mt-1 text-sky-800">{additionalParts.length}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-emerald-950">
+                  Replacement Parts Installed
+                </p>
+                <p className="text-xs text-emerald-900">
+                  Add the traced spare or replacement item fitted into the unit.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 gap-1 border-emerald-300 bg-white px-2 text-xs text-emerald-950"
+                onClick={handleAddReplacementPart}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Replacement
+              </Button>
+            </div>
+
+            {replacementParts.length === 0 ? (
+              <p className="text-xs text-emerald-900">
+                No replacement parts attached yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {replacementParts.map((part) => renderPartRow(part))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-amber-950">
+                  Old Parts Removed For Return
+                </p>
+                <p className="text-xs text-amber-900">
+                  Add the failed item taken back from site. These entries create
+                  return-logistics records after completion.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 gap-1 border-amber-300 bg-white px-2 text-xs text-amber-950"
+                onClick={handleAddRemovedPart}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Removed Part
+              </Button>
+            </div>
+
+            {removedParts.length === 0 ? (
+              <p className="text-xs text-amber-900">
+                No removed old parts captured yet.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {removedParts.map((part) => renderPartRow(part))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-slate-900">
+                  Other Part Usage
+                </p>
+                <p className="text-xs text-slate-500">
+                  Use this for consumables or returned-unused items.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-8 gap-1 px-2 text-xs"
+                onClick={handleAddOtherPart}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Other Part
+              </Button>
+            </div>
+
+            {additionalParts.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No other consumables or returned-unused parts added.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {additionalParts.map((part) => renderPartRow(part))}
+              </div>
+            )}
           </div>
 
           {scannedPartBlockingError ? (
@@ -922,111 +1176,6 @@ export function TechnicianCompleteWork({
               Resolver scan ready: {scannedPart.scan.assetCode} ({scannedPart.scan.tagCode})
             </p>
           ) : null}
-
-          {parts.length === 0 ? (
-            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              No parts selected.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {parts.map((part) => (
-                <div key={part.id} className="rounded-md border border-slate-200 p-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {ticket.partsCatalog.length > 0 ? (
-                      <select
-                        value={part.catalogPartId}
-                        onChange={(event) =>
-                          handlePartChange(part.id, {
-                            catalogPartId: event.target.value,
-                          })
-                        }
-                        className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                      >
-                        {ticket.partsCatalog.map((catalogPart) => (
-                          <option key={catalogPart.id} value={catalogPart.id}>
-                            {catalogPart.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Input
-                        value="No catalog part selected"
-                        readOnly
-                        className="text-slate-500"
-                      />
-                    )}
-                    <Input
-                      placeholder="Part/kit/pack asset code"
-                      value={part.assetCode}
-                      onChange={(event) =>
-                        handlePartChange(part.id, {
-                          assetCode: event.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <select
-                      value={part.usageType}
-                      onChange={(event) =>
-                        handlePartChange(part.id, {
-                          usageType: event.target
-                            .value as PartSelection["usageType"],
-                        })
-                      }
-                      className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                    >
-                      <option value="consumed">Consumed</option>
-                      <option value="installed">Installed</option>
-                      <option value="returned_unused">Returned Unused</option>
-                      <option value="removed">Removed</option>
-                    </select>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={part.cost}
-                      onChange={(event) =>
-                        handlePartChange(part.id, { cost: event.target.value })
-                      }
-                    />
-                    <Input
-                      type="number"
-                      min="0.001"
-                      step="0.001"
-                      value={part.quantity}
-                      onChange={(event) =>
-                        handlePartChange(part.id, { quantity: event.target.value })
-                      }
-                    />
-                  </div>
-                  <Input
-                    className="mt-2"
-                    placeholder="Tag code (for unit scan mandatory mode)"
-                    value={part.tagCode}
-                    onChange={(event) =>
-                      handlePartChange(part.id, {
-                        tagCode: event.target.value,
-                      })
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="mt-2 h-8 gap-1 px-2 text-xs text-rose-600 hover:text-rose-700"
-                    onClick={() =>
-                      setParts((previous) =>
-                        previous.filter((entry) => entry.id !== part.id),
-                      )
-                    }
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Remove
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {message ? (

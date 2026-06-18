@@ -260,7 +260,7 @@ export function JobDetail({
     });
   }, [job.partsUsed, job.receivedSpareItems, parts]);
 
-  const handleAddPart = () => {
+  const handleAddReplacementPart = () => {
     setActionError(null);
     setActionSuccess(null);
 
@@ -269,6 +269,34 @@ export function JobDetail({
       return;
     }
 
+    setShowReceivedSparePicker(false);
+    setParts((prev) => [
+      ...prev,
+      {
+        ...createSelectionFromCatalog(job.partsCatalog[0]),
+        usageType: "installed",
+      },
+    ]);
+  };
+
+  const handleAddRemovedPart = () => {
+    setActionError(null);
+    setActionSuccess(null);
+    setShowReceivedSparePicker(false);
+    setParts((prev) => [
+      ...prev,
+      {
+        ...createSelectionFromCatalog(job.partsCatalog[0]),
+        usageType: "removed",
+        cost: "0",
+      },
+    ]);
+  };
+
+  const handleAddOtherPart = () => {
+    setActionError(null);
+    setActionSuccess(null);
+    setShowReceivedSparePicker(false);
     setParts((prev) => [
       ...prev,
       createSelectionFromCatalog(job.partsCatalog[0]),
@@ -296,6 +324,25 @@ export function JobDetail({
       `Received spare ${item.assetCode} (${item.tagCode}) added to this ticket.`,
     );
   };
+
+  const replacementParts = useMemo(
+    () => parts.filter((part) => part.usageType === "installed"),
+    [parts],
+  );
+
+  const removedParts = useMemo(
+    () => parts.filter((part) => part.usageType === "removed"),
+    [parts],
+  );
+
+  const additionalParts = useMemo(
+    () =>
+      parts.filter(
+        (part) =>
+          part.usageType !== "installed" && part.usageType !== "removed",
+      ),
+    [parts],
+  );
 
   const mapLink = useMemo(
     () => googleMapsUrl(job.customerAddress),
@@ -626,6 +673,110 @@ export function JobDetail({
     }
   };
 
+  const renderPartRow = (part: PartSelection) => (
+    <div
+      key={part.id}
+      className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2"
+    >
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {job.partsCatalog.length > 0 ? (
+          <select
+            value={part.catalogPartId}
+            className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+            onChange={(event) =>
+              handlePartChange(part.id, {
+                catalogPartId: event.target.value,
+              })
+            }
+          >
+            {job.partsCatalog.map((catalogPart) => (
+              <option key={catalogPart.id} value={catalogPart.id}>
+                {catalogPart.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input
+            value="No catalog part selected"
+            readOnly
+            className="text-slate-500"
+          />
+        )}
+        <Input
+          placeholder="Part/kit/pack asset code"
+          value={part.assetCode}
+          onChange={(event) =>
+            handlePartChange(part.id, {
+              assetCode: event.target.value,
+            })
+          }
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_88px_88px_40px]">
+        <select
+          value={part.usageType}
+          className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
+          onChange={(event) =>
+            handlePartChange(part.id, {
+              usageType: event.target.value as PartSelection["usageType"],
+            })
+          }
+        >
+          <option value="consumed">Consumed</option>
+          <option value="installed">Installed</option>
+          <option value="returned_unused">Returned Unused</option>
+          <option value="removed">Removed</option>
+        </select>
+        <Input
+          type="number"
+          inputMode="decimal"
+          min="0.001"
+          step="0.001"
+          value={part.quantity}
+          onChange={(event) =>
+            handlePartChange(part.id, {
+              quantity: event.target.value,
+            })
+          }
+        />
+        <Input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          value={part.cost}
+          onChange={(event) =>
+            handlePartChange(part.id, {
+              cost: event.target.value,
+            })
+          }
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          className="w-full sm:w-auto"
+          onClick={() =>
+            setParts((previous) =>
+              previous.filter((item) => item.id !== part.id),
+            )
+          }
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+      <Input
+        placeholder="Tag code (for unit scan mandatory mode)"
+        value={part.tagCode}
+        onChange={(event) =>
+          handlePartChange(part.id, {
+            tagCode: event.target.value,
+          })
+        }
+      />
+    </div>
+  );
+
   return (
     <div className="flex h-full flex-col bg-slate-50">
       <div className="border-b border-slate-200 bg-white px-4 py-4">
@@ -858,85 +1009,208 @@ export function JobDetail({
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <label className="text-sm font-medium text-slate-800">
-                      Parts used
+                      Replacement and Return Parts
                     </label>
                     <p className="text-xs text-slate-500">
                       Traceability mode: {job.partTraceabilityMode} • Small-part
                       mode: {job.smallPartTrackingMode}
                     </p>
                     <p className="text-xs text-slate-500">
-                      Primary flow: scan a generated part tag via `/r/[code]` and
-                      return. Manual entry remains available if needed.
+                      Capture both sides of the repair here: the replacement
+                      parts fitted into the unit, and the failed parts removed
+                      for reverse logistics.
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-9"
-                    onClick={handleAddPart}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Part
-                  </Button>
                 </div>
 
-                {job.receivedSpareItems.length > 0 ? (
-                  <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
-                    <p className="font-medium">
-                      Received spares for this ticket: {job.receivedSpareItems.length}
-                    </p>
-                    <p className="mt-1 text-sky-800">
-                      Tap `Add Part` to choose from the spares already dispatched to this job.
-                    </p>
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                  <p className="font-medium text-slate-900">
+                    Repair capture summary
+                  </p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="font-medium text-emerald-900">
+                        Replacement parts fitted
+                      </p>
+                      <p className="mt-1 text-emerald-800">
+                        {replacementParts.length}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="font-medium text-amber-900">
+                        Old parts removed for return
+                      </p>
+                      <p className="mt-1 text-amber-800">{removedParts.length}</p>
+                    </div>
+                    <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2">
+                      <p className="font-medium text-sky-900">
+                        Other consumables / unused
+                      </p>
+                      <p className="mt-1 text-sky-800">{additionalParts.length}</p>
+                    </div>
                   </div>
-                ) : null}
+                </div>
 
-                {showReceivedSparePicker && availableReceivedSpareItems.length > 0 ? (
-                  <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
-                    <p className="text-sm font-medium text-slate-900">
-                      Select a received spare
-                    </p>
-                    {availableReceivedSpareItems.map((item) => (
-                      <div
-                        key={item.dispatchItemId}
-                        className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-900">
-                            {item.partName}
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            {item.partNumber || "Part number unavailable"}
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            {item.assetCode} {item.tagCode ? `• ${item.tagCode}` : ""}
-                          </p>
-                          <p className="text-[11px] text-slate-500">
-                            {item.dispatchNumber}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-9"
-                          onClick={() => handleAttachReceivedSpare(item)}
-                        >
-                          Attach
-                        </Button>
-                      </div>
-                    ))}
+                <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-emerald-950">
+                        Replacement Parts Installed
+                      </p>
+                      <p className="text-xs text-emerald-900">
+                        Use this for traced spares fitted into the equipment.
+                        Dispatched spares should be attached from the received
+                        list first.
+                      </p>
+                    </div>
                     <Button
                       type="button"
-                      variant="ghost"
                       size="sm"
-                      className="h-9"
-                      onClick={() => setShowReceivedSparePicker(false)}
+                      variant="outline"
+                      className="h-9 border-emerald-300 bg-white text-emerald-950"
+                      onClick={handleAddReplacementPart}
                     >
-                      Cancel
+                      <Plus className="h-4 w-4" />
+                      Add Replacement Part
                     </Button>
                   </div>
-                ) : null}
+
+                  {job.receivedSpareItems.length > 0 ? (
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                      <p className="font-medium">
+                        Received traced spares on this ticket: {job.receivedSpareItems.length}
+                      </p>
+                      <p className="mt-1 text-sky-800">
+                        Tap `Add Replacement Part` to choose from the spares already dispatched to this job.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {showReceivedSparePicker &&
+                  availableReceivedSpareItems.length > 0 ? (
+                    <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                      <p className="text-sm font-medium text-slate-900">
+                        Select a received spare to mark as installed
+                      </p>
+                      {availableReceivedSpareItems.map((item) => (
+                        <div
+                          key={item.dispatchItemId}
+                          className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900">
+                              {item.partName}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              {item.partNumber || "Part number unavailable"}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              {item.assetCode} {item.tagCode ? `• ${item.tagCode}` : ""}
+                            </p>
+                            <p className="text-[11px] text-slate-500">
+                              {item.dispatchNumber}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-9"
+                            onClick={() => handleAttachReceivedSpare(item)}
+                          >
+                            Add as Replacement
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setShowReceivedSparePicker(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  {replacementParts.length === 0 ? (
+                    <p className="text-xs text-emerald-900">
+                      No replacement parts attached yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {replacementParts.map((part) => renderPartRow(part))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-amber-950">
+                        Old Parts Removed For Return
+                      </p>
+                      <p className="text-xs text-amber-900">
+                        Add the failed parts taken back from site. These rows
+                        create old-part return records for service center and
+                        manufacturer/depot follow-up.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9 border-amber-300 bg-white text-amber-950"
+                      onClick={handleAddRemovedPart}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Removed Old Part
+                    </Button>
+                  </div>
+
+                  {removedParts.length === 0 ? (
+                    <p className="text-xs text-amber-900">
+                      No removed old parts captured yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {removedParts.map((part) => renderPartRow(part))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        Other Part Usage
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Use this for consumables or dispatched parts returned unused.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      onClick={handleAddOtherPart}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Other Part
+                    </Button>
+                  </div>
+
+                  {additionalParts.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      No other consumables or returned-unused parts added.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {additionalParts.map((part) => renderPartRow(part))}
+                    </div>
+                  )}
+                </div>
 
                 {scannedPartError ? (
                   <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
@@ -949,117 +1223,6 @@ export function JobDetail({
                     Resolver scan ready: {scannedPart.assetCode} ({scannedPart.tagCode})
                   </p>
                 ) : null}
-
-                {parts.length === 0 ? (
-                  <p className="text-xs text-slate-500">No parts added.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {parts.map((part) => (
-                      <div
-                        key={part.id}
-                        className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2"
-                      >
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {job.partsCatalog.length > 0 ? (
-                            <select
-                              value={part.catalogPartId}
-                              className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                              onChange={(event) =>
-                                handlePartChange(part.id, {
-                                  catalogPartId: event.target.value,
-                                })
-                              }
-                            >
-                              {job.partsCatalog.map((catalogPart) => (
-                                <option key={catalogPart.id} value={catalogPart.id}>
-                                  {catalogPart.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <Input
-                              value="No catalog part selected"
-                              readOnly
-                              className="text-slate-500"
-                            />
-                          )}
-                          <Input
-                            placeholder="Part/kit/pack asset code"
-                            value={part.assetCode}
-                            onChange={(event) =>
-                              handlePartChange(part.id, {
-                                assetCode: event.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_88px_88px_40px]">
-                          <select
-                            value={part.usageType}
-                            className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm"
-                            onChange={(event) =>
-                              handlePartChange(part.id, {
-                                usageType: event.target
-                                  .value as PartSelection["usageType"],
-                              })
-                            }
-                          >
-                            <option value="consumed">Consumed</option>
-                            <option value="installed">Installed</option>
-                            <option value="returned_unused">Returned Unused</option>
-                            <option value="removed">Removed</option>
-                          </select>
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            min="0.001"
-                            step="0.001"
-                            value={part.quantity}
-                            onChange={(event) =>
-                              handlePartChange(part.id, {
-                                quantity: event.target.value,
-                              })
-                            }
-                          />
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            step="0.01"
-                            value={part.cost}
-                            onChange={(event) =>
-                              handlePartChange(part.id, {
-                                cost: event.target.value,
-                              })
-                            }
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon-sm"
-                            className="w-full sm:w-auto"
-                            onClick={() =>
-                              setParts((previous) =>
-                                previous.filter((item) => item.id !== part.id),
-                              )
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Input
-                          placeholder="Tag code (for unit scan mandatory mode)"
-                          value={part.tagCode}
-                          onChange={(event) =>
-                            handlePartChange(part.id, {
-                              tagCode: event.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-2">
