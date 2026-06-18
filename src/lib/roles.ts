@@ -56,6 +56,7 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
     { label: "Tickets", href: "/dashboard/tickets", icon: Ticket },
     { label: "Technicians", href: "/dashboard/technicians", icon: Wrench },
     { label: "Claims", href: "/dashboard/claims", icon: ClipboardList },
+    { label: "Analytics", href: "/dashboard/analytics", icon: ChartColumn },
     { label: "Settings", href: "/dashboard/settings", icon: Settings },
   ],
   technician: [
