@@ -33,6 +33,12 @@ type InwardReceiptClientProps = {
   organizationContextLabel: string;
 };
 
+type CreatedOrderState = {
+  id: string;
+  orderNumber: string;
+  href: string;
+};
+
 const fieldClassName =
   "w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200";
 
@@ -53,8 +59,8 @@ export function InwardReceiptClient({
   const [reportedFault, setReportedFault] = useState("");
   const [inwardConditionNotes, setInwardConditionNotes] = useState("");
   const [accessoriesReceived, setAccessoriesReceived] = useState("");
-  const [submissionState, setSubmissionState] = useState<"idle" | "creating" | "opening">("idle");
-  const [createdOrderNumber, setCreatedOrderNumber] = useState<string | null>(null);
+  const [submissionState, setSubmissionState] = useState<"idle" | "creating" | "created">("idle");
+  const [createdOrder, setCreatedOrder] = useState<CreatedOrderState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const recentAssetButtons = useMemo(() => assetSuggestions.slice(0, 6), [assetSuggestions]);
@@ -72,7 +78,7 @@ export function InwardReceiptClient({
     }
 
     setSubmissionState("creating");
-    setCreatedOrderNumber(null);
+    setCreatedOrder(null);
     setError(null);
     const toastId = toast.loading("Creating internal-service order…");
 
@@ -107,18 +113,25 @@ export function InwardReceiptClient({
       }
 
       const nextHref = `${orderBaseHref}/${payload.order.id}`;
-      setCreatedOrderNumber(payload.order.orderNumber);
-      setSubmissionState("opening");
+      const nextOrder = {
+        id: payload.order.id,
+        orderNumber: payload.order.orderNumber,
+        href: nextHref,
+      } satisfies CreatedOrderState;
+      setCreatedOrder(nextOrder);
+      setSubmissionState("created");
       toast.success(`${payload.order.orderNumber} created. Opening depot order…`, {
         id: toastId,
       });
 
-      // Use a full navigation so the freshly created order detail always loads
-      // against the latest server state instead of feeling like a client-side no-op.
-      window.location.assign(nextHref);
+      // Paint the success state first so the operator never gets stranded without
+      // a visible completion signal, then hard-navigate to the new order detail.
+      window.setTimeout(() => {
+        window.location.assign(nextHref);
+      }, 150);
     } catch (requestError) {
       setSubmissionState("idle");
-      setCreatedOrderNumber(null);
+      setCreatedOrder(null);
       toast.error(
         requestError instanceof Error
           ? requestError.message
@@ -277,11 +290,21 @@ export function InwardReceiptClient({
             </div>
           ) : null}
 
-          {submissionState === "opening" ? (
+          {submissionState === "created" && createdOrder ? (
             <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              {createdOrderNumber
-                ? `${createdOrderNumber} has been created. Opening the depot order now…`
-                : "Internal-service order created. Opening the depot order now…"}
+              <p className="font-medium">
+                {createdOrder.orderNumber} has been created successfully.
+              </p>
+              <p className="mt-1">
+                Opening the depot order now. If the browser does not redirect
+                automatically, open it directly:
+              </p>
+              <a
+                href={createdOrder.href}
+                className="mt-2 inline-flex text-sm font-medium text-emerald-900 underline underline-offset-2"
+              >
+                Open {createdOrder.orderNumber}
+              </a>
             </div>
           ) : null}
 
@@ -290,8 +313,8 @@ export function InwardReceiptClient({
               {isBusy ? <Loader2 className="size-4 animate-spin" /> : <ArrowRightCircle className="size-4" />}
               {submissionState === "creating"
                 ? "Creating Internal Service Order…"
-                : submissionState === "opening"
-                  ? `Opening ${createdOrderNumber ?? "Depot Order"}…`
+                : submissionState === "created"
+                  ? `Opening ${createdOrder?.orderNumber ?? "Depot Order"}…`
                   : "Create Internal Service Order"}
             </Button>
           </div>

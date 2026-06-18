@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -74,11 +74,23 @@ async function submitDepotAction(
   const body = (await response.json().catch(() => ({}))) as {
     success?: boolean;
     error?: string;
+    order?: {
+      id: string;
+      status: string;
+      assignedTechnicianId: string | null;
+      finalDisposition: string | null;
+    };
   };
 
   if (!response.ok) {
     throw new Error(body.error ?? "Unable to update internal-service order.");
   }
+
+  if (!body.order) {
+    throw new Error("Internal-service update did not return the latest order state.");
+  }
+
+  return body.order;
 }
 
 function nextStepLabel(status: string) {
@@ -116,6 +128,13 @@ export function InternalServiceOrderActionsClient({
   technicians,
 }: InternalServiceOrderActionsClientProps) {
   const router = useRouter();
+  const [savedStatus, setSavedStatus] = useState(status);
+  const [savedAssignedTechnicianId, setSavedAssignedTechnicianId] = useState(
+    currentAssignedTechnicianId ?? "",
+  );
+  const [savedReportedFault, setSavedReportedFault] = useState(currentReportedFault);
+  const [savedDiagnosisNotes, setSavedDiagnosisNotes] = useState(currentDiagnosisNotes);
+  const [savedResolutionNotes, setSavedResolutionNotes] = useState(currentResolutionNotes);
   const [assignedTechnicianId, setAssignedTechnicianId] = useState(
     currentAssignedTechnicianId ?? "",
   );
@@ -127,17 +146,34 @@ export function InternalServiceOrderActionsClient({
   );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
 
-  const assignmentDirty =
-    assignedTechnicianId !== (currentAssignedTechnicianId ?? "");
+  useEffect(() => {
+    setSavedStatus(status);
+    setSavedAssignedTechnicianId(currentAssignedTechnicianId ?? "");
+    setSavedReportedFault(currentReportedFault);
+    setSavedDiagnosisNotes(currentDiagnosisNotes);
+    setSavedResolutionNotes(currentResolutionNotes);
+    setAssignedTechnicianId(currentAssignedTechnicianId ?? "");
+    setReportedFault(currentReportedFault);
+    setDiagnosisNotes(currentDiagnosisNotes);
+    setResolutionNotes(currentResolutionNotes);
+  }, [
+    currentAssignedTechnicianId,
+    currentDiagnosisNotes,
+    currentReportedFault,
+    currentResolutionNotes,
+    status,
+  ]);
+
+  const assignmentDirty = assignedTechnicianId !== savedAssignedTechnicianId;
   const notesDirty =
-    reportedFault !== currentReportedFault ||
-    diagnosisNotes !== currentDiagnosisNotes ||
-    resolutionNotes !== currentResolutionNotes;
+    reportedFault !== savedReportedFault ||
+    diagnosisNotes !== savedDiagnosisNotes ||
+    resolutionNotes !== savedResolutionNotes;
   const hasDraftChanges = assignmentDirty || notesDirty;
   const isPending = pendingAction !== null;
 
   const workflowButtons = useMemo<WorkflowButton[]>(() => {
-    switch (status) {
+    switch (savedStatus) {
       case "inward_received":
         return [{ action: "mark_triaged", label: "Mark Triaged" }];
       case "awaiting_triage":
@@ -188,7 +224,7 @@ export function InternalServiceOrderActionsClient({
       default:
         return [];
     }
-  }, [status]);
+  }, [savedStatus]);
 
   const runAction = async (action: string) => {
     setPendingAction(action);
@@ -205,7 +241,7 @@ export function InternalServiceOrderActionsClient({
     const toastId = toast.loading(toastLabel);
 
     try {
-      await submitDepotAction(orderId, {
+      const nextOrder = await submitDepotAction(orderId, {
         action,
         assignedTechnicianId: assignedTechnicianId || undefined,
         reportedFault,
@@ -214,6 +250,16 @@ export function InternalServiceOrderActionsClient({
         finalDisposition:
           action === "complete_disposition" ? finalDisposition : undefined,
       });
+
+      setSavedStatus(nextOrder.status);
+      setSavedAssignedTechnicianId(nextOrder.assignedTechnicianId ?? "");
+      setSavedReportedFault(reportedFault);
+      setSavedDiagnosisNotes(diagnosisNotes);
+      setSavedResolutionNotes(resolutionNotes);
+      setAssignedTechnicianId(nextOrder.assignedTechnicianId ?? "");
+      if (nextOrder.finalDisposition) {
+        setFinalDisposition(nextOrder.finalDisposition);
+      }
 
       toast.success(
         action === "assign_engineer"
@@ -242,7 +288,7 @@ export function InternalServiceOrderActionsClient({
         <CardTitle className="text-base">Depot execution layer</CardTitle>
         <CardDescription>
           Separate internal bench workflow for assignment, diagnosis, repair, QC,
-          and final disposition. Next step: {nextStepLabel(status)}.
+          and final disposition. Next step: {nextStepLabel(savedStatus)}.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -291,7 +337,7 @@ export function InternalServiceOrderActionsClient({
             <select
               value={finalDisposition}
               onChange={(event) => setFinalDisposition(event.target.value)}
-              disabled={isPending || status !== "ready_for_disposition"}
+              disabled={isPending || savedStatus !== "ready_for_disposition"}
               className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
             >
               {DISPOSITION_OPTIONS.map((option) => (
