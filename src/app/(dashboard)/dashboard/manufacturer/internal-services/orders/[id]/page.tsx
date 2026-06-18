@@ -129,6 +129,7 @@ export default async function ManufacturerInternalServiceOrderDetailPage({
         status: order.status,
         serviceType: order.serviceType,
         priority: order.priority,
+        assignedTechnicianId: null,
         initiationSource: order.initiationSource,
         finalDisposition: order.finalDisposition,
         reportedFault: order.reportedFault,

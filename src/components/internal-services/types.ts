@@ -38,6 +38,7 @@ export type InternalServiceOrderDetail = {
   status: string;
   serviceType: string;
   priority: string;
+  assignedTechnicianId: string | null;
   initiationSource: string;
   finalDisposition: string | null;
   reportedFault: string | null;

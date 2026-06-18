@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { InternalServiceOrderActionsClient } from "@/components/internal-services/order-actions-client";
 import { InternalServiceOrderDetailView } from "@/components/internal-services/order-detail-view";
 import { db } from "@/lib/db";
 
@@ -19,7 +20,8 @@ export default async function DepotInternalServiceOrderDetailPage({
     notFound();
   }
 
-  const order = await db.internalServiceOrder.findFirst({
+  const [order, technicians] = await Promise.all([
+    db.internalServiceOrder.findFirst({
     where: {
       id,
       serviceCenter: {
@@ -60,6 +62,7 @@ export default async function DepotInternalServiceOrderDetailPage({
       },
       assignedTechnician: {
         select: {
+          id: true,
           name: true,
         },
       },
@@ -115,65 +118,90 @@ export default async function DepotInternalServiceOrderDetailPage({
         },
       },
     },
-  });
+    }),
+    db.technician.findMany({
+      where: {
+        serviceCenter: {
+          organizationId,
+        },
+      },
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+      },
+    }),
+  ]);
 
   if (!order) {
     notFound();
   }
 
   return (
-    <InternalServiceOrderDetailView
-      backHref="/dashboard/internal-services/orders"
-      backLabel="Back to internal orders"
-      order={{
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        serviceType: order.serviceType,
-        priority: order.priority,
-        initiationSource: order.initiationSource,
-        finalDisposition: order.finalDisposition,
-        reportedFault: order.reportedFault,
-        inwardConditionNotes: order.inwardConditionNotes,
-        diagnosisNotes: order.diagnosisNotes,
-        resolutionNotes: order.resolutionNotes,
-        accessoriesReceived: Array.isArray(order.accessoriesReceived)
-          ? order.accessoriesReceived.filter((value): value is string => typeof value === "string")
-          : [],
-        receivedAt: order.receivedAt?.toISOString() ?? null,
-        triagedAt: order.triagedAt?.toISOString() ?? null,
-        repairStartedAt: order.repairStartedAt?.toISOString() ?? null,
-        qcStartedAt: order.qcStartedAt?.toISOString() ?? null,
-        qcCompletedAt: order.qcCompletedAt?.toISOString() ?? null,
-        completedAt: order.completedAt?.toISOString() ?? null,
-        closedAt: order.closedAt?.toISOString() ?? null,
-        isSaleableAfterService: order.isSaleableAfterService,
-        manufacturerName: order.manufacturerOrg.name,
-        serviceCenterName: order.serviceCenter.name,
-        serviceCenterCity: order.serviceCenter.city,
-        assignedTechnicianName: order.assignedTechnician?.name ?? null,
-        requestedByName: order.requestedByUser.name,
-        receivedByName: order.receivedByUser?.name ?? null,
-        assetPublicCode: order.asset.publicCode,
-        assetSerialNumber: order.asset.serialNumber,
-        modelName: order.asset.productModel.name,
-        modelNumber: order.asset.productModel.modelNumber,
-        timelineEntries: order.timelineEntries.map((entry) => ({
-          id: entry.id,
-          eventType: entry.eventType,
-          eventDescription: entry.eventDescription,
-          actorName: entry.actorName,
-          actorRole: entry.actorRole,
-          createdAt: entry.createdAt.toISOString(),
-        })),
-        partUsages: order.partUsages.map((usage) => ({
-          id: usage.id,
-          usageType: usage.usageType,
-          usedAssetCode: usage.usedAsset?.publicCode ?? null,
-          usedTagCode: usage.usedTag?.publicCode ?? null,
-          linkedAt: usage.linkedAt.toISOString(),
-        })),
-      }}
-    />
+    <div className="space-y-6">
+      <InternalServiceOrderActionsClient
+        orderId={order.id}
+        status={order.status}
+        currentAssignedTechnicianId={order.assignedTechnician?.id ?? null}
+        currentDiagnosisNotes={order.diagnosisNotes ?? ""}
+        currentResolutionNotes={order.resolutionNotes ?? ""}
+        currentReportedFault={order.reportedFault ?? ""}
+        technicians={technicians}
+      />
+      <InternalServiceOrderDetailView
+        backHref="/dashboard/internal-services/orders"
+        backLabel="Back to internal orders"
+        order={{
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          serviceType: order.serviceType,
+          priority: order.priority,
+          assignedTechnicianId: order.assignedTechnician?.id ?? null,
+          initiationSource: order.initiationSource,
+          finalDisposition: order.finalDisposition,
+          reportedFault: order.reportedFault,
+          inwardConditionNotes: order.inwardConditionNotes,
+          diagnosisNotes: order.diagnosisNotes,
+          resolutionNotes: order.resolutionNotes,
+          accessoriesReceived: Array.isArray(order.accessoriesReceived)
+            ? order.accessoriesReceived.filter((value): value is string => typeof value === "string")
+            : [],
+          receivedAt: order.receivedAt?.toISOString() ?? null,
+          triagedAt: order.triagedAt?.toISOString() ?? null,
+          repairStartedAt: order.repairStartedAt?.toISOString() ?? null,
+          qcStartedAt: order.qcStartedAt?.toISOString() ?? null,
+          qcCompletedAt: order.qcCompletedAt?.toISOString() ?? null,
+          completedAt: order.completedAt?.toISOString() ?? null,
+          closedAt: order.closedAt?.toISOString() ?? null,
+          isSaleableAfterService: order.isSaleableAfterService,
+          manufacturerName: order.manufacturerOrg.name,
+          serviceCenterName: order.serviceCenter.name,
+          serviceCenterCity: order.serviceCenter.city,
+          assignedTechnicianName: order.assignedTechnician?.name ?? null,
+          requestedByName: order.requestedByUser.name,
+          receivedByName: order.receivedByUser?.name ?? null,
+          assetPublicCode: order.asset.publicCode,
+          assetSerialNumber: order.asset.serialNumber,
+          modelName: order.asset.productModel.name,
+          modelNumber: order.asset.productModel.modelNumber,
+          timelineEntries: order.timelineEntries.map((entry) => ({
+            id: entry.id,
+            eventType: entry.eventType,
+            eventDescription: entry.eventDescription,
+            actorName: entry.actorName,
+            actorRole: entry.actorRole,
+            createdAt: entry.createdAt.toISOString(),
+          })),
+          partUsages: order.partUsages.map((usage) => ({
+            id: usage.id,
+            usageType: usage.usageType,
+            usedAssetCode: usage.usedAsset?.publicCode ?? null,
+            usedTagCode: usage.usedTag?.publicCode ?? null,
+            linkedAt: usage.linkedAt.toISOString(),
+          })),
+        }}
+      />
+    </div>
   );
 }
