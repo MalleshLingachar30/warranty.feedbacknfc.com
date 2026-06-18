@@ -525,7 +525,7 @@ export function TicketLogisticsClient({
         <CardHeader>
           <CardTitle>Removed Part Returns</CardTitle>
           <CardDescription>
-            These records are created automatically when a technician marks a traced part as removed during ticket completion.
+            These records are created when removed parts are captured directly, and expected return obligations are created automatically from installed replacement spares.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -566,7 +566,10 @@ export function TicketLogisticsClient({
                   </p>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {partReturn.status === "collected_by_technician" ? (
+                  {(
+                    partReturn.status === "collected_by_technician" ||
+                    partReturn.status === "awaiting_collection"
+                  ) ? (
                     <Button
                       type="button"
                       size="sm"
@@ -578,7 +581,9 @@ export function TicketLogisticsClient({
                       }
                       disabled={Boolean(loading)}
                     >
-                      Receive at Service Center
+                      {partReturn.status === "awaiting_collection"
+                        ? "Receive Expected Return"
+                        : "Receive at Service Center"}
                     </Button>
                   ) : null}
                 </div>

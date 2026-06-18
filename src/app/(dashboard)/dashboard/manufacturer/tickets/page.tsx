@@ -223,7 +223,12 @@ export default async function ManufacturerTicketsPage() {
         },
       },
       status: {
-        in: ["received_at_service_center", "received_by_manufacturer"],
+        in: [
+          "awaiting_collection",
+          "collected_by_technician",
+          "received_at_service_center",
+          "received_by_manufacturer",
+        ],
       },
     },
     orderBy: {
@@ -266,6 +271,77 @@ export default async function ManufacturerTicketsPage() {
       technician: {
         select: {
           name: true,
+        },
+      },
+    },
+  });
+
+  const spareReturnObligations = await db.ticketPartDispatchItem.findMany({
+    where: {
+      dispatch: {
+        ticket: {
+          product: {
+            organizationId,
+          },
+          technicianCompletedAt: {
+            not: null,
+          },
+        },
+      },
+      status: {
+        in: ["received_by_technician", "partially_reconciled"],
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 120,
+    select: {
+      id: true,
+      status: true,
+      partName: true,
+      partNumber: true,
+      quantity: true,
+      spareAsset: {
+        select: {
+          publicCode: true,
+        },
+      },
+      spareTag: {
+        select: {
+          publicCode: true,
+        },
+      },
+      dispatch: {
+        select: {
+          dispatchNumber: true,
+          serviceCenter: {
+            select: {
+              name: true,
+            },
+          },
+          assignedTechnician: {
+            select: {
+              name: true,
+            },
+          },
+          ticket: {
+            select: {
+              ticketNumber: true,
+              technicianCompletedAt: true,
+              product: {
+                select: {
+                  serialNumber: true,
+                  productModel: {
+                    select: {
+                      name: true,
+                      modelNumber: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -452,6 +528,91 @@ export default async function ManufacturerTicketsPage() {
           closedAt: partReturn.closedAt?.toISOString() ?? null,
         }))}
       />
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Unused Spare Return Obligations</CardTitle>
+          <CardDescription>
+            Dispatched traced spares still in technician custody after service completion.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Dispatch / Ticket</TableHead>
+                <TableHead>Spare</TableHead>
+                <TableHead>Service Center</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Completed</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {spareReturnObligations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    No unused traced spare obligations are pending.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                spareReturnObligations.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">
+                      <div className="space-y-0.5">
+                        <p>{item.dispatch.dispatchNumber}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.dispatch.ticket.ticketNumber}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.dispatch.ticket.product.productModel.name}
+                          {item.dispatch.ticket.product.productModel.modelNumber
+                            ? ` • ${item.dispatch.ticket.product.productModel.modelNumber}`
+                            : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.dispatch.ticket.product.serialNumber ?? "Serial unavailable"}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <p>{item.partName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.partNumber ?? "No part number"} • Qty {Number(item.quantity)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.spareAsset?.publicCode ?? "No asset code"}
+                          {item.spareTag?.publicCode
+                            ? ` • ${item.spareTag.publicCode}`
+                            : ""}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <p>{item.dispatch.serviceCenter.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.dispatch.assignedTechnician?.name ?? "Technician unavailable"}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="capitalize">
+                        {item.status.replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {item.dispatch.ticket.technicianCompletedAt
+                        ? formatDateTime(item.dispatch.ticket.technicianCompletedAt)
+                        : "Not recorded"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

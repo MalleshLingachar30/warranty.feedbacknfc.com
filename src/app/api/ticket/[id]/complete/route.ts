@@ -383,6 +383,12 @@ export async function POST(
           returnNumber: string;
           partName: string;
         }> = [];
+        const autoExpectedReturnObligations: Array<{
+          returnNumber: string;
+          partName: string;
+        }> = [];
+        const installedReplacementUsages: typeof resolvedPartUsages = [];
+        let explicitRemovedReturnCount = 0;
 
         if (mainAsset && resolvedPartUsages.length > 0) {
           const usageCreateInputs = toJobPartUsageCreateManyInput({
@@ -409,6 +415,10 @@ export async function POST(
             const usage = resolvedPartUsages[index];
             const dispatchItemId = createdUsage.dispatchItemId;
 
+            if (usage.input.usageType === "installed") {
+              installedReplacementUsages.push(usage);
+            }
+
             if (dispatchItemId) {
               const updatedItem = await tx.ticketPartDispatchItem.update({
                 where: { id: dispatchItemId },
@@ -425,6 +435,7 @@ export async function POST(
             }
 
             if (usage.input.usageType === "removed") {
+              explicitRemovedReturnCount += 1;
               const returnNumber = await generateTicketPartReturnNumber(tx);
               await tx.ticketPartReturn.create({
                 data: {
@@ -501,6 +512,7 @@ export async function POST(
 
         if (mainAsset && manualRemovedPartUsages.length > 0) {
           for (const usage of manualRemovedPartUsages) {
+            explicitRemovedReturnCount += 1;
             const returnNumber = await generateTicketPartReturnNumber(tx);
             const partName = usage.partName ?? usage.partNumber ?? "Removed part";
             await tx.ticketPartReturn.create({
@@ -533,6 +545,66 @@ export async function POST(
             removedPartReturns.push({
               returnNumber,
               partName,
+            });
+          }
+        }
+
+        if (mainAsset && installedReplacementUsages.length > explicitRemovedReturnCount) {
+          const missingReturnCount =
+            installedReplacementUsages.length - explicitRemovedReturnCount;
+          const expectedReturnSeedUsages = installedReplacementUsages.slice(
+            explicitRemovedReturnCount,
+          );
+
+          for (const usage of expectedReturnSeedUsages) {
+            const returnNumber = await generateTicketPartReturnNumber(tx);
+            const partName = derivePartNameFromUsage(usage);
+            const partNumber = derivePartNumberFromUsage(usage);
+
+            await tx.ticketPartReturn.create({
+              data: {
+                ticketId: ticket.id,
+                mainAssetId: mainAsset.id,
+                serviceCenterId:
+                  ticket.assignedServiceCenterId ?? technician.serviceCenterId,
+                technicianId: technician.id,
+                createdByUserId: technician.userId,
+                returnNumber,
+                status: "awaiting_collection",
+                partName,
+                partNumber,
+                quantity: usage.input.quantity,
+                metadata: {
+                  fromTicketCompletion: true,
+                  technicianName: technician.name,
+                  linkedUsageType: "installed",
+                  autoExpectedFromInstalledReplacement: true,
+                  expectedBecauseInstalledAssetCode:
+                    usage.usedAsset.publicCode,
+                  expectedBecauseInstalledTagCode:
+                    usage.usedTag?.publicCode ?? null,
+                } satisfies Prisma.InputJsonValue,
+              },
+            });
+
+            autoExpectedReturnObligations.push({
+              returnNumber,
+              partName,
+            });
+          }
+
+          if (missingReturnCount > 0) {
+            await tx.ticketTimeline.create({
+              data: {
+                ticketId: ticket.id,
+                eventType: "removed_parts_expected",
+                eventDescription: `${missingReturnCount} old-part return obligation(s) were created automatically from installed replacement spares.`,
+                actorRole: "system",
+                actorName: "System",
+                metadata: {
+                  returns: autoExpectedReturnObligations,
+                } as Prisma.InputJsonValue,
+              },
             });
           }
         }

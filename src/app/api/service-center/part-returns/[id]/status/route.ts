@@ -69,10 +69,11 @@ export async function POST(
 
     if (
       action === "receive_service_center" &&
-      partReturn.status !== "collected_by_technician"
+      partReturn.status !== "collected_by_technician" &&
+      partReturn.status !== "awaiting_collection"
     ) {
       throw new ApiError(
-        "Only technician-collected returns can be marked as received at the service center.",
+        "Only technician-collected or expected field returns can be marked as received at the service center.",
         409,
       );
     }
@@ -90,6 +91,11 @@ export async function POST(
         data: {
           status: nextStatus,
           collectionNotes: notes ?? partReturn.collectionNotes,
+          collectedAt:
+            action === "receive_service_center" &&
+            partReturn.status === "awaiting_collection"
+              ? now
+              : undefined,
           receivedAtServiceCenterAt:
             action === "receive_service_center" ? now : undefined,
           closedAt: action === "cancel" ? now : undefined,
