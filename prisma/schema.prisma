@@ -166,6 +166,21 @@ enum AssetProductClass {
 enum AssetLifecycleState {
   generated
   packed
+  inward_received
+  in_service_inventory
+  awaiting_triage
+  under_diagnosis
+  awaiting_parts
+  under_repair
+  awaiting_qc
+  qa_failed
+  qa_passed
+  ready_for_return
+  refurbished_saleable
+  returned_to_stock
+  scrap_pending
+  scrapped
+  cannibalized
   sold_pending_installation
   installation_scheduled
   installation_in_progress
@@ -279,6 +294,60 @@ enum TicketPartReturnStatus {
   cancelled
 }
 
+enum InternalServiceType {
+  depot_repair
+  preventive_maintenance
+  calibration
+  refurbishment
+  qa_inspection
+  demo_preparation
+  field_campaign
+  distributor_rework
+}
+
+enum InternalServicePriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum InternalServiceStatus {
+  draft
+  inward_received
+  awaiting_triage
+  under_diagnosis
+  awaiting_parts
+  repair_in_progress
+  awaiting_qc
+  qa_failed
+  ready_for_disposition
+  completed
+  closed
+  cancelled
+}
+
+enum InternalServiceInitiationSource {
+  customer_return
+  distributor_return
+  service_center_return
+  production_rejection
+  demo_return
+  internal_qc
+  manual_admin
+}
+
+enum InternalServiceDisposition {
+  returned_to_customer
+  returned_to_distributor
+  returned_to_service_center
+  refurbished_saleable
+  returned_to_stock
+  scrapped
+  cannibalized
+  no_fault_found_return
+}
+
 enum IntegrationConnectorType {
   sap
 }
@@ -352,31 +421,33 @@ model Organization {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  parentOrganization               Organization?                 @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
-  childOrganizations               Organization[]                @relation("OrganizationHierarchy")
-  users                            User[]
-  productModels                    ProductModel[]
-  allocatedStickers                Sticker[]                     @relation("AllocatedOrganization")
-  products                         Product[]
-  serviceCenters                   ServiceCenter[]
-  manufacturerClaims               WarrantyClaim[]               @relation("ManufacturerOrganizationClaims")
-  serviceCenterClaims              WarrantyClaim[]               @relation("ServiceCenterOrganizationClaims")
-  stickerAllocations               StickerAllocation[]
-  assetIdentities                  AssetIdentity[]
-  serializedSalesLines             SerializedSalesLine[]
-  saleRegistrations                SaleRegistration[]
-  tagGenerationBatches             TagGenerationBatch[]
-  installationJobs                 InstallationJob[]             @relation("ManufacturerInstallationJobs")
-  integrationConnectors            IntegrationConnector[]
-  integrationFeeds                 IntegrationFeed[]
-  integrationRuns                  IntegrationRun[]
-  integrationStagingRecords        IntegrationStagingRecord[]
-  integrationReplayRequests        IntegrationReplayRequest[]
-  erpItemMasterRecords             ErpItemMasterRecord[]         @relation("OrganizationErpItemMasterRecords")
-  importedDistributorMasterRecords ErpDistributorMasterRecord[]  @relation("ManufacturerErpDistributorMasterRecords")
-  mappedDistributorMasterRecords   ErpDistributorMasterRecord[]  @relation("MappedDistributorMasterRecord")
-  erpSerializedDispatchRecords     ErpSerializedDispatchRecord[] @relation("ManufacturerErpSerializedDispatchRecords")
-  mappedSerializedDispatchRecords  ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchDistributor")
+  parentOrganization                Organization?                 @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
+  childOrganizations                Organization[]                @relation("OrganizationHierarchy")
+  users                             User[]
+  productModels                     ProductModel[]
+  allocatedStickers                 Sticker[]                     @relation("AllocatedOrganization")
+  products                          Product[]
+  serviceCenters                    ServiceCenter[]
+  manufacturerClaims                WarrantyClaim[]               @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims               WarrantyClaim[]               @relation("ServiceCenterOrganizationClaims")
+  stickerAllocations                StickerAllocation[]
+  assetIdentities                   AssetIdentity[]
+  serializedSalesLines              SerializedSalesLine[]
+  saleRegistrations                 SaleRegistration[]
+  tagGenerationBatches              TagGenerationBatch[]
+  installationJobs                  InstallationJob[]             @relation("ManufacturerInstallationJobs")
+  integrationConnectors             IntegrationConnector[]
+  integrationFeeds                  IntegrationFeed[]
+  integrationRuns                   IntegrationRun[]
+  integrationStagingRecords         IntegrationStagingRecord[]
+  integrationReplayRequests         IntegrationReplayRequest[]
+  erpItemMasterRecords              ErpItemMasterRecord[]         @relation("OrganizationErpItemMasterRecords")
+  importedDistributorMasterRecords  ErpDistributorMasterRecord[]  @relation("ManufacturerErpDistributorMasterRecords")
+  mappedDistributorMasterRecords    ErpDistributorMasterRecord[]  @relation("MappedDistributorMasterRecord")
+  erpSerializedDispatchRecords      ErpSerializedDispatchRecord[] @relation("ManufacturerErpSerializedDispatchRecords")
+  mappedSerializedDispatchRecords   ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchDistributor")
+  manufacturerInternalServiceOrders InternalServiceOrder[]        @relation("ManufacturerInternalServiceOrders")
+  sourceInternalServiceOrders       InternalServiceOrder[]        @relation("SourceOrganizationInternalServiceOrders")
 
   @@index([externalCode], map: "idx_organizations_external_code")
   @@index([parentOrganizationId], map: "idx_organizations_parent_org")
@@ -397,21 +468,24 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  organization                 Organization?              @relation(fields: [organizationId], references: [id])
-  technicianProfile            Technician?
-  reportedTickets              Ticket[]                   @relation("ReportedTickets")
-  approvedClaims               WarrantyClaim[]            @relation("ClaimApprover")
-  timelineEvents               TicketTimeline[]           @relation("TimelineActor")
-  stickerAllocations           StickerAllocation[]        @relation("AllocatedByUser")
-  createdTagGenerationBatches  TagGenerationBatch[]       @relation("TagGenerationBatchCreator")
-  customerAssetIdentities      AssetIdentity[]            @relation("AssetIdentityCustomer")
-  customerProducts             Product[]                  @relation("CustomerProducts")
-  scanLogs                     ScanLog[]                  @relation("ScanLogActor")
-  submittedInstallationReports InstallationReport[]
-  linkedPartUsages             JobPartUsage[]
-  createdPartDispatches        TicketPartDispatch[]       @relation("TicketPartDispatchCreator")
-  createdPartReturns           TicketPartReturn[]         @relation("TicketPartReturnCreator")
-  integrationReplayRequests    IntegrationReplayRequest[] @relation("IntegrationReplayRequestedBy")
+  organization                   Organization?              @relation(fields: [organizationId], references: [id])
+  technicianProfile              Technician?
+  reportedTickets                Ticket[]                   @relation("ReportedTickets")
+  approvedClaims                 WarrantyClaim[]            @relation("ClaimApprover")
+  timelineEvents                 TicketTimeline[]           @relation("TimelineActor")
+  stickerAllocations             StickerAllocation[]        @relation("AllocatedByUser")
+  createdTagGenerationBatches    TagGenerationBatch[]       @relation("TagGenerationBatchCreator")
+  customerAssetIdentities        AssetIdentity[]            @relation("AssetIdentityCustomer")
+  customerProducts               Product[]                  @relation("CustomerProducts")
+  scanLogs                       ScanLog[]                  @relation("ScanLogActor")
+  submittedInstallationReports   InstallationReport[]
+  linkedPartUsages               JobPartUsage[]
+  createdPartDispatches          TicketPartDispatch[]       @relation("TicketPartDispatchCreator")
+  createdPartReturns             TicketPartReturn[]         @relation("TicketPartReturnCreator")
+  integrationReplayRequests      IntegrationReplayRequest[] @relation("IntegrationReplayRequestedBy")
+  requestedInternalServiceOrders InternalServiceOrder[]     @relation("RequestedInternalServiceOrders")
+  receivedInternalServiceOrders  InternalServiceOrder[]     @relation("ReceivedInternalServiceOrders")
+  internalServiceTimelineEvents  InternalServiceTimeline[]  @relation("InternalServiceTimelineActor")
 
   @@map("users")
 }
@@ -750,6 +824,7 @@ model AssetIdentity {
   saleRegistration          SaleRegistration?
   installationJobs          InstallationJob[]
   installationReports       InstallationReport[]
+  internalServiceOrders     InternalServiceOrder[]
   tags                      AssetTag[]
   usagesAsMainAsset         JobPartUsage[]                @relation("JobPartUsageMainAsset")
   usagesAsUsedAsset         JobPartUsage[]                @relation("JobPartUsageUsedAsset")
@@ -962,37 +1037,109 @@ model InstallationReport {
 }
 
 model JobPartUsage {
-  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  installationJobId String?       @map("installation_job_id") @db.Uuid
-  ticketId          String?       @map("ticket_id") @db.Uuid
-  mainAssetId       String        @map("main_asset_id") @db.Uuid
-  usedAssetId       String?       @map("used_asset_id") @db.Uuid
-  usedTagId         String?       @map("used_tag_id") @db.Uuid
-  dispatchItemId    String?       @map("dispatch_item_id") @db.Uuid
-  usageType         PartUsageType @map("usage_type")
-  quantity          Decimal       @default(1.000) @db.Decimal(12, 3)
-  linkedByUserId    String        @map("linked_by_user_id") @db.Uuid
-  linkedAt          DateTime      @default(now()) @map("linked_at")
-  metadata          Json          @default(dbgenerated("'{}'::jsonb"))
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationJobId      String?       @map("installation_job_id") @db.Uuid
+  ticketId               String?       @map("ticket_id") @db.Uuid
+  internalServiceOrderId String?       @map("internal_service_order_id") @db.Uuid
+  mainAssetId            String        @map("main_asset_id") @db.Uuid
+  usedAssetId            String?       @map("used_asset_id") @db.Uuid
+  usedTagId              String?       @map("used_tag_id") @db.Uuid
+  dispatchItemId         String?       @map("dispatch_item_id") @db.Uuid
+  usageType              PartUsageType @map("usage_type")
+  quantity               Decimal       @default(1.000) @db.Decimal(12, 3)
+  linkedByUserId         String        @map("linked_by_user_id") @db.Uuid
+  linkedAt               DateTime      @default(now()) @map("linked_at")
+  metadata               Json          @default(dbgenerated("'{}'::jsonb"))
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
 
-  installationJob InstallationJob?        @relation(fields: [installationJobId], references: [id])
-  ticket          Ticket?                 @relation(fields: [ticketId], references: [id])
-  mainAsset       AssetIdentity           @relation("JobPartUsageMainAsset", fields: [mainAssetId], references: [id])
-  usedAsset       AssetIdentity?          @relation("JobPartUsageUsedAsset", fields: [usedAssetId], references: [id])
-  usedTag         AssetTag?               @relation(fields: [usedTagId], references: [id])
-  linkedByUser    User                    @relation(fields: [linkedByUserId], references: [id])
-  dispatchItem    TicketPartDispatchItem? @relation(fields: [dispatchItemId], references: [id])
-  generatedReturn TicketPartReturn?       @relation("TicketPartReturnSourceUsage")
+  installationJob      InstallationJob?        @relation(fields: [installationJobId], references: [id])
+  ticket               Ticket?                 @relation(fields: [ticketId], references: [id])
+  internalServiceOrder InternalServiceOrder?   @relation(fields: [internalServiceOrderId], references: [id])
+  mainAsset            AssetIdentity           @relation("JobPartUsageMainAsset", fields: [mainAssetId], references: [id])
+  usedAsset            AssetIdentity?          @relation("JobPartUsageUsedAsset", fields: [usedAssetId], references: [id])
+  usedTag              AssetTag?               @relation(fields: [usedTagId], references: [id])
+  linkedByUser         User                    @relation(fields: [linkedByUserId], references: [id])
+  dispatchItem         TicketPartDispatchItem? @relation(fields: [dispatchItemId], references: [id])
+  generatedReturn      TicketPartReturn?       @relation("TicketPartReturnSourceUsage")
 
   @@index([installationJobId], map: "idx_job_part_usages_installation_job")
   @@index([ticketId], map: "idx_job_part_usages_ticket")
+  @@index([internalServiceOrderId], map: "idx_job_part_usages_internal_service_order")
   @@index([mainAssetId], map: "idx_job_part_usages_main_asset")
   @@index([usedAssetId], map: "idx_job_part_usages_used_asset")
   @@index([dispatchItemId], map: "idx_job_part_usages_dispatch_item")
   @@index([linkedAt], map: "idx_job_part_usages_linked_at")
   @@map("job_part_usages")
+}
+
+model InternalServiceOrder {
+  id                     String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber            String                          @unique @map("order_number") @db.VarChar(30)
+  assetId                String                          @map("asset_id") @db.Uuid
+  manufacturerOrgId      String                          @map("manufacturer_org_id") @db.Uuid
+  serviceCenterId        String                          @map("service_center_id") @db.Uuid
+  assignedTechnicianId   String?                         @map("assigned_technician_id") @db.Uuid
+  requestedByUserId      String                          @map("requested_by_user_id") @db.Uuid
+  receivedByUserId       String?                         @map("received_by_user_id") @db.Uuid
+  sourceOrganizationId   String?                         @map("source_organization_id") @db.Uuid
+  initiationSource       InternalServiceInitiationSource @map("initiation_source")
+  serviceType            InternalServiceType             @map("service_type")
+  priority               InternalServicePriority         @default(medium)
+  status                 InternalServiceStatus           @default(inward_received)
+  finalDisposition       InternalServiceDisposition?     @map("final_disposition")
+  reportedFault          String?                         @map("reported_fault")
+  inwardConditionNotes   String?                         @map("inward_condition_notes")
+  diagnosisNotes         String?                         @map("diagnosis_notes")
+  resolutionNotes        String?                         @map("resolution_notes")
+  accessoriesReceived    Json                            @default(dbgenerated("'[]'::jsonb")) @map("accessories_received")
+  receivedAt             DateTime?                       @map("received_at")
+  triagedAt              DateTime?                       @map("triaged_at")
+  repairStartedAt        DateTime?                       @map("repair_started_at")
+  qcStartedAt            DateTime?                       @map("qc_started_at")
+  qcCompletedAt          DateTime?                       @map("qc_completed_at")
+  completedAt            DateTime?                       @map("completed_at")
+  closedAt               DateTime?                       @map("closed_at")
+  isSaleableAfterService Boolean                         @default(false) @map("is_saleable_after_service")
+  metadata               Json                            @default(dbgenerated("'{}'::jsonb"))
+  createdAt              DateTime                        @default(now()) @map("created_at")
+  updatedAt              DateTime                        @updatedAt @map("updated_at")
+
+  asset              AssetIdentity             @relation(fields: [assetId], references: [id])
+  manufacturerOrg    Organization              @relation("ManufacturerInternalServiceOrders", fields: [manufacturerOrgId], references: [id])
+  serviceCenter      ServiceCenter             @relation(fields: [serviceCenterId], references: [id])
+  assignedTechnician Technician?               @relation("AssignedTechnicianInternalServiceOrders", fields: [assignedTechnicianId], references: [id])
+  requestedByUser    User                      @relation("RequestedInternalServiceOrders", fields: [requestedByUserId], references: [id])
+  receivedByUser     User?                     @relation("ReceivedInternalServiceOrders", fields: [receivedByUserId], references: [id])
+  sourceOrganization Organization?             @relation("SourceOrganizationInternalServiceOrders", fields: [sourceOrganizationId], references: [id])
+  timelineEntries    InternalServiceTimeline[]
+  partUsages         JobPartUsage[]
+
+  @@index([manufacturerOrgId, status], map: "idx_internal_service_orders_manufacturer_status")
+  @@index([serviceCenterId, status], map: "idx_internal_service_orders_service_center_status")
+  @@index([assignedTechnicianId, status], map: "idx_internal_service_orders_technician_status")
+  @@index([assetId], map: "idx_internal_service_orders_asset")
+  @@index([sourceOrganizationId], map: "idx_internal_service_orders_source_org")
+  @@index([receivedAt], map: "idx_internal_service_orders_received_at")
+  @@map("internal_service_orders")
+}
+
+model InternalServiceTimeline {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  internalServiceOrderId String   @map("internal_service_order_id") @db.Uuid
+  eventType              String   @map("event_type") @db.VarChar(50)
+  eventDescription       String?  @map("event_description")
+  actorUserId            String?  @map("actor_user_id") @db.Uuid
+  actorRole              String?  @map("actor_role") @db.VarChar(50)
+  actorName              String?  @map("actor_name") @db.VarChar(255)
+  metadata               Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  internalServiceOrder InternalServiceOrder @relation(fields: [internalServiceOrderId], references: [id])
+  actorUser            User?                @relation("InternalServiceTimelineActor", fields: [actorUserId], references: [id])
+
+  @@index([internalServiceOrderId, createdAt], map: "idx_internal_service_timeline_order")
+  @@map("internal_service_timeline")
 }
 
 model TicketPartDispatch {
@@ -1141,12 +1288,13 @@ model ServiceCenter {
   createdAt                  DateTime              @default(now()) @map("created_at")
   updatedAt                  DateTime              @updatedAt @map("updated_at")
 
-  organization     Organization         @relation(fields: [organizationId], references: [id])
-  technicians      Technician[]
-  assignedTickets  Ticket[]             @relation("AssignedServiceCenterTickets")
-  installationJobs InstallationJob[]    @relation("AssignedServiceCenterInstallationJobs")
-  partDispatches   TicketPartDispatch[]
-  partReturns      TicketPartReturn[]
+  organization          Organization           @relation(fields: [organizationId], references: [id])
+  technicians           Technician[]
+  assignedTickets       Ticket[]               @relation("AssignedServiceCenterTickets")
+  installationJobs      InstallationJob[]      @relation("AssignedServiceCenterInstallationJobs")
+  internalServiceOrders InternalServiceOrder[]
+  partDispatches        TicketPartDispatch[]
+  partReturns           TicketPartReturn[]
 
   @@index([organizationId], map: "idx_service_centers_organization")
   @@index([location], type: Gist, map: "idx_service_centers_location")
@@ -1170,13 +1318,14 @@ model Technician {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
 
-  user             User                 @relation(fields: [userId], references: [id])
-  serviceCenter    ServiceCenter        @relation(fields: [serviceCenterId], references: [id])
-  assignedTickets  Ticket[]             @relation("AssignedTechnicianTickets")
-  installationJobs InstallationJob[]    @relation("AssignedTechnicianInstallationJobs")
-  liveStatuses     TicketLiveStatus[]
-  partDispatches   TicketPartDispatch[] @relation("TicketPartDispatchTechnician")
-  partReturns      TicketPartReturn[]   @relation("TicketPartReturnTechnician")
+  user                  User                   @relation(fields: [userId], references: [id])
+  serviceCenter         ServiceCenter          @relation(fields: [serviceCenterId], references: [id])
+  assignedTickets       Ticket[]               @relation("AssignedTechnicianTickets")
+  installationJobs      InstallationJob[]      @relation("AssignedTechnicianInstallationJobs")
+  internalServiceOrders InternalServiceOrder[] @relation("AssignedTechnicianInternalServiceOrders")
+  liveStatuses          TicketLiveStatus[]
+  partDispatches        TicketPartDispatch[]   @relation("TicketPartDispatchTechnician")
+  partReturns           TicketPartReturn[]     @relation("TicketPartReturnTechnician")
 
   @@index([serviceCenterId], map: "idx_technicians_service_center")
   @@map("technicians")

@@ -48,6 +48,11 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
       icon: Users,
     },
     { label: "Claims", href: "/dashboard/manufacturer/claims", icon: ClipboardList },
+    {
+      label: "Internal Services",
+      href: "/dashboard/manufacturer/internal-services",
+      icon: Wrench,
+    },
     { label: "Analytics", href: "/dashboard/manufacturer/analytics", icon: ChartColumn },
     { label: "Settings", href: "/dashboard/manufacturer/settings", icon: Settings },
   ],
@@ -56,6 +61,11 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
     { label: "Tickets", href: "/dashboard/tickets", icon: Ticket },
     { label: "Technicians", href: "/dashboard/technicians", icon: Wrench },
     { label: "Claims", href: "/dashboard/claims", icon: ClipboardList },
+    {
+      label: "Internal Services",
+      href: "/dashboard/internal-services",
+      icon: Package,
+    },
     { label: "Analytics", href: "/dashboard/analytics", icon: ChartColumn },
     { label: "Settings", href: "/dashboard/settings", icon: Settings },
   ],
