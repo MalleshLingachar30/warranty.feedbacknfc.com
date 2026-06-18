@@ -153,7 +153,32 @@ export async function POST(
       value: body.partUsages,
       defaultUsageType: "consumed",
     });
+    const assetTrackedPartUsages = parsedPartUsages.filter(
+      (usage) => Boolean(usage.assetCode) || Boolean(usage.tagCode),
+    );
+    const manualRemovedPartUsages = parsedPartUsages.filter(
+      (usage) =>
+        usage.usageType === "removed" &&
+        !usage.assetCode &&
+        !usage.tagCode,
+    );
+    const invalidUntrackedPartUsages = parsedPartUsages.filter(
+      (usage) =>
+        usage.usageType !== "removed" &&
+        !usage.assetCode &&
+        !usage.tagCode,
+    );
     const laborHours = Math.max(0, toNumber(body.laborHours, 0));
+
+    if (invalidUntrackedPartUsages.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Replacement and other part usage entries must include a traced asset or tag code. Removed old parts may be captured by part name/number without a serialized code.",
+        },
+        { status: 400 },
+      );
+    }
 
     const ticket = await db.ticket.findUnique({
       where: { id: ticketId },
@@ -270,10 +295,15 @@ export async function POST(
 
         const resolvedPartUsages = await resolvePartUsages(tx, {
           organizationId: ticket.product.organizationId,
-          parsedUsages: parsedPartUsages,
+          parsedUsages: assetTrackedPartUsages,
         });
 
-        if ((traceabilityRequired || resolvedPartUsages.length > 0) && !mainAsset) {
+        if (
+          (traceabilityRequired ||
+            resolvedPartUsages.length > 0 ||
+            manualRemovedPartUsages.length > 0) &&
+          !mainAsset
+        ) {
           throw new Error(
             "Main product asset could not be resolved for this ticket. Ensure the product is linked to a serialized asset before recording part usage.",
           );
@@ -294,7 +324,10 @@ export async function POST(
           });
         }
 
-        const ticketPartsSnapshot = toTicketPartsSnapshot(resolvedPartUsages);
+        const ticketPartsSnapshot = toTicketPartsSnapshot({
+          resolvedUsages: resolvedPartUsages,
+          manualUsages: manualRemovedPartUsages,
+        });
         const partsCost = ticketPartsSnapshot.partsCost;
         const laborCost = laborHours * DEFAULT_LABOR_RATE_PER_HOUR;
         const claimValue = Number((partsCost + laborCost).toFixed(2));
@@ -323,11 +356,9 @@ export async function POST(
                 partsCost,
                 laborCost,
                 estimatedClaimValue: claimValue,
-                partUsageCount: resolvedPartUsages.length,
+                partUsageCount: ticketPartsSnapshot.partCount,
                 reconciledDispatchLineCount: dispatchItemMatches.size,
-                removedPartReturnCount: resolvedPartUsages.filter(
-                  (usage) => usage.input.usageType === "removed",
-                ).length,
+                removedPartReturnCount: ticketPartsSnapshot.removedPartCount,
                 completedAt: completedAt.toISOString(),
               },
             },
@@ -348,6 +379,11 @@ export async function POST(
           },
         });
 
+        const removedPartReturns: Array<{
+          returnNumber: string;
+          partName: string;
+        }> = [];
+
         if (mainAsset && resolvedPartUsages.length > 0) {
           const usageCreateInputs = toJobPartUsageCreateManyInput({
             mainAssetId: mainAsset.id,
@@ -357,10 +393,6 @@ export async function POST(
           });
 
           const updatedDispatchIds = new Set<string>();
-          const removedPartReturns: Array<{
-            returnNumber: string;
-            partName: string;
-          }> = [];
 
           for (const [index, usageInput] of usageCreateInputs.entries()) {
             const createdUsage = await tx.jobPartUsage.create({
@@ -465,20 +497,59 @@ export async function POST(
             });
           }
 
-          if (removedPartReturns.length > 0) {
-            await tx.ticketTimeline.create({
+        }
+
+        if (mainAsset && manualRemovedPartUsages.length > 0) {
+          for (const usage of manualRemovedPartUsages) {
+            const returnNumber = await generateTicketPartReturnNumber(tx);
+            const partName = usage.partName ?? usage.partNumber ?? "Removed part";
+            await tx.ticketPartReturn.create({
               data: {
                 ticketId: ticket.id,
-                eventType: "removed_parts_collected",
-                eventDescription: `${removedPartReturns.length} removed part return record(s) were created for service-center custody.`,
-                actorRole: "technician",
-                actorName: technician.name,
+                mainAssetId: mainAsset.id,
+                serviceCenterId:
+                  ticket.assignedServiceCenterId ?? technician.serviceCenterId,
+                technicianId: technician.id,
+                createdByUserId: technician.userId,
+                returnNumber,
+                status: "collected_by_technician",
+                partName,
+                partNumber: usage.partNumber,
+                quantity: usage.quantity,
+                collectionNotes: usage.note,
+                collectedAt: completedAt,
                 metadata: {
-                  returns: removedPartReturns,
-                } as Prisma.InputJsonValue,
+                  fromTicketCompletion: true,
+                  technicianName: technician.name,
+                  linkedUsageType: usage.usageType,
+                  manualCapture: true,
+                  catalogPartId: usage.catalogPartId,
+                  removedAssetCode: null,
+                  removedTagCode: null,
+                } satisfies Prisma.InputJsonValue,
               },
             });
+
+            removedPartReturns.push({
+              returnNumber,
+              partName,
+            });
           }
+        }
+
+        if (removedPartReturns.length > 0) {
+          await tx.ticketTimeline.create({
+            data: {
+              ticketId: ticket.id,
+              eventType: "removed_parts_collected",
+              eventDescription: `${removedPartReturns.length} removed part return record(s) were created for service-center custody.`,
+              actorRole: "technician",
+              actorName: technician.name,
+              metadata: {
+                returns: removedPartReturns,
+              } as Prisma.InputJsonValue,
+            },
+          });
         }
 
         await tx.technician.update({

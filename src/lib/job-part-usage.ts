@@ -521,8 +521,11 @@ function derivePartNumber(usage: ResolvedPartUsage): string {
   );
 }
 
-export function toTicketPartsSnapshot(usages: ResolvedPartUsage[]) {
-  const rows = usages.map((usage) => {
+export function toTicketPartsSnapshot(input: {
+  resolvedUsages: ResolvedPartUsage[];
+  manualUsages?: NormalizedPartUsageInput[];
+}) {
+  const resolvedRows = input.resolvedUsages.map((usage) => {
     const unitCost = usage.input.unitCost ?? 0;
     return {
       partName: derivePartName(usage),
@@ -536,11 +539,28 @@ export function toTicketPartsSnapshot(usages: ResolvedPartUsage[]) {
     };
   });
 
+  const manualRows = (input.manualUsages ?? []).map((usage) => {
+    const unitCost = usage.unitCost ?? 0;
+    return {
+      partName: usage.partName ?? usage.partNumber ?? "Part",
+      partNumber: usage.partNumber ?? "",
+      usageType: usage.usageType,
+      quantity: usage.quantity,
+      cost: Number(unitCost.toFixed(2)),
+      lineTotal: Number((unitCost * usage.quantity).toFixed(2)),
+      assetCode: usage.assetCode,
+      tagCode: usage.tagCode,
+    };
+  });
+
+  const rows = [...resolvedRows, ...manualRows];
   const partsCost = rows.reduce((sum, row) => sum + row.lineTotal, 0);
 
   return {
     partsUsedJson: rows as unknown as Prisma.InputJsonValue,
     partsCost: Number(partsCost.toFixed(2)),
+    partCount: rows.length,
+    removedPartCount: rows.filter((row) => row.usageType === "removed").length,
   };
 }
 

@@ -144,6 +144,7 @@ export function JobDetail({
   >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
   const [showReceivedSparePicker, setShowReceivedSparePicker] = useState(false);
+  const [showRemovedPartCatalog, setShowRemovedPartCatalog] = useState(false);
   const consumedScannedRowsRef = useRef<Set<string>>(new Set());
   const trackingEnabled =
     Boolean(technicianId) &&
@@ -164,6 +165,7 @@ export function JobDetail({
     setQueuedBeforePhotos([]);
     setQueuedAfterPhotos([]);
     setShowReceivedSparePicker(false);
+    setShowRemovedPartCatalog(false);
     setActionError(null);
     setActionSuccess(null);
 
@@ -283,6 +285,12 @@ export function JobDetail({
     setActionError(null);
     setActionSuccess(null);
     setShowReceivedSparePicker(false);
+
+    if (job.partsCatalog.length > 0) {
+      setShowRemovedPartCatalog((previous) => !previous);
+      return;
+    }
+
     setParts((prev) => [
       ...prev,
       {
@@ -297,6 +305,7 @@ export function JobDetail({
     setActionError(null);
     setActionSuccess(null);
     setShowReceivedSparePicker(false);
+    setShowRemovedPartCatalog(false);
     setParts((prev) => [
       ...prev,
       createSelectionFromCatalog(job.partsCatalog[0]),
@@ -323,6 +332,22 @@ export function JobDetail({
     setActionSuccess(
       `Received spare ${item.assetCode} (${item.tagCode}) added to this ticket.`,
     );
+  };
+
+  const handleAttachRemovedCatalogPart = (
+    catalogPart: TechnicianPartCatalogItem,
+  ) => {
+    setParts((previous) => [
+      ...previous,
+      {
+        ...createSelectionFromCatalog(catalogPart),
+        usageType: "removed",
+        cost: "0",
+      },
+    ]);
+    setShowRemovedPartCatalog(false);
+    setActionError(null);
+    setActionSuccess(`Removed old part ${catalogPart.name} added to this ticket.`);
   };
 
   const replacementParts = useMemo(
@@ -615,16 +640,61 @@ export function JobDetail({
             usageType: entry.usageType,
             partName: catalogPart?.name ?? "",
             partNumber: catalogPart?.partNumber ?? "",
+            catalogPartId: entry.catalogPartId || null,
             unitCost: Number.parseFloat(entry.cost),
             quantity: Math.max(0.001, Number.parseFloat(entry.quantity) || 1),
           };
         })
-        .filter(
-          (part) =>
-            (part.assetCode.length > 0 || Boolean(part.tagCode)) &&
-            Number.isFinite(part.unitCost) &&
-            part.unitCost >= 0,
+        .filter((part) => {
+          if (!Number.isFinite(part.unitCost) || part.unitCost < 0) {
+            return false;
+          }
+
+          const hasIdentity = part.assetCode.length > 0 || Boolean(part.tagCode);
+          const hasDescriptor = Boolean(
+            part.partName || part.partNumber || part.catalogPartId,
+          );
+
+          if (part.usageType === "removed") {
+            return hasIdentity || hasDescriptor;
+          }
+
+          return hasIdentity;
+        });
+
+      const installedPartUsages = partUsages.filter(
+        (part) => part.usageType === "installed",
+      );
+      const removedPartUsages = partUsages.filter(
+        (part) => part.usageType === "removed",
+      );
+      const invalidTrackedRows = parts.filter(
+        (part) =>
+          part.usageType !== "removed" &&
+          part.assetCode.trim().length === 0 &&
+          part.tagCode.trim().length === 0,
+      );
+
+      if (invalidTrackedRows.length > 0) {
+        throw new Error(
+          "Replacement and other part usage entries need a traced asset or tag code before completion.",
         );
+      }
+
+      if (
+        job.receivedSpareItems.length > 0 &&
+        installedPartUsages.length === 0
+      ) {
+        throw new Error(
+          "Attach at least one received traced spare using `Add as Replacement Part` before completing this job.",
+        );
+      }
+
+      if (removedParts.length > 0 && removedPartUsages.length === 0) {
+        throw new Error(
+          "Select which old failed part is being taken back before completing this job.",
+        );
+      }
 
       if (
         job.partTraceabilityMode !== "none" &&
@@ -1177,6 +1247,46 @@ export function JobDetail({
                       {removedParts.map((part) => renderPartRow(part))}
                     </div>
                   )}
+
+                  {showRemovedPartCatalog && job.partsCatalog.length > 0 ? (
+                    <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                      <p className="text-sm font-medium text-slate-900">
+                        Select the failed part being taken back from site
+                      </p>
+                      {job.partsCatalog.map((catalogPart) => (
+                        <div
+                          key={catalogPart.id}
+                          className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-slate-900">
+                              {catalogPart.name}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              {catalogPart.partNumber || "Part number unavailable"}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-9"
+                            onClick={() => handleAttachRemovedCatalogPart(catalogPart)}
+                          >
+                            Mark as Removed
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setShowRemovedPartCatalog(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">

@@ -394,6 +394,7 @@ export function TechnicianCompleteWork({
   >([]);
   const [parts, setParts] = useState<PartSelection[]>([]);
   const [showReceivedSparePicker, setShowReceivedSparePicker] = useState(false);
+  const [showRemovedPartCatalog, setShowRemovedPartCatalog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -439,6 +440,7 @@ export function TechnicianCompleteWork({
     setQueuedAfterPhotos([]);
     setParts([]);
     setShowReceivedSparePicker(ticket.receivedSpareItems.length > 0);
+    setShowRemovedPartCatalog(false);
     setMessage(null);
     setError(null);
 
@@ -703,6 +705,12 @@ export function TechnicianCompleteWork({
     setError(null);
     setMessage(null);
     setShowReceivedSparePicker(false);
+
+    if (ticket.partsCatalog.length > 0) {
+      setShowRemovedPartCatalog((previous) => !previous);
+      return;
+    }
+
     setParts((previous) => [
       ...previous,
       createPartSelectionWithUsage(ticket.partsCatalog[0], "removed"),
@@ -713,6 +721,7 @@ export function TechnicianCompleteWork({
     setError(null);
     setMessage(null);
     setShowReceivedSparePicker(false);
+    setShowRemovedPartCatalog(false);
     setParts((previous) => [
       ...previous,
       createPartSelection(ticket.partsCatalog[0]),
@@ -769,6 +778,18 @@ export function TechnicianCompleteWork({
     setMessage(
       `Received spare ${assetCode} (${tagCode}) added to this completion.`,
     );
+  };
+
+  const handleAttachRemovedCatalogPart = (
+    catalogPart: TicketView["partsCatalog"][number],
+  ) => {
+    setParts((previous) => [
+      ...previous,
+      createPartSelectionWithUsage(catalogPart, "removed"),
+    ]);
+    setShowRemovedPartCatalog(false);
+    setError(null);
+    setMessage(`Removed old part ${catalogPart.name} added to this completion.`);
   };
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -856,16 +877,64 @@ export function TechnicianCompleteWork({
             usageType: entry.usageType,
             partName: catalogPart?.name ?? "",
             partNumber: catalogPart?.partNumber ?? "",
+            catalogPartId: entry.catalogPartId || null,
             unitCost: Number.parseFloat(entry.cost),
             quantity: Math.max(0.001, Number.parseFloat(entry.quantity) || 1),
           };
         })
-        .filter(
-          (part) =>
-            (part.assetCode.length > 0 || Boolean(part.tagCode)) &&
-            Number.isFinite(part.unitCost) &&
-            part.unitCost >= 0,
+        .filter((part) => {
+          if (!Number.isFinite(part.unitCost) || part.unitCost < 0) {
+            return false;
+          }
+
+          const hasIdentity = part.assetCode.length > 0 || Boolean(part.tagCode);
+          const hasDescriptor = Boolean(
+            part.partName || part.partNumber || part.catalogPartId,
+          );
+
+          if (part.usageType === "removed") {
+            return hasIdentity || hasDescriptor;
+          }
+
+          return hasIdentity;
+        });
+
+      const installedPartUsages = partUsages.filter(
+        (part) => part.usageType === "installed",
+      );
+      const removedPartUsages = partUsages.filter(
+        (part) => part.usageType === "removed",
+      );
+      const invalidTrackedRows = parts.filter(
+        (part) =>
+          part.usageType !== "removed" &&
+          part.assetCode.trim().length === 0 &&
+          part.tagCode.trim().length === 0,
+      );
+
+      if (invalidTrackedRows.length > 0) {
+        setError(
+          "Replacement and other part usage entries need a traced asset or tag code before completion.",
         );
+        return;
+      }
+
+      if (
+        ticket.receivedSpareItems.length > 0 &&
+        installedPartUsages.length === 0
+      ) {
+        setError(
+          "Attach at least one received traced spare using `Add as Replacement` before completing this job.",
+        );
+        return;
+      }
+
+      if (removedParts.length > 0 && removedPartUsages.length === 0) {
+        setError(
+          "Select which old failed part is being taken back before completing this job.",
+        );
+        return;
+      }
 
       if (ticket.partTraceabilityMode !== "none" && partUsages.length === 0) {
         setError(
@@ -1284,6 +1353,46 @@ export function TechnicianCompleteWork({
                 {removedParts.map((part) => renderPartRow(part))}
               </div>
             )}
+
+            {showRemovedPartCatalog && ticket.partsCatalog.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
+                <p className="text-sm font-medium text-slate-900">
+                  Select the failed part being taken back from site
+                </p>
+                {ticket.partsCatalog.map((catalogPart) => (
+                  <div
+                    key={catalogPart.id}
+                    className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">
+                        {catalogPart.name}
+                      </p>
+                      <p className="text-xs text-slate-600">
+                        {catalogPart.partNumber || "Part number unavailable"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-9"
+                      onClick={() => handleAttachRemovedCatalogPart(catalogPart)}
+                    >
+                      Mark as Removed
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => setShowRemovedPartCatalog(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3">
