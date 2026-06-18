@@ -41,6 +41,10 @@ export default async function DashboardPage() {
     redirect("/dashboard/manufacturer/integrations");
   }
 
+  if (role === "service_center_admin") {
+    redirect("/dashboard/service-center");
+  }
+
   if (role === "customer") {
     redirect("/dashboard/customer");
   }
