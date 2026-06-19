@@ -6,8 +6,10 @@ import {
 
 import { db } from "@/lib/db";
 import {
+  findOpenInternalServiceOrderByControllingTag,
   generateInternalServiceOrderNumber,
   resolveInternalServiceAssetByReference,
+  resolveInternalServiceAssetContextByReference,
 } from "@/lib/internal-services";
 
 type GenericRecord = Record<string, unknown>;
@@ -106,11 +108,43 @@ export async function createInternalServiceOrder(input: {
   normalized: NormalizedInternalServiceCreateInput;
   resolvedAsset?: {
     id: string;
+    publicCode: string;
+    serialNumber: string | null;
+    organizationId: string;
+    lifecycleState: string;
+    productModel: {
+      id: string;
+      name: string;
+      modelNumber: string | null;
+    };
   } | null;
+  resolvedAssetContext?: Awaited<
+    ReturnType<typeof resolveInternalServiceAssetContextByReference>
+  >;
 }) {
   return db.$transaction(async (tx) => {
+    const resolvedContext =
+      input.resolvedAssetContext ??
+      (input.resolvedAsset
+        ? {
+            asset: input.resolvedAsset,
+            matchedTag: null,
+            controllingTag: null,
+            referenceSource: "asset_code" as const,
+            controllingTagSource: "dashboard_v1" as const,
+            controllingTagResolvedAt: null,
+          }
+        : await resolveInternalServiceAssetContextByReference(
+            tx,
+            input.normalized.assetReference,
+            {
+              manufacturerOrgId: input.manufacturerOrgId,
+            },
+          ));
+
     const asset =
       input.resolvedAsset ??
+      resolvedContext?.asset ??
       (await resolveInternalServiceAssetByReference(
         tx,
         input.normalized.assetReference,
@@ -123,13 +157,33 @@ export async function createInternalServiceOrder(input: {
       throw new Error("No serialized asset or tag matched the provided reference.");
     }
 
+    if (resolvedContext?.controllingTag?.id) {
+      const openOrder = await findOpenInternalServiceOrderByControllingTag(
+        tx,
+        resolvedContext.controllingTag.id,
+      );
+
+      if (openOrder) {
+        throw new Error(
+          `An active internal-service order already exists for this sticker identity (${openOrder.orderNumber}). Open that order instead of creating a duplicate inward.`,
+        );
+      }
+    }
+
     const orderNumber = await generateInternalServiceOrderNumber(tx);
     const receivedAt = new Date();
+    const inwardCaptureMode =
+      resolvedContext?.controllingTagSource &&
+      resolvedContext.controllingTagSource !== "dashboard_v1"
+        ? "module_v2_sticker_led"
+        : "module_v1";
 
     const order = await tx.internalServiceOrder.create({
       data: {
         orderNumber,
         assetId: asset.id,
+        controllingTagId: resolvedContext?.controllingTag?.id ?? null,
+        controllingTagSource: resolvedContext?.controllingTagSource ?? "dashboard_v1",
         manufacturerOrgId: input.manufacturerOrgId,
         serviceCenterId: input.serviceCenterId,
         requestedByUserId: input.requestedByUserId,
@@ -142,9 +196,12 @@ export async function createInternalServiceOrder(input: {
         inwardConditionNotes: input.normalized.inwardConditionNotes,
         accessoriesReceived: input.normalized.accessoriesReceived,
         receivedAt,
+        controllingTagResolvedAt: resolvedContext?.controllingTagResolvedAt ?? null,
         metadata: {
           assetReference: input.normalized.assetReference,
-          inwardCaptureMode: "module_v1",
+          inwardCaptureMode,
+          controllingTagCode: resolvedContext?.controllingTag?.publicCode ?? null,
+          controllingTagReferenceSource: resolvedContext?.referenceSource ?? null,
         },
       },
       select: {
@@ -175,6 +232,8 @@ export async function createInternalServiceOrder(input: {
         metadata: {
           accessoriesReceived: input.normalized.accessoriesReceived,
           assetReference: input.normalized.assetReference,
+          controllingTagCode: resolvedContext?.controllingTag?.publicCode ?? null,
+          controllingTagSource: resolvedContext?.controllingTagSource ?? "dashboard_v1",
         },
       },
     });

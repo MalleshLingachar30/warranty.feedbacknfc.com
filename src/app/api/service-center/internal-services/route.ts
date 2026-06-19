@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
-import { resolveInternalServiceAssetByReference } from "@/lib/internal-services";
+import { resolveInternalServiceAssetContextByReference } from "@/lib/internal-services";
 
 import {
   ApiError,
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const body = parseJsonBody<InternalServiceCreatePayload>(await request.json());
     const normalized = normalizeInternalServiceCreateInput(body);
 
-    const [serviceCenter, asset] = await Promise.all([
+    const [serviceCenter, resolvedAssetContext] = await Promise.all([
       db.serviceCenter.findFirst({
         where: {
           id: normalized.serviceCenterId,
@@ -38,9 +38,11 @@ export async function POST(request: Request) {
         },
       }),
       db.$transaction((tx) =>
-        resolveInternalServiceAssetByReference(tx, normalized.assetReference),
+        resolveInternalServiceAssetContextByReference(tx, normalized.assetReference),
       ),
     ]);
+
+    const asset = resolvedAssetContext?.asset ?? null;
 
     if (!serviceCenter) {
       throw new ApiError("Selected depot does not belong to this service-center organization.", 404);
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
       receivedByUserId: dbUserId,
       normalized,
       resolvedAsset: asset,
+      resolvedAssetContext,
     });
 
     return NextResponse.json({ order });

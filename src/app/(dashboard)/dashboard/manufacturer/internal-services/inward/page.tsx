@@ -89,6 +89,8 @@ export default async function ManufacturerInternalServicesInwardPage({
       />
       <InwardReceiptClient
         submitUrl="/api/manufacturer/internal-services"
+        scanUrl="/api/manufacturer/internal-services/scan"
+        affixUrl="/api/manufacturer/internal-services/scan"
         orderBaseHref="/dashboard/manufacturer/internal-services/orders"
         prefillBaseHref="/dashboard/manufacturer/internal-services/inward"
         organizationContextLabel={organizationName ?? "this manufacturer"}

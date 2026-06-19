@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { InternalServiceOrderDetailView } from "@/components/internal-services/order-detail-view";
 import { db } from "@/lib/db";
+import { isInternalServiceControllingTagReady } from "@/lib/internal-services";
 
 import { resolveManufacturerPageContext } from "../../../_lib/server-context";
 
@@ -53,6 +54,9 @@ export default async function ManufacturerInternalServiceOrderDetailPage({
       status: true,
       serviceType: true,
       priority: true,
+      controllingTagId: true,
+      controllingTagSource: true,
+      controllingTagResolvedAt: true,
       initiationSource: true,
       finalDisposition: true,
       reportedFault: true,
@@ -106,6 +110,11 @@ export default async function ManufacturerInternalServiceOrderDetailPage({
           },
         },
       },
+      controllingTag: {
+        select: {
+          publicCode: true,
+        },
+      },
       timelineEntries: {
         orderBy: [{ createdAt: "asc" }],
         select: {
@@ -154,6 +163,14 @@ export default async function ManufacturerInternalServiceOrderDetailPage({
         serviceType: order.serviceType,
         priority: order.priority,
         assignedTechnicianId: null,
+        controllingTagCode: order.controllingTag?.publicCode ?? null,
+        controllingTagSource: order.controllingTagSource,
+        controllingTagResolvedAt: order.controllingTagResolvedAt?.toISOString() ?? null,
+        controllingTagReady: isInternalServiceControllingTagReady({
+          controllingTagId: order.controllingTagId,
+          controllingTagSource: order.controllingTagSource,
+          controllingTagResolvedAt: order.controllingTagResolvedAt,
+        }),
         initiationSource: order.initiationSource,
         finalDisposition: order.finalDisposition,
         reportedFault: order.reportedFault,

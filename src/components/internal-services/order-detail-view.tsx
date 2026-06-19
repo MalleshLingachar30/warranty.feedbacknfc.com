@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  formatInternalServiceControlTagSource,
   formatInternalServiceDisposition,
   formatInternalServicePriority,
   formatInternalServiceStatus,
@@ -113,6 +114,17 @@ export function InternalServiceOrderDetailView({
             <p>Service type: {formatInternalServiceType(order.serviceType)}</p>
             <p>Priority: {formatInternalServicePriority(order.priority)}</p>
             <p>Initiation source: {order.initiationSource.replace(/_/g, " ")}</p>
+            <p>
+              Sticker-led control: {order.controllingTagReady ? "ready" : "pending"}
+            </p>
+            <p>Controlling tag: {order.controllingTagCode ?? "-"}</p>
+            <p>
+              Control source:{" "}
+              {formatInternalServiceControlTagSource(order.controllingTagSource)}
+            </p>
+            <p>
+              Control resolved at: {formatDateTime(order.controllingTagResolvedAt)}
+            </p>
             <p>Assigned engineer: {order.assignedTechnicianName ?? "Unassigned"}</p>
             <p>Requested by: {order.requestedByName ?? "-"}</p>
             <p>Received by: {order.receivedByName ?? "-"}</p>

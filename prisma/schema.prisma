@@ -348,6 +348,12 @@ enum InternalServiceDisposition {
   no_fault_found_return
 }
 
+enum InternalServiceControlTagSource {
+  dashboard_v1
+  existing_tag
+  new_affixed_label
+}
+
 enum IntegrationConnectorType {
   sap
 }
@@ -855,11 +861,12 @@ model AssetTag {
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
 
-  asset               AssetIdentity            @relation(fields: [assetId], references: [id])
-  generationBatch     TagGenerationBatch?      @relation(fields: [generationBatchId], references: [id])
-  partUsages          JobPartUsage[]
-  dispatchedPartItems TicketPartDispatchItem[] @relation("TicketPartDispatchItemTag")
-  removedPartReturns  TicketPartReturn[]       @relation("TicketPartReturnRemovedTag")
+  asset                            AssetIdentity            @relation(fields: [assetId], references: [id])
+  generationBatch                  TagGenerationBatch?      @relation(fields: [generationBatchId], references: [id])
+  controllingInternalServiceOrders InternalServiceOrder[]   @relation("InternalServiceControllingTag")
+  partUsages                       JobPartUsage[]
+  dispatchedPartItems              TicketPartDispatchItem[] @relation("TicketPartDispatchItemTag")
+  removedPartReturns               TicketPartReturn[]       @relation("TicketPartReturnRemovedTag")
 
   @@index([assetId], map: "idx_asset_tags_asset")
   @@index([generationBatchId], map: "idx_asset_tags_batch")
@@ -1074,38 +1081,42 @@ model JobPartUsage {
 }
 
 model InternalServiceOrder {
-  id                     String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderNumber            String                          @unique @map("order_number") @db.VarChar(30)
-  assetId                String                          @map("asset_id") @db.Uuid
-  manufacturerOrgId      String                          @map("manufacturer_org_id") @db.Uuid
-  serviceCenterId        String                          @map("service_center_id") @db.Uuid
-  assignedTechnicianId   String?                         @map("assigned_technician_id") @db.Uuid
-  requestedByUserId      String                          @map("requested_by_user_id") @db.Uuid
-  receivedByUserId       String?                         @map("received_by_user_id") @db.Uuid
-  sourceOrganizationId   String?                         @map("source_organization_id") @db.Uuid
-  initiationSource       InternalServiceInitiationSource @map("initiation_source")
-  serviceType            InternalServiceType             @map("service_type")
-  priority               InternalServicePriority         @default(medium)
-  status                 InternalServiceStatus           @default(inward_received)
-  finalDisposition       InternalServiceDisposition?     @map("final_disposition")
-  reportedFault          String?                         @map("reported_fault")
-  inwardConditionNotes   String?                         @map("inward_condition_notes")
-  diagnosisNotes         String?                         @map("diagnosis_notes")
-  resolutionNotes        String?                         @map("resolution_notes")
-  accessoriesReceived    Json                            @default(dbgenerated("'[]'::jsonb")) @map("accessories_received")
-  receivedAt             DateTime?                       @map("received_at")
-  triagedAt              DateTime?                       @map("triaged_at")
-  repairStartedAt        DateTime?                       @map("repair_started_at")
-  qcStartedAt            DateTime?                       @map("qc_started_at")
-  qcCompletedAt          DateTime?                       @map("qc_completed_at")
-  completedAt            DateTime?                       @map("completed_at")
-  closedAt               DateTime?                       @map("closed_at")
-  isSaleableAfterService Boolean                         @default(false) @map("is_saleable_after_service")
-  metadata               Json                            @default(dbgenerated("'{}'::jsonb"))
-  createdAt              DateTime                        @default(now()) @map("created_at")
-  updatedAt              DateTime                        @updatedAt @map("updated_at")
+  id                       String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNumber              String                          @unique @map("order_number") @db.VarChar(30)
+  assetId                  String                          @map("asset_id") @db.Uuid
+  controllingTagId         String?                         @map("controlling_tag_id") @db.Uuid
+  manufacturerOrgId        String                          @map("manufacturer_org_id") @db.Uuid
+  serviceCenterId          String                          @map("service_center_id") @db.Uuid
+  assignedTechnicianId     String?                         @map("assigned_technician_id") @db.Uuid
+  requestedByUserId        String                          @map("requested_by_user_id") @db.Uuid
+  receivedByUserId         String?                         @map("received_by_user_id") @db.Uuid
+  sourceOrganizationId     String?                         @map("source_organization_id") @db.Uuid
+  controllingTagSource     InternalServiceControlTagSource @default(dashboard_v1) @map("controlling_tag_source")
+  initiationSource         InternalServiceInitiationSource @map("initiation_source")
+  serviceType              InternalServiceType             @map("service_type")
+  priority                 InternalServicePriority         @default(medium)
+  status                   InternalServiceStatus           @default(inward_received)
+  finalDisposition         InternalServiceDisposition?     @map("final_disposition")
+  reportedFault            String?                         @map("reported_fault")
+  inwardConditionNotes     String?                         @map("inward_condition_notes")
+  diagnosisNotes           String?                         @map("diagnosis_notes")
+  resolutionNotes          String?                         @map("resolution_notes")
+  accessoriesReceived      Json                            @default(dbgenerated("'[]'::jsonb")) @map("accessories_received")
+  receivedAt               DateTime?                       @map("received_at")
+  controllingTagResolvedAt DateTime?                       @map("controlling_tag_resolved_at")
+  triagedAt                DateTime?                       @map("triaged_at")
+  repairStartedAt          DateTime?                       @map("repair_started_at")
+  qcStartedAt              DateTime?                       @map("qc_started_at")
+  qcCompletedAt            DateTime?                       @map("qc_completed_at")
+  completedAt              DateTime?                       @map("completed_at")
+  closedAt                 DateTime?                       @map("closed_at")
+  isSaleableAfterService   Boolean                         @default(false) @map("is_saleable_after_service")
+  metadata                 Json                            @default(dbgenerated("'{}'::jsonb"))
+  createdAt                DateTime                        @default(now()) @map("created_at")
+  updatedAt                DateTime                        @updatedAt @map("updated_at")
 
   asset              AssetIdentity             @relation(fields: [assetId], references: [id])
+  controllingTag     AssetTag?                 @relation("InternalServiceControllingTag", fields: [controllingTagId], references: [id])
   manufacturerOrg    Organization              @relation("ManufacturerInternalServiceOrders", fields: [manufacturerOrgId], references: [id])
   serviceCenter      ServiceCenter             @relation(fields: [serviceCenterId], references: [id])
   assignedTechnician Technician?               @relation("AssignedTechnicianInternalServiceOrders", fields: [assignedTechnicianId], references: [id])
@@ -1119,6 +1130,7 @@ model InternalServiceOrder {
   @@index([serviceCenterId, status], map: "idx_internal_service_orders_service_center_status")
   @@index([assignedTechnicianId, status], map: "idx_internal_service_orders_technician_status")
   @@index([assetId], map: "idx_internal_service_orders_asset")
+  @@index([controllingTagId], map: "idx_internal_service_orders_controlling_tag")
   @@index([sourceOrganizationId], map: "idx_internal_service_orders_source_org")
   @@index([receivedAt], map: "idx_internal_service_orders_received_at")
   @@map("internal_service_orders")

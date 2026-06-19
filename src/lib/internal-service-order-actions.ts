@@ -6,7 +6,10 @@ import {
 } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { resolveInternalServiceTrackedPartByReference } from "@/lib/internal-services";
+import {
+  isInternalServiceControllingTagReady,
+  resolveInternalServiceTrackedPartByReference,
+} from "@/lib/internal-services";
 
 export class InternalServiceOrderActionError extends Error {
   statusCode: number;
@@ -434,6 +437,9 @@ export async function updateInternalServiceOrderForDepot(input: {
       orderNumber: true,
       status: true,
       assetId: true,
+      controllingTagId: true,
+      controllingTagSource: true,
+      controllingTagResolvedAt: true,
       manufacturerOrgId: true,
       assignedTechnicianId: true,
       finalDisposition: true,
@@ -486,6 +492,25 @@ export async function updateInternalServiceOrderForDepot(input: {
   const effectiveAssignedTechnicianId =
     input.update.assignedTechnicianId ?? order.assignedTechnicianId;
   requireAssignedTechnician(input.update.action, effectiveAssignedTechnicianId);
+
+  const isLifecycleTransitionAction =
+    input.update.action !== "save_notes" &&
+    input.update.action !== "add_part_usage" &&
+    input.update.action !== "assign_engineer";
+
+  if (
+    isLifecycleTransitionAction &&
+    !isInternalServiceControllingTagReady({
+      controllingTagId: order.controllingTagId,
+      controllingTagSource: order.controllingTagSource,
+      controllingTagResolvedAt: order.controllingTagResolvedAt,
+    })
+  ) {
+    throw new InternalServiceOrderActionError(
+      "Sticker-led internal-service orders cannot change lifecycle stage until a controlling tag is resolved.",
+      409,
+    );
+  }
 
   const now = new Date();
   const transition = buildTransition(

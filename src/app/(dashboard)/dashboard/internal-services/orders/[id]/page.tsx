@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { InternalServiceOrderActionsClient } from "@/components/internal-services/order-actions-client";
 import { InternalServiceOrderDetailView } from "@/components/internal-services/order-detail-view";
 import { db } from "@/lib/db";
+import { isInternalServiceControllingTagReady } from "@/lib/internal-services";
 
 import { resolveServiceCenterPageContext } from "../../../_lib/service-center-context";
 
@@ -73,6 +74,9 @@ export default async function DepotInternalServiceOrderDetailPage({
       status: true,
       serviceType: true,
       priority: true,
+      controllingTagId: true,
+      controllingTagSource: true,
+      controllingTagResolvedAt: true,
       initiationSource: true,
       finalDisposition: true,
       reportedFault: true,
@@ -125,6 +129,11 @@ export default async function DepotInternalServiceOrderDetailPage({
               modelNumber: true,
             },
           },
+        },
+      },
+      controllingTag: {
+        select: {
+          publicCode: true,
         },
       },
       timelineEntries: {
@@ -202,6 +211,14 @@ export default async function DepotInternalServiceOrderDetailPage({
           serviceType: order.serviceType,
           priority: order.priority,
           assignedTechnicianId: order.assignedTechnician?.id ?? null,
+          controllingTagCode: order.controllingTag?.publicCode ?? null,
+          controllingTagSource: order.controllingTagSource,
+          controllingTagResolvedAt: order.controllingTagResolvedAt?.toISOString() ?? null,
+          controllingTagReady: isInternalServiceControllingTagReady({
+            controllingTagId: order.controllingTagId,
+            controllingTagSource: order.controllingTagSource,
+            controllingTagResolvedAt: order.controllingTagResolvedAt,
+          }),
           initiationSource: order.initiationSource,
           finalDisposition: order.finalDisposition,
           reportedFault: order.reportedFault,

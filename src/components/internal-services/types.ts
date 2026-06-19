@@ -43,6 +43,10 @@ export type InternalServiceOrderDetail = {
   serviceType: string;
   priority: string;
   assignedTechnicianId: string | null;
+  controllingTagCode: string | null;
+  controllingTagSource: string;
+  controllingTagResolvedAt: string | null;
+  controllingTagReady: boolean;
   initiationSource: string;
   finalDisposition: string | null;
   reportedFault: string | null;

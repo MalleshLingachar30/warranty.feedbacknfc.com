@@ -89,6 +89,8 @@ export default async function DepotInternalServicesInwardPage({
       />
       <InwardReceiptClient
         submitUrl="/api/service-center/internal-services"
+        scanUrl="/api/service-center/internal-services/scan"
+        affixUrl="/api/service-center/internal-services/scan"
         orderBaseHref="/dashboard/internal-services/orders"
         prefillBaseHref="/dashboard/internal-services/inward"
         organizationContextLabel="this depot / service-center network"
