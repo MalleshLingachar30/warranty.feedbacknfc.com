@@ -68,3 +68,53 @@ export async function POST(
 
   return NextResponse.redirect(redirectUrl, { status: 303 });
 }
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { id } = await context.params;
+  const detailPath = `/dashboard/internal-services/orders/${id}`;
+  const redirectUrl = new URL(detailPath, request.url);
+
+  try {
+    const { organizationId, dbUserId } = await requireServiceCenterContext();
+    const action = request.nextUrl.searchParams.get("action") ?? undefined;
+
+    if (!dbUserId) {
+      throw new InternalServiceOrderActionError(
+        "Service-center user is not linked to a local user record.",
+        400,
+      );
+    }
+
+    if (!id) {
+      throw new InternalServiceOrderActionError(
+        "Internal-service order id is required.",
+        400,
+      );
+    }
+
+    const update = normalizeInternalServiceOrderUpdateInput({
+      action,
+    } satisfies UpdateInternalServiceOrderRequest);
+
+    await updateInternalServiceOrderForDepot({
+      organizationId,
+      dbUserId,
+      orderId: id,
+      update,
+    });
+
+    redirectUrl.searchParams.set("updated", update.action);
+  } catch (error) {
+    const message =
+      error instanceof InternalServiceOrderActionError
+        ? error.message
+        : "Unable to update the internal-service order.";
+
+    redirectUrl.searchParams.set("error", message);
+  }
+
+  return NextResponse.redirect(redirectUrl, { status: 303 });
+}

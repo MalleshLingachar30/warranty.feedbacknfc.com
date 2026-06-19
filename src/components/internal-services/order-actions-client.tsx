@@ -1,7 +1,5 @@
 "use client";
 
-import { useState, useTransition } from "react";
-
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -173,34 +171,8 @@ export function InternalServiceOrderActionsClient({
   noticeAction,
   noticeError,
 }: InternalServiceOrderActionsClientProps) {
-  const [workflowError, setWorkflowError] = useState<string | null>(null);
-  const [pendingWorkflowAction, setPendingWorkflowAction] = useState<string | null>(null);
-  const [isWorkflowPending, startWorkflowTransition] = useTransition();
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
-
-  const handleWorkflowAction = (action: string) => {
-    setWorkflowError(null);
-    setPendingWorkflowAction(action);
-
-    startWorkflowTransition(async () => {
-      try {
-        const formData = new FormData();
-        formData.set("action", action);
-
-        const response = await fetch(actionPath, {
-          method: "POST",
-          body: formData,
-          redirect: "follow",
-        });
-
-        window.location.assign(response.url || actionPath);
-      } catch (error) {
-        setWorkflowError(error instanceof Error ? error.message : "Unable to submit depot action.");
-        setPendingWorkflowAction(null);
-      }
-    });
-  };
 
   return (
     <Card className="border-slate-200">
@@ -215,12 +187,6 @@ export function InternalServiceOrderActionsClient({
         {noticeError ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             {noticeError}
-          </div>
-        ) : null}
-
-        {workflowError ? (
-          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            {workflowError}
           </div>
         ) : null}
 
@@ -351,17 +317,13 @@ export function InternalServiceOrderActionsClient({
             {workflowButtons
               .filter((button) => button.action !== "complete_disposition")
               .map((button) => (
-                <button
+                <a
                   key={button.action}
-                  type="button"
-                  disabled={isWorkflowPending}
-                  onClick={() => handleWorkflowAction(button.action)}
+                  href={`${actionPath}?action=${encodeURIComponent(button.action)}`}
                   className={cn(buttonVariants({ variant: button.variant }))}
                 >
-                  {isWorkflowPending && pendingWorkflowAction === button.action
-                    ? `${button.label}...`
-                    : button.label}
-                </button>
+                  {button.label}
+                </a>
               ))}
           </div>
 
