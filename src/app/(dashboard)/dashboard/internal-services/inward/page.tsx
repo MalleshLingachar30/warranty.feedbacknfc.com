@@ -88,6 +88,7 @@ export default async function DepotInternalServicesInwardPage({
         description="Receive a faulty unit into depot inventory and create an Internal Service Order separate from field-service tickets."
       />
       <InwardReceiptClient
+        key={`${prefilledAssetReference ?? "none"}:${serviceCenters.length === 1 ? serviceCenters[0]?.id ?? "none" : "multi"}`}
         submitUrl="/api/service-center/internal-services"
         scanUrl="/api/service-center/internal-services/scan"
         affixUrl="/api/service-center/internal-services/scan"

@@ -88,6 +88,7 @@ export default async function ManufacturerInternalServicesInwardPage({
         description="Receive a faulty item into Internal Services and create a depot work order without opening a warranty ticket."
       />
       <InwardReceiptClient
+        key={prefilledAssetReference ?? "none"}
         submitUrl="/api/manufacturer/internal-services"
         scanUrl="/api/manufacturer/internal-services/scan"
         affixUrl="/api/manufacturer/internal-services/scan"

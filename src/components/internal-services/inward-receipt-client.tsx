@@ -161,13 +161,6 @@ export function InwardReceiptClient({
     Boolean(scanContext?.controllingTagReady);
 
   useEffect(() => {
-    setAssetReference(defaultAssetReference ?? "");
-    setScanContext(null);
-    setAutoResolveSeed(defaultAssetReference ?? null);
-    setError(null);
-  }, [defaultAssetReference]);
-
-  useEffect(() => {
     if (!autoResolveSeed || autoResolveSeed !== assetReference.trim()) {
       return;
     }

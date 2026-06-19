@@ -355,7 +355,7 @@ export async function resolveInternalServiceAssetContextByReference(
     matchedTag: null,
     controllingTag,
     referenceSource,
-    controllingTagSource: controllingTag ? "existing_tag" : "dashboard_v1",
+    controllingTagSource: controllingTag ? "existing_tag" : "new_affixed_label",
     controllingTagResolvedAt: controllingTag ? new Date() : null,
   };
 }
