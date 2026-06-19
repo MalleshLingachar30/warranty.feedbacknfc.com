@@ -1,6 +1,6 @@
 import { formatInternalServiceDisposition } from "@/lib/internal-services";
 
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 type TechnicianOption = {
   id: string;
@@ -146,6 +147,7 @@ export function InternalServiceOrderActionsClient({
 }: InternalServiceOrderActionsClientProps) {
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
+  const formId = `depot-order-action-form-${orderId}`;
 
   return (
     <Card className="border-slate-200">
@@ -175,7 +177,7 @@ export function InternalServiceOrderActionsClient({
           depend on client-side PATCH calls.
         </div>
 
-        <form method="post" action={actionPath} className="space-y-5">
+        <form id={formId} method="post" action={actionPath} className="space-y-5">
           <input type="hidden" name="orderId" value={orderId} />
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -262,22 +264,41 @@ export function InternalServiceOrderActionsClient({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button type="submit" name="action" value="save_notes" variant="outline">
+            <button
+              type="submit"
+              name="action"
+              value="save_notes"
+              form={formId}
+              formAction={actionPath}
+              formMethod="post"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
               Save Notes
-            </Button>
-            <Button type="submit" name="action" value="assign_engineer" variant="outline">
+            </button>
+            <button
+              type="submit"
+              name="action"
+              value="assign_engineer"
+              form={formId}
+              formAction={actionPath}
+              formMethod="post"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
               Save Assignment
-            </Button>
+            </button>
             {workflowButtons.map((button) => (
-              <Button
+              <button
                 key={button.action}
                 type="submit"
                 name="action"
                 value={button.action}
-                variant={button.variant ?? "default"}
+                form={formId}
+                formAction={actionPath}
+                formMethod="post"
+                className={cn(buttonVariants({ variant: button.variant ?? "default" }))}
               >
                 {button.label}
-              </Button>
+              </button>
             ))}
           </div>
 
