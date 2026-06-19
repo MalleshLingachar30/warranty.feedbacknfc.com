@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { Camera } from "lucide-react";
 
+import { MobileCodeScannerDialog } from "@/components/scanning/mobile-code-scanner-dialog";
+import type { MobileCodeScannerResult } from "@/lib/mobile-code-scanner";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -218,6 +221,8 @@ export function InternalServiceOrderActionsClient({
   const [selectedDisposition, setSelectedDisposition] = useState(
     currentFinalDisposition ?? "returned_to_stock",
   );
+  const [tracedPartReference, setTracedPartReference] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
   const benchExecutionLocked =
     Boolean(benchStationLockedReason) ||
     (benchScanRequired && !benchScanVerified);
@@ -225,6 +230,9 @@ export function InternalServiceOrderActionsClient({
     status === "completed" || status === "closed" || benchExecutionLocked;
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
+  const handleTracedPartDetected = (scanResult: MobileCodeScannerResult) => {
+    setTracedPartReference(scanResult.value);
+  };
 
   return (
     <Card className="border-slate-200">
@@ -394,12 +402,37 @@ export function InternalServiceOrderActionsClient({
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">Tracked asset / tag reference</label>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm font-medium text-slate-900">
+                    Tracked asset / tag reference
+                  </label>
+                  <button
+                    type="button"
+                    className={cn(
+                      buttonVariants({ variant: "outline" }),
+                      "h-9 px-3 text-xs",
+                    )}
+                    disabled={partUsageLocked}
+                    onClick={() => setScannerOpen(true)}
+                  >
+                    <Camera className="mr-1.5 size-3.5" />
+                    Scan with camera
+                  </button>
+                </div>
                 <Input
                   name="partReference"
+                  value={tracedPartReference}
+                  onChange={(event) => setTracedPartReference(event.target.value)}
                   disabled={partUsageLocked}
                   placeholder="Required: asset code, serial, or Data Matrix / tag code"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
+                <p className="text-xs text-slate-500">
+                  Scan the spare&apos;s Data Matrix or QR label with the PWA camera,
+                  or type the asset code, serial, or tag manually.
+                </p>
               </div>
             </div>
 
@@ -428,6 +461,16 @@ export function InternalServiceOrderActionsClient({
               />
             )}
           </form>
+
+          <MobileCodeScannerDialog
+            open={scannerOpen}
+            onOpenChange={setScannerOpen}
+            onDetected={handleTracedPartDetected}
+            title="Scan traced spare with camera"
+            description="Use the phone camera to read the spare's QR or Data Matrix label and attach that traced part to this internal-service order."
+            initialManualValue={tracedPartReference}
+            manualLabel="If the spare label cannot be decoded from the camera, type or paste the traced spare value and continue with the same internal repair flow."
+          />
 
           <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-amber-200 bg-amber-50/60 p-4">
             <HiddenStationContext
