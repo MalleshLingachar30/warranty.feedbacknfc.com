@@ -29,6 +29,10 @@ export type InternalServicePartUsageItem = {
   usageType: string;
   usedAssetCode: string | null;
   usedTagCode: string | null;
+  partName: string | null;
+  partNumber: string | null;
+  note: string | null;
+  traced: boolean;
   linkedAt: string;
 };
 

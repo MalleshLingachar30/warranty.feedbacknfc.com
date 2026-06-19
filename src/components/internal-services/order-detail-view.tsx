@@ -235,9 +235,19 @@ export function InternalServiceOrderDetailView({
                   <p className="font-medium text-slate-900">
                     {usage.usageType.replace(/_/g, " ")}
                   </p>
+                  <p className="mt-1">
+                    {usage.partName ?? "Unnamed part"}
+                    {usage.partNumber ? ` · ${usage.partNumber}` : ""}
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">
                     Asset: {usage.usedAssetCode ?? "-"} · Tag: {usage.usedTagCode ?? "-"}
                   </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Tracking: {usage.traced ? "traced asset / tag" : "manual repair entry"}
+                  </p>
+                  {usage.note ? (
+                    <p className="mt-1 text-xs text-slate-600">{usage.note}</p>
+                  ) : null}
                   <p className="mt-1 text-xs text-slate-500">
                     Linked at {formatDateTime(usage.linkedAt)}
                   </p>

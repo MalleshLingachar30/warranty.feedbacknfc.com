@@ -1,6 +1,11 @@
-import { InternalServiceDisposition, Prisma } from "@prisma/client";
+import {
+  InternalServiceDisposition,
+  PartUsageType,
+  Prisma,
+} from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { resolveInternalServiceTrackedPartByReference } from "@/lib/internal-services";
 
 export class InternalServiceOrderActionError extends Error {
   statusCode: number;
@@ -14,6 +19,7 @@ export class InternalServiceOrderActionError extends Error {
 
 export type InternalServiceAction =
   | "save_notes"
+  | "add_part_usage"
   | "assign_engineer"
   | "mark_triaged"
   | "start_diagnosis"
@@ -32,6 +38,19 @@ export type UpdateInternalServiceOrderRequest = {
   diagnosisNotes?: unknown;
   resolutionNotes?: unknown;
   finalDisposition?: unknown;
+  partUsageType?: unknown;
+  partReference?: unknown;
+  partName?: unknown;
+  partNumber?: unknown;
+  partNote?: unknown;
+};
+
+type NormalizedPartUsageInput = {
+  usageType: PartUsageType;
+  partReference: string | null;
+  partName: string | null;
+  partNumber: string | null;
+  partNote: string | null;
 };
 
 type StatusTransition = {
@@ -56,6 +75,7 @@ function parseAction(value: unknown): InternalServiceAction {
 
   switch (action) {
     case "save_notes":
+    case "add_part_usage":
     case "assign_engineer":
     case "mark_triaged":
     case "start_diagnosis":
@@ -70,6 +90,56 @@ function parseAction(value: unknown): InternalServiceAction {
     default:
       throw new InternalServiceOrderActionError("Unsupported internal-service action.", 400);
   }
+}
+
+function parsePartUsageType(value: unknown) {
+  const usageType = asOptionalString(value);
+  if (!usageType) {
+    return null;
+  }
+
+  if (!(usageType in PartUsageType)) {
+    throw new InternalServiceOrderActionError(
+      "Unsupported internal-service part usage type.",
+      400,
+    );
+  }
+
+  return usageType as PartUsageType;
+}
+
+function normalizePartUsageInput(body: UpdateInternalServiceOrderRequest): NormalizedPartUsageInput | null {
+  const usageType = parsePartUsageType(body.partUsageType);
+  const partReference = asOptionalString(body.partReference);
+  const partName = asOptionalString(body.partName);
+  const partNumber = asOptionalString(body.partNumber);
+  const partNote = asOptionalString(body.partNote);
+
+  if (!usageType && !partReference && !partName && !partNumber && !partNote) {
+    return null;
+  }
+
+  if (!usageType) {
+    throw new InternalServiceOrderActionError(
+      "Select a part usage type before adding internal repair part usage.",
+      400,
+    );
+  }
+
+  if (!partReference && !partName && !partNumber) {
+    throw new InternalServiceOrderActionError(
+      "Provide a tracked part reference or at least a part name / part number.",
+      400,
+    );
+  }
+
+  return {
+    usageType,
+    partReference,
+    partName,
+    partNumber,
+    partNote,
+  };
 }
 
 function parseDisposition(value: unknown) {
@@ -96,6 +166,7 @@ function buildTransition(
 ): StatusTransition | null {
   switch (action) {
     case "save_notes":
+    case "add_part_usage":
     case "assign_engineer":
       return null;
     case "mark_triaged":
@@ -310,6 +381,7 @@ function requireAssignedTechnician(
     "fail_qc",
     "pass_qc",
     "complete_disposition",
+    "add_part_usage",
   ];
 
   if (actionsRequiringAssignment.includes(action) && !assignedTechnicianId) {
@@ -330,6 +402,7 @@ export function normalizeInternalServiceOrderUpdateInput(
     diagnosisNotes: asOptionalString(body.diagnosisNotes),
     resolutionNotes: asOptionalString(body.resolutionNotes),
     finalDisposition: parseDisposition(body.finalDisposition),
+    partUsage: normalizePartUsageInput(body),
   };
 }
 
@@ -351,6 +424,7 @@ export async function updateInternalServiceOrderForDepot(input: {
       orderNumber: true,
       status: true,
       assetId: true,
+      manufacturerOrgId: true,
       assignedTechnicianId: true,
       finalDisposition: true,
     },
@@ -412,6 +486,15 @@ export async function updateInternalServiceOrderForDepot(input: {
   );
 
   const updated = await db.$transaction(async (tx) => {
+    const resolvedTrackedPart =
+      input.update.partUsage?.partReference
+        ? await resolveInternalServiceTrackedPartByReference(
+            tx,
+            input.update.partUsage.partReference,
+            { manufacturerOrgId: order.manufacturerOrgId },
+          )
+        : null;
+
     const assignedTechnicianPatch: Prisma.InternalServiceOrderUpdateInput["assignedTechnician"] =
       input.update.action === "assign_engineer"
         ? input.update.assignedTechnicianId
@@ -471,11 +554,65 @@ export async function updateInternalServiceOrderForDepot(input: {
       });
     }
 
-    const eventDescription =
-      transition?.eventDescription ??
-      (input.update.action === "assign_engineer"
-        ? `Engineer assignment updated to ${technician?.name ?? "unassigned"}.`
-        : "Internal-service notes updated.");
+    if (input.update.action === "add_part_usage" && input.update.partUsage) {
+      await tx.jobPartUsage.create({
+        data: {
+          internalServiceOrderId: order.id,
+          mainAssetId: order.assetId,
+          usedAssetId: resolvedTrackedPart?.asset.id ?? null,
+          usedTagId: resolvedTrackedPart?.tag?.id ?? null,
+          usageType: input.update.partUsage.usageType,
+          quantity: new Prisma.Decimal(1),
+          linkedByUserId: input.dbUserId,
+          linkedAt: now,
+          metadata: {
+            assetReference:
+              input.update.partUsage.partReference ??
+              resolvedTrackedPart?.asset.publicCode ??
+              null,
+            tagCode: resolvedTrackedPart?.tag?.publicCode ?? null,
+            partName:
+              input.update.partUsage.partName ??
+              resolvedTrackedPart?.asset.productModel.name ??
+              null,
+            partNumber:
+              input.update.partUsage.partNumber ??
+              resolvedTrackedPart?.asset.productModel.modelNumber ??
+              null,
+            note: input.update.partUsage.partNote,
+            traced: Boolean(resolvedTrackedPart),
+          } satisfies Prisma.InputJsonValue,
+        },
+      });
+
+      if (
+        resolvedTrackedPart?.asset.id &&
+        (input.update.partUsage.usageType === "installed" ||
+          input.update.partUsage.usageType === "consumed")
+      ) {
+        await tx.assetIdentity.update({
+          where: {
+            id: resolvedTrackedPart.asset.id,
+          },
+          data: {
+            lifecycleState: "consumed",
+          },
+        });
+      }
+    }
+
+    const eventDescription = transition?.eventDescription
+      ?? (input.update.action === "add_part_usage"
+        ? `Part usage recorded as ${input.update.partUsage?.usageType.replace(/_/g, " ")}${
+            input.update.partUsage?.partName
+              ? ` for ${input.update.partUsage.partName}`
+              : input.update.partUsage?.partReference
+                ? ` using ${input.update.partUsage.partReference}`
+                : ""
+          }.`
+        : input.update.action === "assign_engineer"
+          ? `Engineer assignment updated to ${technician?.name ?? "unassigned"}.`
+          : "Internal-service notes updated.");
 
     await tx.internalServiceTimeline.create({
       data: {
@@ -494,6 +631,11 @@ export async function updateInternalServiceOrderForDepot(input: {
           diagnosisNotes: input.update.diagnosisNotes,
           resolutionNotes: input.update.resolutionNotes,
           reportedFault: input.update.reportedFault,
+          partUsageType: input.update.partUsage?.usageType ?? null,
+          partReference: input.update.partUsage?.partReference ?? null,
+          partName: input.update.partUsage?.partName ?? null,
+          partNumber: input.update.partUsage?.partNumber ?? null,
+          partNote: input.update.partUsage?.partNote ?? null,
         } as Prisma.InputJsonValue,
       },
     });

@@ -131,3 +131,104 @@ export async function resolveInternalServiceAssetByReference(
     },
   });
 }
+
+export async function resolveInternalServiceTrackedPartByReference(
+  tx: Prisma.TransactionClient,
+  reference: string,
+  options?: {
+    manufacturerOrgId?: string | null;
+  },
+) {
+  const normalized = reference.trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const manufacturerOrgId = options?.manufacturerOrgId ?? null;
+
+  const tagMatch = await tx.assetTag.findFirst({
+    where: {
+      publicCode: {
+        equals: normalized,
+        mode: "insensitive",
+      },
+      asset: manufacturerOrgId
+        ? {
+            organizationId: manufacturerOrgId,
+          }
+        : undefined,
+    },
+    select: {
+      id: true,
+      publicCode: true,
+      asset: {
+        select: {
+          id: true,
+          publicCode: true,
+          serialNumber: true,
+          productClass: true,
+          lifecycleState: true,
+          productModel: {
+            select: {
+              name: true,
+              modelNumber: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (tagMatch) {
+    return {
+      asset: tagMatch.asset,
+      tag: {
+        id: tagMatch.id,
+        publicCode: tagMatch.publicCode,
+      },
+    };
+  }
+
+  const assetMatch = await tx.assetIdentity.findFirst({
+    where: {
+      OR: [
+        {
+          publicCode: {
+            equals: normalized,
+            mode: "insensitive",
+          },
+        },
+        {
+          serialNumber: {
+            equals: normalized,
+            mode: "insensitive",
+          },
+        },
+      ],
+      organizationId: manufacturerOrgId ?? undefined,
+    },
+    select: {
+      id: true,
+      publicCode: true,
+      serialNumber: true,
+      productClass: true,
+      lifecycleState: true,
+      productModel: {
+        select: {
+          name: true,
+          modelNumber: true,
+        },
+      },
+    },
+  });
+
+  if (!assetMatch) {
+    return null;
+  }
+
+  return {
+    asset: assetMatch,
+    tag: null,
+  };
+}

@@ -47,6 +47,11 @@ export async function POST(
       diagnosisNotes: asFormString(formData.get("diagnosisNotes")),
       resolutionNotes: asFormString(formData.get("resolutionNotes")),
       finalDisposition: asFormString(formData.get("finalDisposition")),
+      partUsageType: asFormString(formData.get("partUsageType")),
+      partReference: asFormString(formData.get("partReference")),
+      partName: asFormString(formData.get("partName")),
+      partNumber: asFormString(formData.get("partNumber")),
+      partNote: asFormString(formData.get("partNote")),
     } satisfies UpdateInternalServiceOrderRequest);
 
     await updateInternalServiceOrderForDepot({

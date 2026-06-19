@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { formatInternalServiceDisposition } from "@/lib/internal-services";
 import { cn } from "@/lib/utils";
@@ -176,6 +177,7 @@ export function InternalServiceOrderActionsClient({
   const [selectedDisposition, setSelectedDisposition] = useState(
     currentFinalDisposition ?? "returned_to_stock",
   );
+  const partUsageLocked = status === "completed" || status === "closed";
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
 
@@ -285,6 +287,81 @@ export function InternalServiceOrderActionsClient({
         </div>
 
         <div className="space-y-3 rounded-lg border border-slate-200 p-4">
+          <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-900">Engineer part usage</p>
+              <p className="text-xs text-slate-500">
+                Capture traced or manual part usage during diagnosis and repair without mixing it into field-service part flows.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Usage type</label>
+                <select
+                  name="partUsageType"
+                  disabled={partUsageLocked}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                >
+                  <option value="installed">installed</option>
+                  <option value="removed">removed</option>
+                  <option value="consumed">consumed</option>
+                  <option value="returned_unused">returned unused</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Tracked asset / tag reference</label>
+                <Input
+                  name="partReference"
+                  disabled={partUsageLocked}
+                  placeholder="Asset code, serial, or Data Matrix / tag code"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Part name</label>
+                <Input
+                  name="partName"
+                  disabled={partUsageLocked}
+                  placeholder="Cooling fan, display board, battery pack"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Part number</label>
+                <Input
+                  name="partNumber"
+                  disabled={partUsageLocked}
+                  placeholder="Optional manual part number"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900">Repair note</label>
+              <Textarea
+                name="partNote"
+                disabled={partUsageLocked}
+                rows={3}
+                placeholder="Why this part was used, removed, or consumed during internal repair."
+              />
+            </div>
+
+            {partUsageLocked ? (
+              <p className="text-xs text-slate-500">
+                Part usage is locked once the order is completed or closed.
+              </p>
+            ) : (
+              <SubmitControl
+                actionPath={actionPath}
+                action="add_part_usage"
+                label="Add Part Usage"
+                variant="outline"
+              />
+            )}
+          </form>
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-900">
               Final disposition

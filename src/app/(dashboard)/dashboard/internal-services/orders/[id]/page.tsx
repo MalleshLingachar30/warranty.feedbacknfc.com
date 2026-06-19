@@ -11,6 +11,29 @@ interface DepotInternalServiceOrderDetailPageProps {
   searchParams: Promise<{ updated?: string | string[]; error?: string | string[] }>;
 }
 
+function metadataString(
+  metadata: unknown,
+  key: string,
+) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function metadataBoolean(
+  metadata: unknown,
+  key: string,
+) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+
+  return (metadata as Record<string, unknown>)[key] === true;
+}
+
 export default async function DepotInternalServiceOrderDetailPage({
   params,
   searchParams,
@@ -121,6 +144,7 @@ export default async function DepotInternalServiceOrderDetailPage({
           id: true,
           usageType: true,
           linkedAt: true,
+          metadata: true,
           usedAsset: {
             select: {
               publicCode: true,
@@ -218,6 +242,10 @@ export default async function DepotInternalServiceOrderDetailPage({
             usageType: usage.usageType,
             usedAssetCode: usage.usedAsset?.publicCode ?? null,
             usedTagCode: usage.usedTag?.publicCode ?? null,
+            partName: metadataString(usage.metadata, "partName"),
+            partNumber: metadataString(usage.metadata, "partNumber"),
+            note: metadataString(usage.metadata, "note"),
+            traced: metadataBoolean(usage.metadata, "traced"),
             linkedAt: usage.linkedAt.toISOString(),
           })),
         }}
