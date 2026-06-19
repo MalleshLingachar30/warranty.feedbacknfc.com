@@ -143,15 +143,17 @@ function SubmitControl({
   variant?: "default" | "outline";
 }) {
   return (
-    <button
-      type="submit"
-      className={cn(buttonVariants({ variant }))}
-      formAction={actionPath}
-      formMethod="post"
-    >
-      {label}
+    <>
       <input type="hidden" name="action" value={action} />
-    </button>
+      <button
+        type="submit"
+        className={cn(buttonVariants({ variant }))}
+        formAction={actionPath}
+        formMethod="post"
+      >
+        {label}
+      </button>
+    </>
   );
 }
 
