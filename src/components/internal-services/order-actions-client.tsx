@@ -1,5 +1,3 @@
-import { formatInternalServiceDisposition } from "@/lib/internal-services";
-
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -9,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { formatInternalServiceDisposition } from "@/lib/internal-services";
 import { cn } from "@/lib/utils";
 
 type TechnicianOption = {
@@ -52,7 +51,7 @@ function nextStepLabel(status: string) {
     case "inward_received":
       return "Mark Triaged";
     case "awaiting_triage":
-      return "Start Diagnosis";
+      return "Save engineer, then Start Diagnosis";
     case "under_diagnosis":
       return "Await Parts or Start Repair";
     case "awaiting_parts":
@@ -64,7 +63,7 @@ function nextStepLabel(status: string) {
     case "qa_failed":
       return "Restart Diagnosis";
     case "ready_for_disposition":
-      return "Complete Disposition";
+      return "Select disposition, then Complete Disposition";
     case "completed":
       return "Close Order";
     default:
@@ -132,8 +131,31 @@ function formatActionNotice(action: string | null | undefined) {
   }
 }
 
+function SubmitControl({
+  actionPath,
+  action,
+  label,
+  variant = "default",
+}: {
+  actionPath: string;
+  action: string;
+  label: string;
+  variant?: "default" | "outline";
+}) {
+  return (
+    <button
+      type="submit"
+      className={cn(buttonVariants({ variant }))}
+      formAction={actionPath}
+      formMethod="post"
+    >
+      {label}
+      <input type="hidden" name="action" value={action} />
+    </button>
+  );
+}
+
 export function InternalServiceOrderActionsClient({
-  orderId,
   actionPath,
   status,
   currentAssignedTechnicianId,
@@ -147,7 +169,6 @@ export function InternalServiceOrderActionsClient({
 }: InternalServiceOrderActionsClientProps) {
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
-  const formId = `depot-order-action-form-${orderId}`;
 
   return (
     <Card className="border-slate-200">
@@ -172,15 +193,13 @@ export function InternalServiceOrderActionsClient({
         ) : null}
 
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          Every action here saves the current engineer and notes together with the
-          workflow transition. This is a native submit path, so depot updates do not
-          depend on client-side PATCH calls.
+          Assignment, notes, and status transitions are intentionally separated.
+          Save the engineer first, then advance the depot workflow. This avoids draft
+          form state getting mixed into lifecycle transitions.
         </div>
 
-        <form id={formId} method="post" action={actionPath} className="space-y-5">
-          <input type="hidden" name="orderId" value={orderId} />
-
-          <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+          <form method="post" action={actionPath} className="space-y-3 rounded-lg border border-slate-200 p-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">
                 Assigned engineer
@@ -198,117 +217,120 @@ export function InternalServiceOrderActionsClient({
                 ))}
               </select>
               <p className="text-xs text-slate-500">
-                Diagnosis, repair, QC, and disposition actions require an assigned
-                engineer. Selecting one here and using the next action is enough.
+                Save this first before diagnosis, repair, QC, or disposition actions.
               </p>
             </div>
+            <SubmitControl
+              actionPath={actionPath}
+              action="assign_engineer"
+              label="Save Assignment"
+              variant="outline"
+            />
+          </form>
 
+          <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-slate-200 p-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">
-                Final disposition
+                Reported fault / inward brief
               </label>
-              <select
-                name="finalDisposition"
-                defaultValue={currentFinalDisposition ?? "returned_to_stock"}
-                disabled={status !== "ready_for_disposition"}
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
-              >
-                {DISPOSITION_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {formatInternalServiceDisposition(option)}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500">
-                Enabled once QC passes and the depot is ready to decide stock / return
-                outcome.
-              </p>
+              <Textarea
+                name="reportedFault"
+                defaultValue={currentReportedFault}
+                rows={3}
+                placeholder="Describe the incoming issue and receiving observations."
+              />
             </div>
-          </div>
 
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">
+                  Diagnosis notes
+                </label>
+                <Textarea
+                  name="diagnosisNotes"
+                  defaultValue={currentDiagnosisNotes}
+                  rows={5}
+                  placeholder="Bench diagnosis, suspected fault, parts required, root cause."
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">
+                  Resolution notes
+                </label>
+                <Textarea
+                  name="resolutionNotes"
+                  defaultValue={currentResolutionNotes}
+                  rows={5}
+                  placeholder="Repair actions, calibration outcome, readiness for QC or stock."
+                />
+              </div>
+            </div>
+
+            <SubmitControl
+              actionPath={actionPath}
+              action="save_notes"
+              label="Save Notes"
+              variant="outline"
+            />
+          </form>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-slate-200 p-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-900">
-              Reported fault / inward brief
+              Final disposition
             </label>
-            <Textarea
-              name="reportedFault"
-              defaultValue={currentReportedFault}
-              rows={3}
-              placeholder="Describe the incoming issue and receiving observations."
-            />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900">
-                Diagnosis notes
-              </label>
-              <Textarea
-                name="diagnosisNotes"
-                defaultValue={currentDiagnosisNotes}
-                rows={5}
-                placeholder="Bench diagnosis, suspected fault, parts required, root cause."
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900">
-                Resolution notes
-              </label>
-              <Textarea
-                name="resolutionNotes"
-                defaultValue={currentResolutionNotes}
-                rows={5}
-                placeholder="Repair actions, calibration outcome, readiness for QC or stock."
-              />
-            </div>
+            <form method="post" action={actionPath} className="flex flex-col gap-3 lg:flex-row lg:items-end">
+              <div className="flex-1 space-y-2">
+                <select
+                  name="finalDisposition"
+                  defaultValue={currentFinalDisposition ?? "returned_to_stock"}
+                  disabled={status !== "ready_for_disposition"}
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  {DISPOSITION_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {formatInternalServiceDisposition(option)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  Enabled once QC passes and the depot is ready to decide stock / return
+                  outcome.
+                </p>
+              </div>
+              {status === "ready_for_disposition" ? (
+                <SubmitControl
+                  actionPath={actionPath}
+                  action="complete_disposition"
+                  label="Complete Disposition"
+                />
+              ) : null}
+            </form>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button
-              type="submit"
-              name="action"
-              value="save_notes"
-              form={formId}
-              formAction={actionPath}
-              formMethod="post"
-              className={cn(buttonVariants({ variant: "outline" }))}
-            >
-              Save Notes
-            </button>
-            <button
-              type="submit"
-              name="action"
-              value="assign_engineer"
-              form={formId}
-              formAction={actionPath}
-              formMethod="post"
-              className={cn(buttonVariants({ variant: "outline" }))}
-            >
-              Save Assignment
-            </button>
-            {workflowButtons.map((button) => (
-              <button
-                key={button.action}
-                type="submit"
-                name="action"
-                value={button.action}
-                form={formId}
-                formAction={actionPath}
-                formMethod="post"
-                className={cn(buttonVariants({ variant: button.variant ?? "default" }))}
-              >
-                {button.label}
-              </button>
-            ))}
+            {workflowButtons
+              .filter((button) => button.action !== "complete_disposition")
+              .map((button) => (
+                <form key={button.action} method="post" action={actionPath}>
+                  <SubmitControl
+                    actionPath={actionPath}
+                    action={button.action}
+                    label={button.label}
+                    variant={button.variant}
+                  />
+                </form>
+              ))}
           </div>
 
-          {status === "awaiting_triage" && !currentAssignedTechnicianId ? (
+          {status === "awaiting_triage" ? (
             <p className="text-xs text-amber-700">
-              If you are starting diagnosis on this submit, choose the engineer in the
-              same form first.
+              Save the engineer assignment first, then start diagnosis as a separate
+              depot action.
             </p>
           ) : null}
-        </form>
+        </div>
       </CardContent>
     </Card>
   );
