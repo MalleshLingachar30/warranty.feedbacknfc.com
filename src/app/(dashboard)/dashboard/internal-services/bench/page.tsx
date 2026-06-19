@@ -5,6 +5,7 @@ import { ClipboardList, PackageSearch, Wrench, WrenchIcon } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -162,6 +163,13 @@ export default async function DepotInternalServicesBenchPage() {
       <PageHeader
         title="Bench Queue"
         description="Engineer-facing repair bench queue for internal service orders under triage, diagnosis, parts wait, and repair."
+        actions={
+          <Button asChild>
+            <Link href="/dashboard/internal-services/bench/scan">
+              Open Bench Scan
+            </Link>
+          </Button>
+        }
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

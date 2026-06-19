@@ -23,12 +23,19 @@ type TechnicianOption = {
 type InternalServiceOrderActionsClientProps = {
   orderId: string;
   actionPath: string;
+  returnToPath: string;
   status: string;
   currentAssignedTechnicianId: string | null;
   currentFinalDisposition: string | null;
   currentReportedFault: string;
   currentDiagnosisNotes: string;
   currentResolutionNotes: string;
+  benchScanRequired: boolean;
+  benchScanVerified: boolean;
+  benchStationLease: string | null;
+  benchScanTagCode: string | null;
+  benchScanHref: string;
+  benchStationLockedReason?: string | null;
   technicians: TechnicianOption[];
   noticeAction?: string | null;
   noticeError?: string | null;
@@ -142,11 +149,13 @@ function SubmitControl({
   actionPath,
   action,
   label,
+  disabled = false,
   variant = "default",
 }: {
   actionPath: string;
   action: string;
   label: string;
+  disabled?: boolean;
   variant?: "default" | "outline";
 }) {
   return (
@@ -157,6 +166,7 @@ function SubmitControl({
         className={cn(buttonVariants({ variant }))}
         formAction={actionPath}
         formMethod="post"
+        disabled={disabled}
       >
         {label}
       </button>
@@ -164,14 +174,43 @@ function SubmitControl({
   );
 }
 
+function HiddenStationContext({
+  returnToPath,
+  benchScanVerified,
+  benchStationLease,
+}: {
+  returnToPath: string;
+  benchScanVerified: boolean;
+  benchStationLease: string | null;
+}) {
+  return (
+    <>
+      <input type="hidden" name="returnTo" value={returnToPath} />
+      {benchScanVerified && benchStationLease ? (
+        <>
+          <input type="hidden" name="station" value="bench" />
+          <input type="hidden" name="stationLease" value={benchStationLease} />
+        </>
+      ) : null}
+    </>
+  );
+}
+
 export function InternalServiceOrderActionsClient({
   actionPath,
+  returnToPath,
   status,
   currentAssignedTechnicianId,
   currentFinalDisposition,
   currentReportedFault,
   currentDiagnosisNotes,
   currentResolutionNotes,
+  benchScanRequired,
+  benchScanVerified,
+  benchStationLease,
+  benchScanTagCode,
+  benchScanHref,
+  benchStationLockedReason,
   technicians,
   noticeAction,
   noticeError,
@@ -179,7 +218,11 @@ export function InternalServiceOrderActionsClient({
   const [selectedDisposition, setSelectedDisposition] = useState(
     currentFinalDisposition ?? "returned_to_stock",
   );
-  const partUsageLocked = status === "completed" || status === "closed";
+  const benchExecutionLocked =
+    Boolean(benchStationLockedReason) ||
+    (benchScanRequired && !benchScanVerified);
+  const partUsageLocked =
+    status === "completed" || status === "closed" || benchExecutionLocked;
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
 
@@ -211,8 +254,38 @@ export function InternalServiceOrderActionsClient({
           form state getting mixed into lifecycle transitions.
         </div>
 
+        {benchStationLockedReason ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {benchStationLockedReason}
+          </div>
+        ) : null}
+
+        {benchScanRequired ? (
+          benchScanVerified ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              Bench scan verified for controlling tag {benchScanTagCode ?? "-"}.
+              Continue diagnosis, repair, and traced part capture without rescanning on each submit.
+            </div>
+          ) : (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+              Sticker-led bench execution is locked until this unit is opened from Bench Scan.
+              <a
+                href={benchScanHref}
+                className="ml-2 font-medium underline underline-offset-2"
+              >
+                Open Bench Scan
+              </a>
+            </div>
+          )
+        ) : null}
+
         <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <form method="post" action={actionPath} className="space-y-3 rounded-lg border border-slate-200 p-4">
+            <HiddenStationContext
+              returnToPath={returnToPath}
+              benchScanVerified={benchScanVerified}
+              benchStationLease={benchStationLease}
+            />
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">
                 Assigned engineer
@@ -242,6 +315,11 @@ export function InternalServiceOrderActionsClient({
           </form>
 
           <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-slate-200 p-4">
+            <HiddenStationContext
+              returnToPath={returnToPath}
+              benchScanVerified={benchScanVerified}
+              benchStationLease={benchStationLease}
+            />
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">
                 Reported fault / inward brief
@@ -290,6 +368,11 @@ export function InternalServiceOrderActionsClient({
 
         <div className="space-y-3 rounded-lg border border-slate-200 p-4">
           <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-4">
+            <HiddenStationContext
+              returnToPath={returnToPath}
+              benchScanVerified={benchScanVerified}
+              benchStationLease={benchStationLease}
+            />
             <div className="space-y-1">
               <p className="text-sm font-medium text-slate-900">Traced repair spares and kits</p>
               <p className="text-xs text-slate-500">
@@ -332,7 +415,9 @@ export function InternalServiceOrderActionsClient({
 
             {partUsageLocked ? (
               <p className="text-xs text-slate-500">
-                Traced spare capture is locked once the order is completed or closed.
+                {status === "completed" || status === "closed"
+                  ? "Traced spare capture is locked once the order is completed or closed."
+                  : "Bench scan verification is required before traced spare capture can continue on sticker-led orders."}
               </p>
             ) : (
               <SubmitControl
@@ -345,6 +430,11 @@ export function InternalServiceOrderActionsClient({
           </form>
 
           <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-amber-200 bg-amber-50/60 p-4">
+            <HiddenStationContext
+              returnToPath={returnToPath}
+              benchScanVerified={benchScanVerified}
+              benchStationLease={benchStationLease}
+            />
             <input type="hidden" name="partUsageType" value="removed" />
             <div className="space-y-1">
               <p className="text-sm font-medium text-slate-900">Removed part capture</p>
@@ -394,7 +484,9 @@ export function InternalServiceOrderActionsClient({
 
             {partUsageLocked ? (
               <p className="text-xs text-slate-500">
-                Removed-part capture is locked once the order is completed or closed.
+                {status === "completed" || status === "closed"
+                  ? "Removed-part capture is locked once the order is completed or closed."
+                  : "Bench scan verification is required before removed-part capture can continue on sticker-led orders."}
               </p>
             ) : (
               <SubmitControl
@@ -411,6 +503,11 @@ export function InternalServiceOrderActionsClient({
               Final disposition
             </label>
             <form method="post" action={actionPath} className="flex flex-col gap-3 lg:flex-row lg:items-end">
+              <HiddenStationContext
+                returnToPath={returnToPath}
+                benchScanVerified={benchScanVerified}
+                benchStationLease={benchStationLease}
+              />
               <div className="flex-1 space-y-2">
                 <select
                   name="finalDisposition"
@@ -432,7 +529,7 @@ export function InternalServiceOrderActionsClient({
               </div>
               {status === "ready_for_disposition" ? (
                 <a
-                  href={`${actionPath}?action=complete_disposition&finalDisposition=${encodeURIComponent(selectedDisposition)}`}
+                  href={`${actionPath}?action=complete_disposition&finalDisposition=${encodeURIComponent(selectedDisposition)}&returnTo=${encodeURIComponent(returnToPath)}${benchScanVerified && benchStationLease ? `&station=bench&stationLease=${encodeURIComponent(benchStationLease)}` : ""}`}
                   className={cn(buttonVariants({ variant: "default" }))}
                 >
                   Complete Disposition
@@ -442,17 +539,29 @@ export function InternalServiceOrderActionsClient({
           </div>
 
           <div className="flex flex-wrap gap-3">
-            {workflowButtons
-              .filter((button) => button.action !== "complete_disposition")
-              .map((button) => (
-                <a
-                  key={button.action}
-                  href={`${actionPath}?action=${encodeURIComponent(button.action)}`}
-                  className={cn(buttonVariants({ variant: button.variant }))}
-                >
-                  {button.label}
-                </a>
-              ))}
+            {benchExecutionLocked ? (
+              <a
+                href={benchScanHref}
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+                )}
+              >
+                Open Bench Scan
+              </a>
+            ) : (
+              workflowButtons
+                .filter((button) => button.action !== "complete_disposition")
+                .map((button) => (
+                  <a
+                    key={button.action}
+                    href={`${actionPath}?action=${encodeURIComponent(button.action)}&returnTo=${encodeURIComponent(returnToPath)}${benchScanVerified && benchStationLease ? `&station=bench&stationLease=${encodeURIComponent(benchStationLease)}` : ""}`}
+                    className={cn(buttonVariants({ variant: button.variant }))}
+                  >
+                    {button.label}
+                  </a>
+                ))
+            )}
           </div>
 
           {status === "awaiting_triage" ? (

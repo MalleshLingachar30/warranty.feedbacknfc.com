@@ -4,12 +4,22 @@ import { InternalServiceOrderActionsClient } from "@/components/internal-service
 import { InternalServiceOrderDetailView } from "@/components/internal-services/order-detail-view";
 import { db } from "@/lib/db";
 import { isInternalServiceControllingTagReady } from "@/lib/internal-services";
+import {
+  isInternalServiceBenchActiveStatus,
+  verifyInternalServiceStationLease,
+} from "@/lib/internal-service-bench";
 
 import { resolveServiceCenterPageContext } from "../../../_lib/service-center-context";
 
 interface DepotInternalServiceOrderDetailPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ updated?: string | string[]; error?: string | string[] }>;
+  searchParams: Promise<{
+    updated?: string | string[];
+    error?: string | string[];
+    station?: string | string[];
+    stationLease?: string | string[];
+    scanNotice?: string | string[];
+  }>;
 }
 
 function metadataString(
@@ -58,6 +68,24 @@ export default async function DepotInternalServiceOrderDetailPage({
       ? query.error
       : Array.isArray(query.error)
         ? query.error[0] ?? null
+        : null;
+  const station =
+    typeof query.station === "string"
+      ? query.station
+      : Array.isArray(query.station)
+        ? query.station[0] ?? null
+        : null;
+  const stationLease =
+    typeof query.stationLease === "string"
+      ? query.stationLease
+      : Array.isArray(query.stationLease)
+        ? query.stationLease[0] ?? null
+        : null;
+  const scanNotice =
+    typeof query.scanNotice === "string"
+      ? query.scanNotice
+      : Array.isArray(query.scanNotice)
+        ? query.scanNotice[0] ?? null
         : null;
 
   const [order, technicians] = await Promise.all([
@@ -186,17 +214,56 @@ export default async function DepotInternalServiceOrderDetailPage({
     notFound();
   }
 
+  const detailPath = `/dashboard/internal-services/orders/${order.id}`;
+  const returnParams = new URLSearchParams();
+  if (station === "bench") {
+    returnParams.set("station", "bench");
+  }
+  if (stationLease) {
+    returnParams.set("stationLease", stationLease);
+  }
+  if (scanNotice) {
+    returnParams.set("scanNotice", scanNotice);
+  }
+  const returnToPath = returnParams.size > 0 ? `${detailPath}?${returnParams}` : detailPath;
+
+  const benchScanRequired =
+    order.controllingTagSource !== "dashboard_v1" &&
+    isInternalServiceBenchActiveStatus(order.status);
+  const benchScanVerified =
+    station === "bench" &&
+    Boolean(stationLease) &&
+    Boolean(order.controllingTag?.publicCode) &&
+    verifyInternalServiceStationLease(stationLease ?? "", {
+      station: "bench",
+      orderId: order.id,
+      controllingTagCode: order.controllingTag?.publicCode ?? "",
+    });
+  const benchStationLockedReason =
+    scanNotice === "wrong_station"
+      ? "This unit is no longer in a bench execution stage. Use the correct station workflow instead of continuing from bench scan."
+      : scanNotice === "closed_order"
+        ? "This internal-service order is already closed. Bench scan opens it in read-only mode only."
+        : null;
+
   return (
     <div className="space-y-6">
       <InternalServiceOrderActionsClient
         orderId={order.id}
         actionPath={`/dashboard/internal-services/orders/${order.id}/action`}
+        returnToPath={returnToPath}
         status={order.status}
         currentAssignedTechnicianId={order.assignedTechnician?.id ?? null}
         currentFinalDisposition={order.finalDisposition}
         currentDiagnosisNotes={order.diagnosisNotes ?? ""}
         currentResolutionNotes={order.resolutionNotes ?? ""}
         currentReportedFault={order.reportedFault ?? ""}
+        benchScanRequired={benchScanRequired}
+        benchScanVerified={benchScanVerified}
+        benchStationLease={benchScanVerified ? stationLease : null}
+        benchScanTagCode={benchScanVerified ? order.controllingTag?.publicCode ?? null : null}
+        benchScanHref="/dashboard/internal-services/bench/scan"
+        benchStationLockedReason={benchStationLockedReason}
         technicians={technicians}
         noticeAction={updated}
         noticeError={error}

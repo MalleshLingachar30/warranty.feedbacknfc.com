@@ -10,6 +10,10 @@ import {
   isInternalServiceControllingTagReady,
   resolveInternalServiceTrackedPartByReference,
 } from "@/lib/internal-services";
+import {
+  isInternalServiceBenchActiveStatus,
+  verifyInternalServiceStationLease,
+} from "@/lib/internal-service-bench";
 
 export class InternalServiceOrderActionError extends Error {
   statusCode: number;
@@ -37,6 +41,8 @@ export type InternalServiceAction =
 
 export type UpdateInternalServiceOrderRequest = {
   action?: unknown;
+  station?: unknown;
+  stationLease?: unknown;
   assignedTechnicianId?: unknown;
   reportedFault?: unknown;
   diagnosisNotes?: unknown;
@@ -410,6 +416,8 @@ export function normalizeInternalServiceOrderUpdateInput(
 ) {
   return {
     action: parseAction(body.action),
+    station: asOptionalString(body.station),
+    stationLease: asOptionalString(body.stationLease),
     assignedTechnicianId: asOptionalString(body.assignedTechnicianId),
     reportedFault: asOptionalString(body.reportedFault),
     diagnosisNotes: asOptionalString(body.diagnosisNotes),
@@ -417,6 +425,33 @@ export function normalizeInternalServiceOrderUpdateInput(
     finalDisposition: parseDisposition(body.finalDisposition),
     partUsage: normalizePartUsageInput(body),
   };
+}
+
+function requiresBenchStationLease(
+  action: InternalServiceAction,
+  order: {
+    status: string;
+    controllingTagSource: string;
+    controllingTagId: string | null;
+  },
+) {
+  if (
+    order.controllingTagSource === "dashboard_v1" ||
+    !order.controllingTagId ||
+    !isInternalServiceBenchActiveStatus(order.status)
+  ) {
+    return false;
+  }
+
+  const leaseRequiredActions: InternalServiceAction[] = [
+    "start_diagnosis",
+    "await_parts",
+    "start_repair",
+    "submit_to_qc",
+    "add_part_usage",
+  ];
+
+  return leaseRequiredActions.includes(action);
 }
 
 export async function updateInternalServiceOrderForDepot(input: {
@@ -440,6 +475,11 @@ export async function updateInternalServiceOrderForDepot(input: {
       controllingTagId: true,
       controllingTagSource: true,
       controllingTagResolvedAt: true,
+      controllingTag: {
+        select: {
+          publicCode: true,
+        },
+      },
       manufacturerOrgId: true,
       assignedTechnicianId: true,
       finalDisposition: true,
@@ -510,6 +550,26 @@ export async function updateInternalServiceOrderForDepot(input: {
       "Sticker-led internal-service orders cannot change lifecycle stage until a controlling tag is resolved.",
       409,
     );
+  }
+
+  if (
+    requiresBenchStationLease(input.update.action, order)
+  ) {
+    if (
+      input.update.station !== "bench" ||
+      !input.update.stationLease ||
+      !order.controllingTag?.publicCode ||
+      !verifyInternalServiceStationLease(input.update.stationLease, {
+        station: "bench",
+        orderId: order.id,
+        controllingTagCode: order.controllingTag.publicCode,
+      })
+    ) {
+      throw new InternalServiceOrderActionError(
+        "Scan the unit from Bench Scan before performing sticker-led bench actions on this order.",
+        409,
+      );
+    }
   }
 
   const now = new Date();

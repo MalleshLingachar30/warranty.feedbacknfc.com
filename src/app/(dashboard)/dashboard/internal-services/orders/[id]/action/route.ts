@@ -58,6 +58,8 @@ export async function POST(
 
     const update = normalizeInternalServiceOrderUpdateInput({
       action: asFormString(formData.get("action")),
+      station: asFormString(formData.get("station")),
+      stationLease: asFormString(formData.get("stationLease")),
       assignedTechnicianId: asFormString(formData.get("assignedTechnicianId")),
       reportedFault: asFormString(formData.get("reportedFault")),
       diagnosisNotes: asFormString(formData.get("diagnosisNotes")),
@@ -126,6 +128,9 @@ export async function GET(
 
     const update = normalizeInternalServiceOrderUpdateInput({
       action,
+      station: request.nextUrl.searchParams.get("station") ?? undefined,
+      stationLease:
+        request.nextUrl.searchParams.get("stationLease") ?? undefined,
       finalDisposition,
     } satisfies UpdateInternalServiceOrderRequest);
 
