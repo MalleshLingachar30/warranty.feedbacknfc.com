@@ -6,8 +6,21 @@ import { db } from "@/lib/db";
 
 import { resolveManufacturerPageContext } from "../../_lib/server-context";
 
-export default async function ManufacturerInternalServicesInwardPage() {
+interface ManufacturerInternalServicesInwardPageProps {
+  searchParams: Promise<{ asset?: string | string[] }>;
+}
+
+export default async function ManufacturerInternalServicesInwardPage({
+  searchParams,
+}: ManufacturerInternalServicesInwardPageProps) {
   const { organizationId, organizationName } = await resolveManufacturerPageContext();
+  const query = await searchParams;
+  const prefilledAssetReference =
+    typeof query.asset === "string"
+      ? query.asset
+      : Array.isArray(query.asset)
+        ? query.asset[0] ?? null
+        : null;
 
   if (!organizationId) {
     return (
@@ -77,6 +90,7 @@ export default async function ManufacturerInternalServicesInwardPage() {
       <InwardReceiptClient
         submitUrl="/api/manufacturer/internal-services"
         orderBaseHref="/dashboard/manufacturer/internal-services/orders"
+        prefillBaseHref="/dashboard/manufacturer/internal-services/inward"
         organizationContextLabel={organizationName ?? "this manufacturer"}
         serviceCenters={serviceCenters.map((center) => ({
           id: center.id,
@@ -91,6 +105,7 @@ export default async function ManufacturerInternalServicesInwardPage() {
           modelNumber: asset.productModel.modelNumber,
           organizationName: asset.organization.name,
         }))}
+        defaultAssetReference={prefilledAssetReference}
       />
     </div>
   );

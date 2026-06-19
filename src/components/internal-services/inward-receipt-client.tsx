@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRightCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,9 +27,11 @@ type ServiceCenterOption = {
 type InwardReceiptClientProps = {
   submitUrl: string;
   orderBaseHref: string;
+  prefillBaseHref: string;
   serviceCenters: ServiceCenterOption[];
   assetSuggestions: AssetSuggestion[];
   defaultServiceCenterId?: string | null;
+  defaultAssetReference?: string | null;
   serviceCenterLocked?: boolean;
   organizationContextLabel: string;
 };
@@ -45,13 +48,15 @@ const fieldClassName =
 export function InwardReceiptClient({
   submitUrl,
   orderBaseHref,
+  prefillBaseHref,
   serviceCenters,
   assetSuggestions,
   defaultServiceCenterId = null,
+  defaultAssetReference = null,
   serviceCenterLocked = false,
   organizationContextLabel,
 }: InwardReceiptClientProps) {
-  const [assetReference, setAssetReference] = useState("");
+  const [assetReference, setAssetReference] = useState(defaultAssetReference ?? "");
   const [serviceCenterId, setServiceCenterId] = useState(defaultServiceCenterId ?? "");
   const [initiationSource, setInitiationSource] = useState("manual_admin");
   const [serviceType, setServiceType] = useState("depot_repair");
@@ -65,6 +70,11 @@ export function InwardReceiptClient({
 
   const recentAssetButtons = useMemo(() => assetSuggestions.slice(0, 6), [assetSuggestions]);
   const isBusy = submissionState !== "idle";
+
+  useEffect(() => {
+    setAssetReference(defaultAssetReference ?? "");
+    setError(null);
+  }, [defaultAssetReference]);
 
   const createOrder = async () => {
     if (!assetReference.trim()) {
@@ -324,7 +334,8 @@ export function InwardReceiptClient({
           <div>
             <h2 className="text-base font-semibold text-slate-900">Recent traceable assets</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Use these to seed inward receipt quickly when the faulty item is already labeled.
+              Use these to prefill inward receipt through a fresh URL state when the
+              faulty item is already labeled.
             </p>
           </div>
           <div className="space-y-3">
@@ -334,12 +345,12 @@ export function InwardReceiptClient({
               </div>
             ) : (
               recentAssetButtons.map((asset) => (
-                <button
+                <Link
                   key={`${asset.publicCode}-${asset.serialNumber ?? "none"}`}
-                  type="button"
-                  onClick={() => setAssetReference(asset.serialNumber ?? asset.publicCode)}
-                  disabled={isBusy}
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50"
+                  href={`${prefillBaseHref}?asset=${encodeURIComponent(
+                    asset.serialNumber ?? asset.publicCode,
+                  )}`}
                 >
                   <div className="font-medium text-slate-900">{asset.modelName}</div>
                   <div className="mt-1 text-xs text-slate-600">
@@ -348,7 +359,7 @@ export function InwardReceiptClient({
                   <div className="mt-1 text-xs text-slate-500">
                     {asset.organizationName ?? "Unknown manufacturer"} · {asset.publicCode}
                   </div>
-                </button>
+                </Link>
               ))
             )}
           </div>

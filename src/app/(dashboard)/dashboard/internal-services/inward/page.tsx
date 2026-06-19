@@ -6,8 +6,21 @@ import { db } from "@/lib/db";
 
 import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
 
-export default async function DepotInternalServicesInwardPage() {
+interface DepotInternalServicesInwardPageProps {
+  searchParams: Promise<{ asset?: string | string[] }>;
+}
+
+export default async function DepotInternalServicesInwardPage({
+  searchParams,
+}: DepotInternalServicesInwardPageProps) {
   const { organizationId } = await resolveServiceCenterPageContext();
+  const query = await searchParams;
+  const prefilledAssetReference =
+    typeof query.asset === "string"
+      ? query.asset
+      : Array.isArray(query.asset)
+        ? query.asset[0] ?? null
+        : null;
 
   if (!organizationId) {
     return (
@@ -77,6 +90,7 @@ export default async function DepotInternalServicesInwardPage() {
       <InwardReceiptClient
         submitUrl="/api/service-center/internal-services"
         orderBaseHref="/dashboard/internal-services/orders"
+        prefillBaseHref="/dashboard/internal-services/inward"
         organizationContextLabel="this depot / service-center network"
         serviceCenters={serviceCenters.map((center) => ({
           id: center.id,
@@ -85,6 +99,7 @@ export default async function DepotInternalServicesInwardPage() {
           organizationName: center.organization.name,
         }))}
         defaultServiceCenterId={serviceCenters.length === 1 ? serviceCenters[0].id : null}
+        defaultAssetReference={prefilledAssetReference}
         serviceCenterLocked={serviceCenters.length === 1}
         assetSuggestions={assetSuggestions.map((asset) => ({
           publicCode: asset.publicCode,

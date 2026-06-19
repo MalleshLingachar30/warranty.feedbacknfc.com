@@ -1,9 +1,4 @@
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { formatInternalServiceDisposition } from "@/lib/internal-services";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +9,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { formatInternalServiceDisposition } from "@/lib/internal-services";
 
 type TechnicianOption = {
   id: string;
@@ -23,19 +17,22 @@ type TechnicianOption = {
 
 type InternalServiceOrderActionsClientProps = {
   orderId: string;
+  actionPath: string;
   status: string;
   currentAssignedTechnicianId: string | null;
+  currentFinalDisposition: string | null;
   currentReportedFault: string;
   currentDiagnosisNotes: string;
   currentResolutionNotes: string;
   technicians: TechnicianOption[];
+  noticeAction?: string | null;
+  noticeError?: string | null;
 };
 
 type WorkflowButton = {
   action: string;
   label: string;
   variant?: "default" | "outline";
-  requiresEngineer?: boolean;
 };
 
 const DISPOSITION_OPTIONS = [
@@ -48,50 +45,6 @@ const DISPOSITION_OPTIONS = [
   "cannibalized",
   "no_fault_found_return",
 ] as const;
-
-const ACTIONS_REQUIRING_ENGINEER = new Set([
-  "start_diagnosis",
-  "await_parts",
-  "start_repair",
-  "submit_to_qc",
-  "fail_qc",
-  "pass_qc",
-  "complete_disposition",
-]);
-
-async function submitDepotAction(
-  orderId: string,
-  payload: Record<string, unknown>,
-) {
-  const response = await fetch(`/api/service-center/internal-services/${orderId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const body = (await response.json().catch(() => ({}))) as {
-    success?: boolean;
-    error?: string;
-    order?: {
-      id: string;
-      status: string;
-      assignedTechnicianId: string | null;
-      finalDisposition: string | null;
-    };
-  };
-
-  if (!response.ok) {
-    throw new Error(body.error ?? "Unable to update internal-service order.");
-  }
-
-  if (!body.order) {
-    throw new Error("Internal-service update did not return the latest order state.");
-  }
-
-  return body.order;
-}
 
 function nextStepLabel(status: string) {
   switch (status) {
@@ -118,169 +71,81 @@ function nextStepLabel(status: string) {
   }
 }
 
+function workflowButtonsForStatus(status: string): WorkflowButton[] {
+  switch (status) {
+    case "inward_received":
+      return [{ action: "mark_triaged", label: "Mark Triaged" }];
+    case "awaiting_triage":
+      return [{ action: "start_diagnosis", label: "Start Diagnosis" }];
+    case "under_diagnosis":
+      return [
+        { action: "await_parts", label: "Await Parts", variant: "outline" },
+        { action: "start_repair", label: "Start Repair" },
+      ];
+    case "awaiting_parts":
+      return [{ action: "start_repair", label: "Resume Repair" }];
+    case "repair_in_progress":
+      return [{ action: "submit_to_qc", label: "Submit To QC" }];
+    case "awaiting_qc":
+      return [
+        { action: "fail_qc", label: "Fail QC", variant: "outline" },
+        { action: "pass_qc", label: "Pass QC" },
+      ];
+    case "qa_failed":
+      return [{ action: "start_diagnosis", label: "Restart Diagnosis" }];
+    case "ready_for_disposition":
+      return [{ action: "complete_disposition", label: "Complete Disposition" }];
+    case "completed":
+      return [{ action: "close_order", label: "Close Order" }];
+    default:
+      return [];
+  }
+}
+
+function formatActionNotice(action: string | null | undefined) {
+  switch (action) {
+    case "save_notes":
+      return "Depot notes saved.";
+    case "assign_engineer":
+      return "Engineer assignment updated.";
+    case "mark_triaged":
+      return "Order marked as triaged and ready for diagnosis.";
+    case "start_diagnosis":
+      return "Diagnosis started.";
+    case "await_parts":
+      return "Order moved to awaiting parts.";
+    case "start_repair":
+      return "Repair is now in progress.";
+    case "submit_to_qc":
+      return "Order submitted to QC.";
+    case "fail_qc":
+      return "QC failure recorded. The order is back in diagnosis.";
+    case "pass_qc":
+      return "QC passed. Final disposition is now required.";
+    case "complete_disposition":
+      return "Final disposition recorded.";
+    case "close_order":
+      return "Internal-service order closed.";
+    default:
+      return null;
+  }
+}
+
 export function InternalServiceOrderActionsClient({
   orderId,
+  actionPath,
   status,
   currentAssignedTechnicianId,
+  currentFinalDisposition,
   currentReportedFault,
   currentDiagnosisNotes,
   currentResolutionNotes,
   technicians,
+  noticeAction,
+  noticeError,
 }: InternalServiceOrderActionsClientProps) {
-  const router = useRouter();
-  const [savedStatus, setSavedStatus] = useState(status);
-  const [savedAssignedTechnicianId, setSavedAssignedTechnicianId] = useState(
-    currentAssignedTechnicianId ?? "",
-  );
-  const [savedReportedFault, setSavedReportedFault] = useState(currentReportedFault);
-  const [savedDiagnosisNotes, setSavedDiagnosisNotes] = useState(currentDiagnosisNotes);
-  const [savedResolutionNotes, setSavedResolutionNotes] = useState(currentResolutionNotes);
-  const [assignedTechnicianId, setAssignedTechnicianId] = useState(
-    currentAssignedTechnicianId ?? "",
-  );
-  const [reportedFault, setReportedFault] = useState(currentReportedFault);
-  const [diagnosisNotes, setDiagnosisNotes] = useState(currentDiagnosisNotes);
-  const [resolutionNotes, setResolutionNotes] = useState(currentResolutionNotes);
-  const [finalDisposition, setFinalDisposition] = useState(
-    "returned_to_stock",
-  );
-  const [pendingAction, setPendingAction] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSavedStatus(status);
-    setSavedAssignedTechnicianId(currentAssignedTechnicianId ?? "");
-    setSavedReportedFault(currentReportedFault);
-    setSavedDiagnosisNotes(currentDiagnosisNotes);
-    setSavedResolutionNotes(currentResolutionNotes);
-    setAssignedTechnicianId(currentAssignedTechnicianId ?? "");
-    setReportedFault(currentReportedFault);
-    setDiagnosisNotes(currentDiagnosisNotes);
-    setResolutionNotes(currentResolutionNotes);
-  }, [
-    currentAssignedTechnicianId,
-    currentDiagnosisNotes,
-    currentReportedFault,
-    currentResolutionNotes,
-    status,
-  ]);
-
-  const assignmentDirty = assignedTechnicianId !== savedAssignedTechnicianId;
-  const notesDirty =
-    reportedFault !== savedReportedFault ||
-    diagnosisNotes !== savedDiagnosisNotes ||
-    resolutionNotes !== savedResolutionNotes;
-  const hasDraftChanges = assignmentDirty || notesDirty;
-  const isPending = pendingAction !== null;
-
-  const workflowButtons = useMemo<WorkflowButton[]>(() => {
-    switch (savedStatus) {
-      case "inward_received":
-        return [{ action: "mark_triaged", label: "Mark Triaged" }];
-      case "awaiting_triage":
-        return [
-          {
-            action: "start_diagnosis",
-            label: "Start Diagnosis",
-            requiresEngineer: true,
-          },
-        ];
-      case "under_diagnosis":
-        return [
-          { action: "await_parts", label: "Await Parts", variant: "outline" as const },
-          { action: "start_repair", label: "Start Repair", requiresEngineer: true },
-        ];
-      case "awaiting_parts":
-        return [{ action: "start_repair", label: "Resume Repair", requiresEngineer: true }];
-      case "repair_in_progress":
-        return [{ action: "submit_to_qc", label: "Submit To QC", requiresEngineer: true }];
-      case "awaiting_qc":
-        return [
-          {
-            action: "fail_qc",
-            label: "Fail QC",
-            variant: "outline" as const,
-            requiresEngineer: true,
-          },
-          { action: "pass_qc", label: "Pass QC", requiresEngineer: true },
-        ];
-      case "qa_failed":
-        return [
-          {
-            action: "start_diagnosis",
-            label: "Restart Diagnosis",
-            requiresEngineer: true,
-          },
-        ];
-      case "ready_for_disposition":
-        return [
-          {
-            action: "complete_disposition",
-            label: "Complete Disposition",
-            requiresEngineer: true,
-          },
-        ];
-      case "completed":
-        return [{ action: "close_order", label: "Close Order" }];
-      default:
-        return [];
-    }
-  }, [savedStatus]);
-
-  const runAction = async (action: string) => {
-    setPendingAction(action);
-    const isWorkflowAction =
-      action !== "save_notes" && action !== "assign_engineer";
-    const toastLabel =
-      action === "assign_engineer"
-        ? assignedTechnicianId
-          ? "Saving engineer assignment…"
-          : "Clearing engineer assignment…"
-        : action === "save_notes"
-          ? "Saving depot notes…"
-          : "Saving depot action…";
-    const toastId = toast.loading(toastLabel);
-
-    try {
-      const nextOrder = await submitDepotAction(orderId, {
-        action,
-        assignedTechnicianId: assignedTechnicianId || undefined,
-        reportedFault,
-        diagnosisNotes,
-        resolutionNotes,
-        finalDisposition:
-          action === "complete_disposition" ? finalDisposition : undefined,
-      });
-
-      setSavedStatus(nextOrder.status);
-      setSavedAssignedTechnicianId(nextOrder.assignedTechnicianId ?? "");
-      setSavedReportedFault(reportedFault);
-      setSavedDiagnosisNotes(diagnosisNotes);
-      setSavedResolutionNotes(resolutionNotes);
-      setAssignedTechnicianId(nextOrder.assignedTechnicianId ?? "");
-      if (nextOrder.finalDisposition) {
-        setFinalDisposition(nextOrder.finalDisposition);
-      }
-
-      toast.success(
-        action === "assign_engineer"
-          ? assignedTechnicianId
-            ? "Engineer assignment saved."
-            : "Engineer assignment cleared."
-          : isWorkflowAction
-            ? "Depot workflow updated."
-            : "Depot notes saved.",
-        { id: toastId },
-      );
-      router.refresh();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to update order.",
-        { id: toastId },
-      );
-    } finally {
-      setPendingAction(null);
-    }
-  };
+  const workflowButtons = workflowButtonsForStatus(status);
+  const successNotice = formatActionNotice(noticeAction);
 
   return (
     <Card className="border-slate-200">
@@ -288,183 +153,141 @@ export function InternalServiceOrderActionsClient({
         <CardTitle className="text-base">Depot execution layer</CardTitle>
         <CardDescription>
           Separate internal bench workflow for assignment, diagnosis, repair, QC,
-          and final disposition. Next step: {nextStepLabel(savedStatus)}.
+          and final disposition. Next step: {nextStepLabel(status)}.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="space-y-3">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            Notes and engineer selection travel with every depot workflow action. Use
-            the save buttons when you want to checkpoint edits without changing status.
+        {noticeError ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            {noticeError}
           </div>
-          {assignmentDirty || notesDirty ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              {assignmentDirty
-                ? "Engineer assignment has changed and is not saved yet. Save it now, or it will be saved with the next depot action."
-                : "You have unsaved depot notes. Save them now, or they will be saved with the next depot action."}
+        ) : null}
+
+        {successNotice ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {successNotice}
+          </div>
+        ) : null}
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          Every action here saves the current engineer and notes together with the
+          workflow transition. This is a native submit path, so depot updates do not
+          depend on client-side PATCH calls.
+        </div>
+
+        <form method="post" action={actionPath} className="space-y-5">
+          <input type="hidden" name="orderId" value={orderId} />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900">
+                Assigned engineer
+              </label>
+              <select
+                name="assignedTechnicianId"
+                defaultValue={currentAssignedTechnicianId ?? ""}
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
+              >
+                <option value="">Unassigned</option>
+                {technicians.map((technician) => (
+                  <option key={technician.id} value={technician.id}>
+                    {technician.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                Diagnosis, repair, QC, and disposition actions require an assigned
+                engineer. Selecting one here and using the next action is enough.
+              </p>
             </div>
-          ) : null}
-        </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-900">
-              Assigned engineer
-            </label>
-            <select
-              value={assignedTechnicianId}
-              onChange={(event) => setAssignedTechnicianId(event.target.value)}
-              disabled={isPending}
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
-            >
-              <option value="">Unassigned</option>
-              {technicians.map((technician) => (
-                <option key={technician.id} value={technician.id}>
-                  {technician.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500">
-              Diagnosis, repair, QC, and disposition actions require an assigned engineer.
-              Choose one here and save it explicitly, or let the next workflow action persist it.
-            </p>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900">
+                Final disposition
+              </label>
+              <select
+                name="finalDisposition"
+                defaultValue={currentFinalDisposition ?? "returned_to_stock"}
+                disabled={status !== "ready_for_disposition"}
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
+              >
+                {DISPOSITION_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {formatInternalServiceDisposition(option)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                Enabled once QC passes and the depot is ready to decide stock / return
+                outcome.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-900">
-              Final disposition
-            </label>
-            <select
-              value={finalDisposition}
-              onChange={(event) => setFinalDisposition(event.target.value)}
-              disabled={isPending || savedStatus !== "ready_for_disposition"}
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
-            >
-              {DISPOSITION_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {formatInternalServiceDisposition(option)}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500">
-              Enabled once QC passes and the depot is ready to decide stock / return outcome.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-900">
-            Reported fault / inward brief
-          </label>
-          <Textarea
-            value={reportedFault}
-            onChange={(event) => setReportedFault(event.target.value)}
-            disabled={isPending}
-            rows={3}
-            placeholder="Describe the incoming issue and receiving observations."
-          />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-900">
-              Diagnosis notes
+              Reported fault / inward brief
             </label>
             <Textarea
-              value={diagnosisNotes}
-              onChange={(event) => setDiagnosisNotes(event.target.value)}
-              disabled={isPending}
-              rows={5}
-              placeholder="Bench diagnosis, suspected fault, parts required, root cause."
+              name="reportedFault"
+              defaultValue={currentReportedFault}
+              rows={3}
+              placeholder="Describe the incoming issue and receiving observations."
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-900">
-              Resolution notes
-            </label>
-            <Textarea
-              value={resolutionNotes}
-              onChange={(event) => setResolutionNotes(event.target.value)}
-              disabled={isPending}
-              rows={5}
-              placeholder="Repair actions, calibration outcome, readiness for QC or stock."
-            />
-          </div>
-        </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isPending || !notesDirty}
-            onClick={() => void runAction("save_notes")}
-          >
-            {pendingAction === "save_notes" ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Saving Notes…
-              </>
-            ) : (
-              "Save Notes"
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isPending || !assignmentDirty}
-            onClick={() => void runAction("assign_engineer")}
-          >
-            {pendingAction === "assign_engineer" ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Saving Assignment…
-              </>
-            ) : (
-              "Save Assignment"
-            )}
-          </Button>
-          {workflowButtons.map((button) => (
-            <Button
-              key={button.action}
-              type="button"
-              variant={button.variant ?? "default"}
-              disabled={
-                isPending ||
-                ((button.requiresEngineer ||
-                  ACTIONS_REQUIRING_ENGINEER.has(button.action)) &&
-                  !assignedTechnicianId)
-              }
-              onClick={() => void runAction(button.action)}
-            >
-              {pendingAction === button.action ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Saving…
-                </>
-              ) : (
-                button.label
-              )}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900">
+                Diagnosis notes
+              </label>
+              <Textarea
+                name="diagnosisNotes"
+                defaultValue={currentDiagnosisNotes}
+                rows={5}
+                placeholder="Bench diagnosis, suspected fault, parts required, root cause."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900">
+                Resolution notes
+              </label>
+              <Textarea
+                name="resolutionNotes"
+                defaultValue={currentResolutionNotes}
+                rows={5}
+                placeholder="Repair actions, calibration outcome, readiness for QC or stock."
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit" name="action" value="save_notes" variant="outline">
+              Save Notes
             </Button>
-          ))}
-        </div>
+            <Button type="submit" name="action" value="assign_engineer" variant="outline">
+              Save Assignment
+            </Button>
+            {workflowButtons.map((button) => (
+              <Button
+                key={button.action}
+                type="submit"
+                name="action"
+                value={button.action}
+                variant={button.variant ?? "default"}
+              >
+                {button.label}
+              </Button>
+            ))}
+          </div>
 
-        {!assignedTechnicianId &&
-        workflowButtons.some(
-          (button) =>
-            button.requiresEngineer ||
-            ACTIONS_REQUIRING_ENGINEER.has(button.action),
-        ) ? (
-          <p className="text-xs text-amber-700">
-            Select an engineer before running the next depot execution step.
-          </p>
-        ) : null}
-
-        {hasDraftChanges && !isPending ? (
-          <p className="text-xs text-slate-500">
-            Current edits are local until you save them or use the next depot workflow
-            action.
-          </p>
-        ) : null}
+          {status === "awaiting_triage" && !currentAssignedTechnicianId ? (
+            <p className="text-xs text-amber-700">
+              If you are starting diagnosis on this submit, choose the engineer in the
+              same form first.
+            </p>
+          ) : null}
+        </form>
       </CardContent>
     </Card>
   );

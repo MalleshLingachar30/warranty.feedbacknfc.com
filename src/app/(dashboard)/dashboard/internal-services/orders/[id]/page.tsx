@@ -8,17 +8,33 @@ import { resolveServiceCenterPageContext } from "../../../_lib/service-center-co
 
 interface DepotInternalServiceOrderDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ updated?: string | string[]; error?: string | string[] }>;
 }
 
 export default async function DepotInternalServiceOrderDetailPage({
   params,
+  searchParams,
 }: DepotInternalServiceOrderDetailPageProps) {
   const { organizationId } = await resolveServiceCenterPageContext();
   const { id } = await params;
+  const query = await searchParams;
 
   if (!organizationId || !id) {
     notFound();
   }
+
+  const updated =
+    typeof query.updated === "string"
+      ? query.updated
+      : Array.isArray(query.updated)
+        ? query.updated[0] ?? null
+        : null;
+  const error =
+    typeof query.error === "string"
+      ? query.error
+      : Array.isArray(query.error)
+        ? query.error[0] ?? null
+        : null;
 
   const [order, technicians] = await Promise.all([
     db.internalServiceOrder.findFirst({
@@ -141,12 +157,16 @@ export default async function DepotInternalServiceOrderDetailPage({
     <div className="space-y-6">
       <InternalServiceOrderActionsClient
         orderId={order.id}
+        actionPath={`/dashboard/internal-services/orders/${order.id}/action`}
         status={order.status}
         currentAssignedTechnicianId={order.assignedTechnician?.id ?? null}
+        currentFinalDisposition={order.finalDisposition}
         currentDiagnosisNotes={order.diagnosisNotes ?? ""}
         currentResolutionNotes={order.resolutionNotes ?? ""}
         currentReportedFault={order.reportedFault ?? ""}
         technicians={technicians}
+        noticeAction={updated}
+        noticeError={error}
       />
       <InternalServiceOrderDetailView
         backHref="/dashboard/internal-services/orders"
