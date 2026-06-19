@@ -28,6 +28,7 @@ type ZxingReaderModule = typeof import("zxing-wasm/reader");
 
 const DEFAULT_FORMATS = [...MOBILE_CODE_SCANNER_FORMATS];
 const SCAN_INTERVAL_MS = 300;
+const DETECTION_CLOSE_DELAY_MS = 30;
 
 let zxingReaderModulePromise: Promise<ZxingReaderModule> | null = null;
 
@@ -94,6 +95,7 @@ export function MobileCodeScannerDialog({
   const detectorRef = useRef<Awaited<ReturnType<typeof createNativeBarcodeDetector>> | null>(
     null,
   );
+  const pendingDetectionRef = useRef<MobileCodeScannerResult | null>(null);
   const formatListRef = useRef([...formats]);
   const titleId = useId();
 
@@ -129,13 +131,13 @@ export function MobileCodeScannerDialog({
     }
   }, [clearScanTimer]);
 
-  const finalizeDetection = useCallback(async (result: MobileCodeScannerResult) => {
+  const finalizeDetection = useCallback((result: MobileCodeScannerResult) => {
     setStatus("detected");
     setError(null);
     stopStream();
-    await onDetected(result);
+    pendingDetectionRef.current = result;
     onOpenChange(false);
-  }, [onDetected, onOpenChange, stopStream]);
+  }, [onOpenChange, stopStream]);
 
   const scheduleNextScan = useCallback((delay = SCAN_INTERVAL_MS) => {
     clearScanTimer();
@@ -261,6 +263,28 @@ export function MobileCodeScannerDialog({
   }, [scanFrame]);
 
   useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    const pendingDetection = pendingDetectionRef.current;
+
+    if (!pendingDetection) {
+      return;
+    }
+
+    pendingDetectionRef.current = null;
+
+    const detectionTimer = window.setTimeout(() => {
+      void onDetected(pendingDetection);
+    }, DETECTION_CLOSE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(detectionTimer);
+    };
+  }, [onDetected, open]);
+
+  useEffect(() => {
     if (!open) {
       stopStream();
       setStatus("idle");
@@ -359,7 +383,7 @@ export function MobileCodeScannerDialog({
       return;
     }
 
-    await finalizeDetection(manualResult);
+    finalizeDetection(manualResult);
   };
 
   const retryCamera = () => {
@@ -372,11 +396,12 @@ export function MobileCodeScannerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
       <DialogContent
         showCloseButton={false}
         className="h-[min(92vh,54rem)] max-w-[min(100vw-1rem,64rem)] overflow-hidden p-0 sm:h-[min(88vh,56rem)]"
         aria-describedby={titleId}
+        onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <div className="flex h-full flex-col">
           <DialogHeader className="border-b border-slate-200 px-4 py-4 sm:px-6">
