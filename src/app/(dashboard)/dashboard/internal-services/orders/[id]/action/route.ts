@@ -14,17 +14,33 @@ function asFormString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value : undefined;
 }
 
+function sanitizeReturnTo(value: string | undefined, fallbackPath: string) {
+  if (!value) {
+    return fallbackPath;
+  }
+
+  if (!value.startsWith("/dashboard/internal-services")) {
+    return fallbackPath;
+  }
+
+  return value;
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
   const { id } = await context.params;
   const detailPath = `/dashboard/internal-services/orders/${id}`;
-  const redirectUrl = new URL(detailPath, request.url);
 
   try {
     const { organizationId, dbUserId } = await requireServiceCenterContext();
     const formData = await request.formData();
+    const returnTo = sanitizeReturnTo(
+      asFormString(formData.get("returnTo")),
+      detailPath,
+    );
+    const redirectUrl = new URL(returnTo, request.url);
 
     if (!dbUserId) {
       throw new InternalServiceOrderActionError(
@@ -62,16 +78,18 @@ export async function POST(
     });
 
     redirectUrl.searchParams.set("updated", update.action);
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (error) {
+    const returnTo = sanitizeReturnTo(undefined, detailPath);
+    const redirectUrl = new URL(returnTo, request.url);
     const message =
       error instanceof InternalServiceOrderActionError
         ? error.message
         : "Unable to update the internal-service order.";
 
     redirectUrl.searchParams.set("error", message);
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   }
-
-  return NextResponse.redirect(redirectUrl, { status: 303 });
 }
 
 export async function GET(
@@ -80,13 +98,17 @@ export async function GET(
 ) {
   const { id } = await context.params;
   const detailPath = `/dashboard/internal-services/orders/${id}`;
-  const redirectUrl = new URL(detailPath, request.url);
 
   try {
     const { organizationId, dbUserId } = await requireServiceCenterContext();
     const action = request.nextUrl.searchParams.get("action") ?? undefined;
     const finalDisposition =
       request.nextUrl.searchParams.get("finalDisposition") ?? undefined;
+    const returnTo = sanitizeReturnTo(
+      request.nextUrl.searchParams.get("returnTo") ?? undefined,
+      detailPath,
+    );
+    const redirectUrl = new URL(returnTo, request.url);
 
     if (!dbUserId) {
       throw new InternalServiceOrderActionError(
@@ -115,14 +137,19 @@ export async function GET(
     });
 
     redirectUrl.searchParams.set("updated", update.action);
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   } catch (error) {
+    const returnTo = sanitizeReturnTo(
+      request.nextUrl.searchParams.get("returnTo") ?? undefined,
+      detailPath,
+    );
+    const redirectUrl = new URL(returnTo, request.url);
     const message =
       error instanceof InternalServiceOrderActionError
         ? error.message
         : "Unable to update the internal-service order.";
 
     redirectUrl.searchParams.set("error", message);
+    return NextResponse.redirect(redirectUrl, { status: 303 });
   }
-
-  return NextResponse.redirect(redirectUrl, { status: 303 });
 }

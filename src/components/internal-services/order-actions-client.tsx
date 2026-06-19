@@ -131,6 +131,8 @@ function formatActionNotice(action: string | null | undefined) {
       return "Final disposition recorded.";
     case "close_order":
       return "Internal-service order closed.";
+    case "add_part_usage":
+      return "Repair part movement recorded.";
     default:
       return null;
   }
@@ -289,9 +291,9 @@ export function InternalServiceOrderActionsClient({
         <div className="space-y-3 rounded-lg border border-slate-200 p-4">
           <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-4">
             <div className="space-y-1">
-              <p className="text-sm font-medium text-slate-900">Engineer part usage</p>
+              <p className="text-sm font-medium text-slate-900">Traced repair spares and kits</p>
               <p className="text-xs text-slate-500">
-                Capture traced or manual part usage during diagnosis and repair without mixing it into field-service part flows.
+                Use traced spare, small-part, kit, or pack references for installed, consumed, and returned-unused internal repair movements.
               </p>
             </div>
 
@@ -304,7 +306,6 @@ export function InternalServiceOrderActionsClient({
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
                 >
                   <option value="installed">installed</option>
-                  <option value="removed">removed</option>
                   <option value="consumed">consumed</option>
                   <option value="returned_unused">returned unused</option>
                 </select>
@@ -314,26 +315,7 @@ export function InternalServiceOrderActionsClient({
                 <Input
                   name="partReference"
                   disabled={partUsageLocked}
-                  placeholder="Asset code, serial, or Data Matrix / tag code"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">Part name</label>
-                <Input
-                  name="partName"
-                  disabled={partUsageLocked}
-                  placeholder="Cooling fan, display board, battery pack"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">Part number</label>
-                <Input
-                  name="partNumber"
-                  disabled={partUsageLocked}
-                  placeholder="Optional manual part number"
+                  placeholder="Required: asset code, serial, or Data Matrix / tag code"
                 />
               </div>
             </div>
@@ -344,19 +326,81 @@ export function InternalServiceOrderActionsClient({
                 name="partNote"
                 disabled={partUsageLocked}
                 rows={3}
-                placeholder="Why this part was used, removed, or consumed during internal repair."
+                placeholder="Why this traced spare or kit was installed, consumed, or returned unused during repair."
               />
             </div>
 
             {partUsageLocked ? (
               <p className="text-xs text-slate-500">
-                Part usage is locked once the order is completed or closed.
+                Traced spare capture is locked once the order is completed or closed.
               </p>
             ) : (
               <SubmitControl
                 actionPath={actionPath}
                 action="add_part_usage"
-                label="Add Part Usage"
+                label="Record Traced Spare Movement"
+                variant="outline"
+              />
+            )}
+          </form>
+
+          <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-amber-200 bg-amber-50/60 p-4">
+            <input type="hidden" name="partUsageType" value="removed" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-900">Removed part capture</p>
+              <p className="text-xs text-slate-500">
+                Capture the failed component removed during depot repair. Add a traced reference if the removed part already carries its own identity.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Removed part reference</label>
+                <Input
+                  name="partReference"
+                  disabled={partUsageLocked}
+                  placeholder="Optional traced tag / asset / serial reference"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Removed part name</label>
+                <Input
+                  name="partName"
+                  disabled={partUsageLocked}
+                  placeholder="Cooling fan harness, display board, sensor module"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Removed part number</label>
+                <Input
+                  name="partNumber"
+                  disabled={partUsageLocked}
+                  placeholder="Optional removed-part number"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-900">Removal note</label>
+                <Textarea
+                  name="partNote"
+                  disabled={partUsageLocked}
+                  rows={3}
+                  placeholder="Why it was removed and whether it should be analysed, scrapped, or held for return."
+                />
+              </div>
+            </div>
+
+            {partUsageLocked ? (
+              <p className="text-xs text-slate-500">
+                Removed-part capture is locked once the order is completed or closed.
+              </p>
+            ) : (
+              <SubmitControl
+                actionPath={actionPath}
+                action="add_part_usage"
+                label="Capture Removed Part"
                 variant="outline"
               />
             )}

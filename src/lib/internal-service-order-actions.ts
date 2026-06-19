@@ -1,4 +1,5 @@
 import {
+  AssetProductClass,
   InternalServiceDisposition,
   PartUsageType,
   Prisma,
@@ -68,6 +69,15 @@ export function asOptionalString(value: unknown) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function isTrackedRepairAssetClass(productClass: AssetProductClass) {
+  return (
+    productClass === "spare_part" ||
+    productClass === "small_part" ||
+    productClass === "kit" ||
+    productClass === "pack"
+  );
 }
 
 function parseAction(value: unknown): InternalServiceAction {
@@ -494,6 +504,40 @@ export async function updateInternalServiceOrderForDepot(input: {
             { manufacturerOrgId: order.manufacturerOrgId },
           )
         : null;
+
+    if (input.update.action === "add_part_usage" && input.update.partUsage) {
+      if (input.update.partUsage.partReference && !resolvedTrackedPart) {
+        throw new InternalServiceOrderActionError(
+          "The traced part reference does not resolve to a known internal spare or tagged component.",
+          404,
+        );
+      }
+
+      if (
+        (input.update.partUsage.usageType === "installed" ||
+          input.update.partUsage.usageType === "consumed" ||
+          input.update.partUsage.usageType === "returned_unused") &&
+        !input.update.partUsage.partReference
+      ) {
+        throw new InternalServiceOrderActionError(
+          "Installed, consumed, and returned-unused repair parts must be linked to a traced spare, kit, pack, or small part reference.",
+          400,
+        );
+      }
+
+      if (
+        (input.update.partUsage.usageType === "installed" ||
+          input.update.partUsage.usageType === "consumed" ||
+          input.update.partUsage.usageType === "returned_unused") &&
+        resolvedTrackedPart &&
+        !isTrackedRepairAssetClass(resolvedTrackedPart.asset.productClass)
+      ) {
+        throw new InternalServiceOrderActionError(
+          "Tracked repair spare usage must resolve to a spare part, small part, kit, or pack asset.",
+          400,
+        );
+      }
+    }
 
     const assignedTechnicianPatch: Prisma.InternalServiceOrderUpdateInput["assignedTechnician"] =
       input.update.action === "assign_engineer"
