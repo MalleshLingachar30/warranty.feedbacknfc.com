@@ -101,7 +101,14 @@ export default async function DepotInternalServicesAnalyticsPage() {
       SELECT
         date_trunc('month', iso.received_at) AS month,
         COUNT(*)::int AS "inwardCount",
-        COUNT(*) FILTER (WHERE iso.status = 'qa_failed')::int AS "qcFailCount",
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1
+            FROM internal_service_timeline ist
+            WHERE ist.internal_service_order_id = iso.id
+              AND ist.event_type = 'qa_failed'
+          )
+        )::int AS "qcFailCount",
         COUNT(*) FILTER (
           WHERE iso.final_disposition = 'returned_to_stock'
             AND iso.status IN ('completed', 'closed')
@@ -118,7 +125,14 @@ export default async function DepotInternalServicesAnalyticsPage() {
       SELECT
         COALESCE(tech.name, 'Unassigned') AS "engineerName",
         COUNT(*)::int AS "totalOrders",
-        COUNT(*) FILTER (WHERE iso.status = 'qa_failed')::int AS "qcFailed",
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1
+            FROM internal_service_timeline ist
+            WHERE ist.internal_service_order_id = iso.id
+              AND ist.event_type = 'qa_failed'
+          )
+        )::int AS "qcFailed",
         COUNT(*) FILTER (
           WHERE iso.final_disposition = 'returned_to_stock'
             AND iso.status IN ('completed', 'closed')

@@ -111,7 +111,14 @@ export default async function ManufacturerInternalServicesAnalyticsPage() {
       SELECT
         date_trunc('month', iso.received_at) AS month,
         COUNT(*)::int AS "inwardCount",
-        COUNT(*) FILTER (WHERE iso.status = 'qa_failed')::int AS "qcFailCount",
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1
+            FROM internal_service_timeline ist
+            WHERE ist.internal_service_order_id = iso.id
+              AND ist.event_type = 'qa_failed'
+          )
+        )::int AS "qcFailCount",
         COUNT(*) FILTER (
           WHERE iso.final_disposition = 'returned_to_stock'
             AND iso.status IN ('completed', 'closed')
@@ -128,7 +135,14 @@ export default async function ManufacturerInternalServicesAnalyticsPage() {
         sc.name AS "serviceCenterName",
         sc.city AS city,
         COUNT(*)::int AS "inwardCount",
-        COUNT(*) FILTER (WHERE iso.status = 'qa_failed')::int AS "qcFailed",
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1
+            FROM internal_service_timeline ist
+            WHERE ist.internal_service_order_id = iso.id
+              AND ist.event_type = 'qa_failed'
+          )
+        )::int AS "qcFailed",
         COUNT(*) FILTER (
           WHERE iso.final_disposition = 'returned_to_stock'
             AND iso.status IN ('completed', 'closed')
@@ -145,7 +159,14 @@ export default async function ManufacturerInternalServicesAnalyticsPage() {
         pm.name AS "modelName",
         pm.model_number AS "modelNumber",
         COUNT(*)::int AS "inwardCount",
-        COUNT(*) FILTER (WHERE iso.status = 'qa_failed')::int AS "qcFailed",
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1
+            FROM internal_service_timeline ist
+            WHERE ist.internal_service_order_id = iso.id
+              AND ist.event_type = 'qa_failed'
+          )
+        )::int AS "qcFailed",
         COUNT(*) FILTER (
           WHERE iso.final_disposition = 'returned_to_stock'
             AND iso.status IN ('completed', 'closed')
