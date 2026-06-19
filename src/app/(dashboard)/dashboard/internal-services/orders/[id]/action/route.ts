@@ -80,6 +80,8 @@ export async function GET(
   try {
     const { organizationId, dbUserId } = await requireServiceCenterContext();
     const action = request.nextUrl.searchParams.get("action") ?? undefined;
+    const finalDisposition =
+      request.nextUrl.searchParams.get("finalDisposition") ?? undefined;
 
     if (!dbUserId) {
       throw new InternalServiceOrderActionError(
@@ -97,6 +99,7 @@ export async function GET(
 
     const update = normalizeInternalServiceOrderUpdateInput({
       action,
+      finalDisposition,
     } satisfies UpdateInternalServiceOrderRequest);
 
     await updateInternalServiceOrderForDepot({

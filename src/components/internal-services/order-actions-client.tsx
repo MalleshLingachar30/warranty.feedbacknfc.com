@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -171,6 +173,9 @@ export function InternalServiceOrderActionsClient({
   noticeAction,
   noticeError,
 }: InternalServiceOrderActionsClientProps) {
+  const [selectedDisposition, setSelectedDisposition] = useState(
+    currentFinalDisposition ?? "returned_to_stock",
+  );
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
 
@@ -288,7 +293,8 @@ export function InternalServiceOrderActionsClient({
               <div className="flex-1 space-y-2">
                 <select
                   name="finalDisposition"
-                  defaultValue={currentFinalDisposition ?? "returned_to_stock"}
+                  value={selectedDisposition}
+                  onChange={(event) => setSelectedDisposition(event.target.value)}
                   disabled={status !== "ready_for_disposition"}
                   className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:bg-slate-100 disabled:text-slate-500"
                 >
@@ -304,11 +310,12 @@ export function InternalServiceOrderActionsClient({
                 </p>
               </div>
               {status === "ready_for_disposition" ? (
-                <SubmitControl
-                  actionPath={actionPath}
-                  action="complete_disposition"
-                  label="Complete Disposition"
-                />
+                <a
+                  href={`${actionPath}?action=complete_disposition&finalDisposition=${encodeURIComponent(selectedDisposition)}`}
+                  className={cn(buttonVariants({ variant: "default" }))}
+                >
+                  Complete Disposition
+                </a>
               ) : null}
             </form>
           </div>
