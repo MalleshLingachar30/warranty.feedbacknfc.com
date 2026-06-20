@@ -24,11 +24,31 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+function formatBatchSerialValue(input: {
+  serialPrefix: string | null;
+  serialNumber: number | string | null;
+  padLength?: number | null;
+}) {
+  if (input.serialNumber == null) {
+    return null;
+  }
+
+  const prefix = input.serialPrefix ?? "";
+  const rawValue = String(input.serialNumber);
+  const formattedNumber = input.padLength
+    ? rawValue.padStart(input.padLength, "0")
+    : rawValue;
+
+  return `${prefix}${formattedNumber}`;
+}
+
 function renderPrintSheet(input: {
   batchCode: string;
   productName: string;
   generatedAt: Date;
   outputFormat?: string | null;
+  serialFrom?: string | null;
+  serialTo?: string | null;
   rows: Array<{
     tagCode: string;
     microResolverCode: string | null;
@@ -63,6 +83,10 @@ function renderPrintSheet(input: {
       timeStyle: "short",
       timeZone: "Asia/Kolkata",
     }).format(input.generatedAt);
+    const serialRangeLine =
+      input.serialFrom && input.serialTo
+        ? ` • From ${escapeHtml(input.serialFrom)} • To ${escapeHtml(input.serialTo)}`
+        : "";
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -151,7 +175,7 @@ function renderPrintSheet(input: {
     <header class="header">
       <div>
         <h1 class="title">${escapeHtml(input.productName)} PCB Micro Data Matrix Sheet</h1>
-        <p class="subtitle">Batch ${escapeHtml(input.batchCode)} • ${input.rows.length} labels • 10x10 mm squares • Up to 250 per A4 sheet • Generated ${escapeHtml(generatedAt)}</p>
+        <p class="subtitle">Batch ${escapeHtml(input.batchCode)}${serialRangeLine} • ${input.rows.length} labels • 10x10 mm squares • Up to 250 per A4 sheet • Generated ${escapeHtml(generatedAt)}</p>
       </div>
       <div class="subtitle">FeedbackNFC Warranty</div>
     </header>
@@ -192,6 +216,10 @@ function renderPrintSheet(input: {
     timeStyle: "short",
     timeZone: "Asia/Kolkata",
   }).format(input.generatedAt);
+  const serialRangeLine =
+    input.serialFrom && input.serialTo
+      ? ` • From ${escapeHtml(input.serialFrom)} • To ${escapeHtml(input.serialTo)}`
+      : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -320,7 +348,7 @@ function renderPrintSheet(input: {
     <header class="header">
       <div>
         <h1 class="title">${escapeHtml(input.productName)} Data Matrix Sheet</h1>
-        <p class="subtitle">Batch ${escapeHtml(input.batchCode)} • ${input.rows.length} serialized spare labels • Generated ${escapeHtml(generatedAt)}</p>
+        <p class="subtitle">Batch ${escapeHtml(input.batchCode)}${serialRangeLine} • ${input.rows.length} serialized spare labels • Generated ${escapeHtml(generatedAt)}</p>
       </div>
       <div class="subtitle">FeedbackNFC Warranty</div>
     </header>
@@ -361,6 +389,20 @@ export async function GET(
           ? "Use high-quality direct-part marking or pack/kit-level tagging."
           : "Standard label print profile is acceptable.",
     }));
+    const serialFrom =
+      rows[0]?.assetSerialNumber ??
+      formatBatchSerialValue({
+        serialPrefix: batch.serialPrefix,
+        serialNumber: batch.serialStart,
+        padLength: batch.outputProfile.serialPadLength,
+      });
+    const serialTo =
+      rows.at(-1)?.assetSerialNumber ??
+      formatBatchSerialValue({
+        serialPrefix: batch.serialPrefix,
+        serialNumber: batch.serialEnd,
+        padLength: batch.outputProfile.serialPadLength,
+      });
 
     if (format === "html") {
       return new Response(
@@ -369,6 +411,8 @@ export async function GET(
           productName: batch.productModel.name,
           generatedAt: batch.createdAt,
           outputFormat: batch.outputProfile.format ?? null,
+          serialFrom,
+          serialTo,
           rows,
         }),
         {
