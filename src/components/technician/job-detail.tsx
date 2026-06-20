@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   AlertCircle,
+  Camera,
   CheckCircle2,
   ExternalLink,
   Loader2,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { MobileCodeScannerDialog } from "@/components/scanning/mobile-code-scanner-dialog";
 import {
   deletePhotosForOwner,
   listPhotosForOwner,
@@ -145,6 +147,8 @@ export function JobDetail({
   const [parts, setParts] = useState<PartSelection[]>([]);
   const [showReceivedSparePicker, setShowReceivedSparePicker] = useState(false);
   const [showRemovedPartCatalog, setShowRemovedPartCatalog] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerResolving, setScannerResolving] = useState(false);
   const consumedScannedRowsRef = useRef<Set<string>>(new Set());
   const trackingEnabled =
     Boolean(technicianId) &&
@@ -166,6 +170,8 @@ export function JobDetail({
     setQueuedAfterPhotos([]);
     setShowReceivedSparePicker(false);
     setShowRemovedPartCatalog(false);
+    setScannerOpen(false);
+    setScannerResolving(false);
     setActionError(null);
     setActionSuccess(null);
 
@@ -216,30 +222,39 @@ export function JobDetail({
     });
   }, [job.partsCatalog]);
 
-  useEffect(() => {
-    if (!scannedPart) {
-      return;
-    }
+  const consumeResolvedPartScan = useCallback((scan: PartScanPayload) => {
+    const rowKey = `${job.id}:${partScanSignature(scan)}`;
 
-    const rowKey = `${job.id}:${partScanSignature(scannedPart)}`;
     if (consumedScannedRowsRef.current.has(rowKey)) {
+      setActionError(null);
+      setActionSuccess(
+        `Scanned part ${scan.assetCode} (${scan.tagCode || "no tag"}) is already attached to this ticket draft.`,
+      );
       return;
     }
 
     attachPartToDrafts({
-      assetCode: scannedPart.assetCode,
-      tagCode: scannedPart.tagCode,
-      partName: scannedPart.partName,
-      partNumber: scannedPart.partNumber,
+      assetCode: scan.assetCode,
+      tagCode: scan.tagCode,
+      partName: scan.partName,
+      partNumber: scan.partNumber,
       usageType: "installed",
     });
 
     consumedScannedRowsRef.current.add(rowKey);
     setActionError(null);
     setActionSuccess(
-      `Scanned part ${scannedPart.assetCode} (${scannedPart.tagCode}) added to this ticket.`,
+      `Scanned part ${scan.assetCode} (${scan.tagCode || "no tag"}) added to this ticket.`,
     );
-  }, [attachPartToDrafts, job.id, scannedPart]);
+  }, [attachPartToDrafts, job.id]);
+
+  useEffect(() => {
+    if (!scannedPart) {
+      return;
+    }
+
+    consumeResolvedPartScan(scannedPart);
+  }, [consumeResolvedPartScan, scannedPart]);
 
   const availableReceivedSpareItems = useMemo(() => {
     const currentSelections = new Set(
@@ -349,6 +364,51 @@ export function JobDetail({
     setActionError(null);
     setActionSuccess(`Removed old part ${catalogPart.name} added to this ticket.`);
   };
+
+  const handleCameraDetected = useCallback(
+    async (result: { value: string }) => {
+      setScannerResolving(true);
+      setActionError(null);
+      setActionSuccess(null);
+      setShowReceivedSparePicker(false);
+      setShowRemovedPartCatalog(false);
+
+      try {
+        const response = await fetch("/api/technician/part-scan/resolve", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ticketId: job.id,
+            code: result.value,
+          }),
+        });
+
+        const payload = (await response.json()) as {
+          error?: string;
+          scan?: PartScanPayload;
+        };
+
+        if (!response.ok || !payload.scan) {
+          throw new Error(
+            payload.error ?? "Unable to resolve the scanned part for this ticket.",
+          );
+        }
+
+        consumeResolvedPartScan(payload.scan);
+      } catch (error) {
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to resolve the scanned part for this ticket.",
+        );
+      } finally {
+        setScannerResolving(false);
+      }
+    },
+    [consumeResolvedPartScan, job.id],
+  );
 
   const replacementParts = useMemo(
     () => parts.filter((part) => part.usageType === "installed"),
@@ -1133,16 +1193,28 @@ export function JobDetail({
                         list first.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-9 border-emerald-300 bg-white text-emerald-950"
-                      onClick={handleAddReplacementPart}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Replacement Part
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 border-emerald-300 bg-white text-emerald-950"
+                        onClick={() => setScannerOpen(true)}
+                      >
+                        <Camera className="h-4 w-4" />
+                        Scan with camera
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 border-emerald-300 bg-white text-emerald-950"
+                        onClick={handleAddReplacementPart}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Replacement Part
+                      </Button>
+                    </div>
                   </div>
 
                   {job.receivedSpareItems.length > 0 ? (
@@ -1155,6 +1227,12 @@ export function JobDetail({
                       </p>
                     </div>
                   ) : null}
+
+                  <p className="text-xs text-emerald-900">
+                    Camera scans resolve QR, Data Matrix, and micro Data Matrix labels
+                    into replacement-part rows. Scanned parts are added as installed
+                    by default; change usage type after scan if needed.
+                  </p>
 
                   {showReceivedSparePicker &&
                   availableReceivedSpareItems.length > 0 ? (
@@ -1333,6 +1411,12 @@ export function JobDetail({
                     Resolver scan ready: {scannedPart.assetCode} ({scannedPart.tagCode})
                   </p>
                 ) : null}
+
+                {scannerResolving ? (
+                  <p className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700">
+                    Resolving scanned part label for this ticket...
+                  </p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -1362,6 +1446,15 @@ export function JobDetail({
       </div>
 
       <div className="sticky bottom-0 border-t border-slate-200 bg-white p-3">
+        <MobileCodeScannerDialog
+          open={scannerOpen}
+          onOpenChange={setScannerOpen}
+          onDetected={handleCameraDetected}
+          title="Scan replacement part with camera"
+          description="Use the phone camera to read QR, Data Matrix, or micro Data Matrix part labels and attach that traced part to this ticket."
+          manualLabel="If the label cannot be decoded from the camera, type or paste the asset code, tag code, serial, micro token, or full /r/... URL."
+        />
+
         {actionError ? (
           <div className="mb-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />

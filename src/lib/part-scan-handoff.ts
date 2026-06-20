@@ -5,8 +5,8 @@ type QuerySource =
     }
   | Record<string, string | string[] | undefined>;
 
-const PART_SCAN_ASSET_CLASSES = ["spare_part", "small_part", "kit", "pack"] as const;
-const PART_SCAN_TAG_CLASSES = [
+export const PART_SCAN_ASSET_CLASSES = ["spare_part", "small_part", "kit", "pack"] as const;
+export const PART_SCAN_TAG_CLASSES = [
   "component_unit",
   "small_part_batch",
   "kit_parent",
@@ -76,12 +76,33 @@ function parseStickerNumber(value: string | null): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function isSupportedAssetClass(value: string): value is PartScanAssetClass {
+export function isSupportedPartScanAssetClass(
+  value: string,
+): value is PartScanAssetClass {
   return PART_SCAN_ASSET_CLASSES.includes(value as PartScanAssetClass);
 }
 
-function isSupportedTagClass(value: string): value is PartScanTagClass {
+export function isSupportedPartScanTagClass(
+  value: string,
+): value is PartScanTagClass {
   return PART_SCAN_TAG_CLASSES.includes(value as PartScanTagClass);
+}
+
+export function defaultTagClassForPartAssetClass(
+  assetClass: PartScanAssetClass,
+): PartScanTagClass {
+  switch (assetClass) {
+    case "spare_part":
+      return "component_unit";
+    case "small_part":
+      return "small_part_batch";
+    case "kit":
+      return "kit_parent";
+    case "pack":
+      return "pack_parent";
+    default:
+      return "component_unit";
+  }
 }
 
 export function parsePartScanFromQuery(source: QuerySource): PartScanParseResult {
@@ -118,7 +139,7 @@ export function parsePartScanFromQuery(source: QuerySource): PartScanParseResult
     };
   }
 
-  if (!rawAssetClass || !isSupportedAssetClass(rawAssetClass)) {
+  if (!rawAssetClass || !isSupportedPartScanAssetClass(rawAssetClass)) {
     return {
       scan: null,
       context,
@@ -127,7 +148,7 @@ export function parsePartScanFromQuery(source: QuerySource): PartScanParseResult
     };
   }
 
-  if (!rawTagClass || !isSupportedTagClass(rawTagClass)) {
+  if (!rawTagClass || !isSupportedPartScanTagClass(rawTagClass)) {
     return {
       scan: null,
       context,
