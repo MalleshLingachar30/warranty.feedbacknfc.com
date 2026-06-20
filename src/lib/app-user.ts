@@ -209,6 +209,30 @@ export type DbUserSnapshot = {
   technicianProfileId: string | null;
 };
 
+function toDbUserSnapshot(row: {
+  id: string;
+  clerkId: string;
+  role: UserRole;
+  organizationId: string | null;
+  email: string | null;
+  phone: string | null;
+  name: string | null;
+  technicianProfile: {
+    id: string;
+  } | null;
+}): DbUserSnapshot {
+  return {
+    id: row.id,
+    clerkId: row.clerkId,
+    role: row.role,
+    organizationId: row.organizationId,
+    email: row.email,
+    phone: row.phone,
+    name: row.name,
+    technicianProfileId: row.technicianProfile?.id ?? null,
+  };
+}
+
 const fetchDbUser = cache(
   async (clerkUserId: string): Promise<DbUserSnapshot | null> => {
     return withDatabaseRetry(() =>
@@ -236,16 +260,7 @@ const fetchDbUser = cache(
           return null;
         }
 
-        return {
-          id: row.id,
-          clerkId: row.clerkId,
-          role: row.role,
-          organizationId: row.organizationId,
-          email: row.email,
-          phone: row.phone,
-          name: row.name,
-          technicianProfileId: row.technicianProfile?.id ?? null,
-        } satisfies DbUserSnapshot;
+        return toDbUserSnapshot(row);
       });
   },
 );
@@ -256,10 +271,6 @@ const ensureDbUserForClerkUserCached = cache(
     defaultRole: UserRole,
   ): Promise<DbUserSnapshot> => {
     const existing = await fetchDbUser(clerkUserId);
-    if (existing) {
-      return existing;
-    }
-
     const clerk = await getCachedCurrentUser();
     const displayName = extractUserName(clerk);
     const verifiedEmails = extractVerifiedEmails(clerk);
@@ -286,11 +297,20 @@ const ensureDbUserForClerkUserCached = cache(
         : null,
     ].filter((clause): clause is NonNullable<typeof clause> => Boolean(clause));
 
-    if (contactOrClauses.length > 0) {
+    const reconcileOperationalCandidate = async (
+      existingCustomerUserId?: string,
+    ): Promise<DbUserSnapshot | null> => {
+      if (contactOrClauses.length === 0) {
+        return null;
+      }
+
       const candidates = await withDatabaseRetry(() =>
         db.user.findMany({
           where: {
             isActive: true,
+            role: {
+              not: "customer",
+            },
             OR: contactOrClauses,
           },
           select: {
@@ -311,39 +331,46 @@ const ensureDbUserForClerkUserCached = cache(
         }),
       );
 
-      const preferredCandidate =
-        candidates
-          .filter((candidate) => candidate.role !== "customer")
-          .sort((left, right) => {
-            const leftEmailMatched =
-              left.email && verifiedEmails.includes(normalizeEmail(left.email));
-            const rightEmailMatched =
-              right.email &&
-              verifiedEmails.includes(normalizeEmail(right.email));
+      const preferredCandidate = candidates.sort((left, right) => {
+        const leftEmailMatched =
+          left.email && verifiedEmails.includes(normalizeEmail(left.email));
+        const rightEmailMatched =
+          right.email && verifiedEmails.includes(normalizeEmail(right.email));
 
-            if (leftEmailMatched !== rightEmailMatched) {
-              return leftEmailMatched ? -1 : 1;
-            }
+        if (leftEmailMatched !== rightEmailMatched) {
+          return leftEmailMatched ? -1 : 1;
+        }
 
-            const leftPhoneMatched =
-              left.phone && verifiedPhones.includes(normalizePhone(left.phone));
-            const rightPhoneMatched =
-              right.phone &&
-              verifiedPhones.includes(normalizePhone(right.phone));
+        const leftPhoneMatched =
+          left.phone && verifiedPhones.includes(normalizePhone(left.phone));
+        const rightPhoneMatched =
+          right.phone && verifiedPhones.includes(normalizePhone(right.phone));
 
-            if (leftPhoneMatched !== rightPhoneMatched) {
-              return leftPhoneMatched ? -1 : 1;
-            }
+        if (leftPhoneMatched !== rightPhoneMatched) {
+          return leftPhoneMatched ? -1 : 1;
+        }
 
-            return left.createdAt.getTime() - right.createdAt.getTime();
-          })[0] ??
-        candidates
-          .filter((candidate) => candidate.clerkId.startsWith("customer_"))
-          .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())[0];
+        return left.createdAt.getTime() - right.createdAt.getTime();
+      })[0];
 
-      if (preferredCandidate) {
-        const claimed = await withDatabaseRetry(() =>
-          db.user.update({
+      if (!preferredCandidate) {
+        return null;
+      }
+
+      const claimed = await withDatabaseRetry(() =>
+        db.$transaction(async (tx) => {
+          if (existingCustomerUserId) {
+            await tx.user.update({
+              where: {
+                id: existingCustomerUserId,
+              },
+              data: {
+                clerkId: `customer_reclaimed_${existingCustomerUserId}`,
+              },
+            });
+          }
+
+          return tx.user.update({
             where: {
               id: preferredCandidate.id,
             },
@@ -367,19 +394,30 @@ const ensureDbUserForClerkUserCached = cache(
                 },
               },
             },
-          }),
-        );
+          });
+        }),
+      );
 
-        return {
-          id: claimed.id,
-          clerkId: claimed.clerkId,
-          role: claimed.role,
-          organizationId: claimed.organizationId,
-          email: claimed.email,
-          phone: claimed.phone,
-          name: claimed.name,
-          technicianProfileId: claimed.technicianProfile?.id ?? null,
-        };
+      return toDbUserSnapshot(claimed);
+    };
+
+    if (existing) {
+      if (existing.role !== "customer") {
+        return existing;
+      }
+
+      const reconciledExisting = await reconcileOperationalCandidate(existing.id);
+      if (reconciledExisting) {
+        return reconciledExisting;
+      }
+
+      return existing;
+    }
+
+    if (contactOrClauses.length > 0) {
+      const reconciled = await reconcileOperationalCandidate();
+      if (reconciled) {
+        return reconciled;
       }
     }
 
@@ -409,16 +447,7 @@ const ensureDbUserForClerkUserCached = cache(
       }),
     );
 
-    return {
-      id: created.id,
-      clerkId: created.clerkId,
-      role: created.role,
-      organizationId: created.organizationId,
-      email: created.email,
-      phone: created.phone,
-      name: created.name,
-      technicianProfileId: created.technicianProfile?.id ?? null,
-    };
+    return toDbUserSnapshot(created);
   },
 );
 
