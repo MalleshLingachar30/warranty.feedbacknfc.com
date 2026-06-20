@@ -47,9 +47,9 @@ function renderPrintSheet(input: {
 
       return `
         <article class="label">
+          <div class="serial">${escapeHtml(row.assetSerialNumber ?? row.assetCode)}</div>
           <div class="code">${svg}</div>
           <div class="meta">
-            <div class="serial">${escapeHtml(row.assetSerialNumber ?? row.assetCode)}</div>
             <div class="tag">${escapeHtml(row.tagCode)}</div>
             <div class="asset">${escapeHtml(row.assetCode)}</div>
           </div>
@@ -75,9 +75,9 @@ function renderPrintSheet(input: {
     :root {
       --page-width: 210mm;
       --page-height: 297mm;
-      --label-width: 62mm;
-      --label-height: 25.2mm;
-      --gap: 2mm;
+      --label-width: 31mm;
+      --label-height: 33mm;
+      --gap: 1.5mm;
       --border: #0f172a;
       --muted: #475569;
     }
@@ -93,7 +93,7 @@ function renderPrintSheet(input: {
       min-height: var(--page-height);
       margin: 0 auto;
       background: white;
-      padding: 5mm 6mm;
+      padding: 5mm;
     }
     .header {
       display: flex;
@@ -114,7 +114,7 @@ function renderPrintSheet(input: {
     }
     .sheet {
       display: grid;
-      grid-template-columns: repeat(3, var(--label-width));
+      grid-template-columns: repeat(6, var(--label-width));
       gap: var(--gap);
     }
     .label {
@@ -122,48 +122,59 @@ function renderPrintSheet(input: {
       width: var(--label-width);
       height: var(--label-height);
       border: 0.25mm solid var(--border);
-      padding: 2.2mm;
-      display: grid;
-      grid-template-columns: 20mm 1fr;
-      gap: 2.5mm;
+      padding: 1.6mm 1.4mm 1.2mm;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.8mm;
       overflow: hidden;
       break-inside: avoid;
+    }
+    .serial {
+      width: 100%;
+      padding-right: 3.4mm;
+      text-align: center;
+      font-size: 6.2pt;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      line-height: 1.1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .code {
       display: flex;
       align-items: center;
       justify-content: center;
-      border-right: 0.2mm solid #cbd5e1;
-      padding-right: 2mm;
+      width: 100%;
+      min-height: 15mm;
     }
     .code svg {
-      width: 18mm;
-      height: 18mm;
+      width: 14mm;
+      height: 14mm;
       display: block;
     }
     .meta {
       display: flex;
-      min-width: 0;
+      width: 100%;
       flex-direction: column;
-      justify-content: center;
-      gap: 0.7mm;
-    }
-    .serial {
-      font-size: 8.5pt;
-      font-weight: 700;
-      letter-spacing: 0.01em;
+      align-items: center;
+      gap: 0.35mm;
+      min-width: 0;
     }
     .tag,
     .asset {
-      font-size: 5.6pt;
-      line-height: 1.2;
-      word-break: break-all;
+      width: 100%;
+      text-align: center;
+      font-size: 4pt;
+      line-height: 1.1;
+      word-break: break-word;
     }
     .index {
       position: absolute;
-      top: 1.3mm;
-      right: 1.8mm;
-      font-size: 6pt;
+      top: 0.8mm;
+      right: 1.1mm;
+      font-size: 4.5pt;
       color: var(--muted);
     }
     @page {
