@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Building2, Link2, ShieldPlus, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
-import type { AppRole } from "@/lib/roles";
+import { getRoleLabel, type AppRole } from "@/lib/roles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -158,6 +158,12 @@ function normalizeCommaList(value: string) {
     .split(",")
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function getAdminRoleDisplayLabel(
+  role: "manufacturer_admin" | "service_center_admin",
+) {
+  return getRoleLabel(role);
 }
 
 export function SuperAdminOrganizationsClient({
@@ -390,8 +396,54 @@ export function SuperAdminOrganizationsClient({
     <div className="space-y-6">
       <PageHeader
         title="Organizations"
-        description="Onboard manufacturers, service centers, and admin owners for your warranty network."
+        description="Onboard manufacturer and field-service organizations, then hand each operator into the correct workspace from day one."
       />
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wrench className="size-4" />
+              Field Service Workspace
+            </CardTitle>
+            <CardDescription>
+              Customer tickets, dispatch, technician jobs, and field-service
+              closure belong here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-slate-600">
+            <p>
+              Create the service-center organization first, then assign its
+              first <span className="font-medium text-slate-900">Field Service Admin</span>.
+            </p>
+            <p>
+              Typical downstream users: Field Dispatcher, Field Technician.
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Building2 className="size-4" />
+              Internal Services Workspace
+            </CardTitle>
+            <CardDescription>
+              Inward receipt, bench repair, QA, stock disposition, and
+              sticker-led repair work belong here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-slate-600">
+            <p>
+              Internal-service operator accounts are separate from the field
+              flow even when they belong to the same service-center company.
+            </p>
+            <p>
+              Typical downstream users: Internal Services Super Admin, Inward
+              Operator, Bench Engineer, QA, Stock Controller, Label Admin.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       {selectedOrganization ? (
         <div className="space-y-3">
@@ -665,11 +717,11 @@ export function SuperAdminOrganizationsClient({
                   placeholder="Selected organization"
                 />
                 <Input
-                  value={
-                    selectedOrganization.type === "service_center"
-                      ? "service_center_admin"
-                      : "manufacturer_admin"
-                  }
+                    value={
+                      selectedOrganization.type === "service_center"
+                        ? getAdminRoleDisplayLabel("service_center_admin")
+                        : getAdminRoleDisplayLabel("manufacturer_admin")
+                    }
                   disabled
                   placeholder="Admin role"
                 />
@@ -714,11 +766,11 @@ export function SuperAdminOrganizationsClient({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Building2 className="size-4" />
-              Create Manufacturer
+              Create Manufacturer Workspace
             </CardTitle>
             <CardDescription>
-              Create a manufacturer organization and optionally assign the first
-              manufacturer admin.
+              Create the manufacturer organization and optionally assign its
+              first Manufacturer Workspace Admin.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -776,6 +828,10 @@ export function SuperAdminOrganizationsClient({
             />
             <div className="rounded-md border bg-slate-50 p-3 text-sm">
               <p className="mb-2 font-medium">Optional first admin</p>
+              <p className="mb-3 text-xs text-slate-500">
+                Use this only for the manufacturer workspace owner. Internal
+                service operator accounts are created separately.
+              </p>
               <div className="space-y-2">
                 <Input
                   value={manufacturerForm.adminName}
@@ -823,11 +879,11 @@ export function SuperAdminOrganizationsClient({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Wrench className="size-4" />
-              Create Service Center
+              Create Field Service Organization
             </CardTitle>
             <CardDescription>
-              Create a service-center organization, branch, and optionally link
-              it to a manufacturer and first admin.
+              Create the service-center company and branch, then assign its
+              first Field Service Admin.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -922,6 +978,11 @@ export function SuperAdminOrganizationsClient({
             </select>
             <div className="rounded-md border bg-slate-50 p-3 text-sm">
               <p className="mb-2 font-medium">Optional first admin</p>
+              <p className="mb-3 text-xs text-slate-500">
+                This is the field-service workspace owner for tickets and
+                technicians. Internal-service operators should use dedicated
+                internal roles under the same company later.
+              </p>
               <div className="space-y-2">
                 <Input
                   value={serviceCenterForm.adminName}
@@ -971,11 +1032,11 @@ export function SuperAdminOrganizationsClient({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <ShieldPlus className="size-4" />
-              Assign Admin
+              Assign Workspace Admin
             </CardTitle>
             <CardDescription>
-              Attach an existing user to a manufacturer or service-center
-              organization as its first admin.
+              Attach an existing user to the correct workspace owner role
+              before they create downstream operator accounts.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -1036,9 +1097,23 @@ export function SuperAdminOrganizationsClient({
             {selectedAssignOrganization ? (
               <p className="text-xs text-muted-foreground">
                 Role to assign:{" "}
-                <span className="font-medium">{assignAdminForm.adminRole}</span>
+                <span className="font-medium">
+                  {getAdminRoleDisplayLabel(assignAdminForm.adminRole)}
+                </span>
               </p>
             ) : null}
+            <div className="rounded-md border bg-slate-50 p-3 text-xs text-slate-600">
+              Assign only workspace owners here:
+              {" "}
+              <span className="font-medium text-slate-900">
+                Manufacturer Workspace Admin
+              </span>
+              {" "}for the manufacturer surface or{" "}
+              <span className="font-medium text-slate-900">
+                Field Service Admin
+              </span>
+              {" "}for the field-service surface.
+            </div>
             <Button
               onClick={() => void assignAdmin()}
               disabled={isAssigningAdmin}

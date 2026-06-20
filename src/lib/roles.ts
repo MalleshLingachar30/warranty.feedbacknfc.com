@@ -302,25 +302,25 @@ export function getRoleLabel(role: AppRole): string {
     case "field_service_admin":
       return "Field Service Admin";
     case "manufacturer_admin":
-      return "Manufacturer Admin";
+      return "Manufacturer Workspace Admin";
     case "service_center_admin":
-      return "Service Center Admin";
+      return "Field Service Admin";
     case "field_dispatcher":
       return "Field Dispatcher";
     case "field_technician":
       return "Field Technician";
     case "internal_service_super_admin":
-      return "Internal Service Super Admin";
+      return "Internal Services Super Admin";
     case "internal_service_admin":
-      return "Internal Service Admin";
+      return "Internal Services Admin";
     case "internal_inward_operator":
       return "Internal Inward Operator";
     case "internal_service_engineer":
-      return "Internal Service Engineer";
+      return "Internal Bench Engineer";
     case "internal_service_qa":
-      return "Internal Service QA";
+      return "Internal QA Engineer";
     case "internal_service_stock":
-      return "Internal Service Stock";
+      return "Internal Stock Controller";
     case "internal_label_admin":
       return "Internal Label Admin";
     case "customer":
