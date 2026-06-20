@@ -377,7 +377,6 @@ export const SERVICE_CENTER_FIELD_ROLES: AppRole[] = [
 
 export const INTERNAL_SERVICE_ROLES: AppRole[] = [
   "platform_owner",
-  "service_center_admin",
   "internal_service_super_admin",
   "internal_service_admin",
   "internal_inward_operator",
