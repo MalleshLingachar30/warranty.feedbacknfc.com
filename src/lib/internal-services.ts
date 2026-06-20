@@ -9,6 +9,8 @@ import {
   tagClassForProductClass,
 } from "@/lib/asset-generation";
 
+const INTERNAL_SERVICE_SCAN_URL_PREFIXES = new Set(["r", "nfc", "q", "c"]);
+
 export function formatInternalServiceStatus(value: string) {
   return value.replace(/_/g, " ");
 }
@@ -27,6 +29,43 @@ export function formatInternalServiceDisposition(value: string | null) {
 
 export function formatInternalServiceControlTagSource(value: string) {
   return value.replace(/_/g, " ");
+}
+
+function extractInternalServiceCodeFromPathname(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+
+  if (segments.length < 2 || !INTERNAL_SERVICE_SCAN_URL_PREFIXES.has(segments[0] ?? "")) {
+    return null;
+  }
+
+  return decodeURIComponent(segments[1] ?? "");
+}
+
+function normalizeInternalServiceReference(reference: string) {
+  const trimmed = reference.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("/")
+  ) {
+    try {
+      const parsedUrl = trimmed.startsWith("/")
+        ? new URL(trimmed, "https://scanner.feedbacknfc.local")
+        : new URL(trimmed);
+      const extractedCode = extractInternalServiceCodeFromPathname(parsedUrl.pathname);
+
+      return extractedCode?.trim() || trimmed;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return trimmed;
 }
 
 type ManufacturerFilterOptions = {
@@ -576,7 +615,7 @@ export async function resolveInternalServiceTrackedPartByReference(
     manufacturerOrgId?: string | null;
   },
 ) {
-  const normalized = reference.trim();
+  const normalized = normalizeInternalServiceReference(reference);
 
   if (!normalized) {
     return null;
@@ -586,10 +625,20 @@ export async function resolveInternalServiceTrackedPartByReference(
 
   const tagMatch = await tx.assetTag.findFirst({
     where: {
-      publicCode: {
-        equals: normalized,
-        mode: "insensitive",
-      },
+      OR: [
+        {
+          publicCode: {
+            equals: normalized,
+            mode: "insensitive",
+          },
+        },
+        {
+          encodedValue: {
+            equals: reference.trim(),
+            mode: "insensitive",
+          },
+        },
+      ],
       asset: manufacturerOrgId
         ? {
             organizationId: manufacturerOrgId,
