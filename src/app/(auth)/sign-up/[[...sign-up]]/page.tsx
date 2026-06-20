@@ -4,8 +4,6 @@ import { ClerkFailed, ClerkLoaded, ClerkLoading, SignUp, useAuth } from "@clerk/
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
-import { getDefaultDashboardPath, parseAppRoleFromClaims } from "@/lib/roles";
-
 const clerkPublicAuthEnabled = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
 );
@@ -35,22 +33,17 @@ function getRedirectTarget(searchParams: URLSearchParams): string {
 }
 
 function SignUpCard() {
-  const { userId, isLoaded: authLoaded, sessionClaims } = useAuth();
+  const { userId, isLoaded: authLoaded } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTarget = useMemo(
     () => getRedirectTarget(searchParams),
     [searchParams],
   );
-  const resolvedRedirectTarget = useMemo(() => {
-    if (redirectTarget !== "/dashboard") {
-      return redirectTarget;
-    }
-
-    const role = parseAppRoleFromClaims(sessionClaims);
-
-    return getDefaultDashboardPath(role);
-  }, [redirectTarget, sessionClaims]);
+  const resolvedRedirectTarget = useMemo(
+    () => (redirectTarget === "/dashboard" ? "/dashboard" : redirectTarget),
+    [redirectTarget],
+  );
 
   useEffect(() => {
     if (!authLoaded || !userId) {

@@ -2,10 +2,9 @@ import { redirect } from "next/navigation";
 
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { resolveAppRoleForSession } from "@/lib/app-user";
-import { getCachedAuth, getCachedCurrentUser } from "@/lib/clerk-session";
+import { getCachedAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { withDatabaseRetry } from "@/lib/db-retry";
-import { parseAppRoleFromClaims } from "@/lib/roles";
 
 export default async function DashboardLayout({
   children,
@@ -19,29 +18,10 @@ export default async function DashboardLayout({
       redirect("/sign-in");
     }
 
-    const claimsRole = parseAppRoleFromClaims(sessionClaims);
-    const clerkUser =
-      claimsRole === "customer" ? await getCachedCurrentUser() : null;
-    const clerkRole = clerkUser
-      ? parseAppRoleFromClaims(clerkUser)
-      : "customer";
-    const resolvedSession =
-      claimsRole !== "customer"
-        ? {
-            role: claimsRole,
-            dbUser: null,
-          }
-        : clerkRole !== "customer"
-          ? {
-              role: clerkRole,
-              dbUser: null,
-            }
-          : await resolveAppRoleForSession({
-              clerkUserId: userId,
-              sessionClaims,
-            });
-
-    const { role, dbUser } = resolvedSession;
+    const { role, dbUser } = await resolveAppRoleForSession({
+      clerkUserId: userId,
+      sessionClaims,
+    });
 
     const organizationId = dbUser?.organizationId ?? null;
 

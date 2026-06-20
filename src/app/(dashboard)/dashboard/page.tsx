@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { getCachedAuth, getCachedCurrentUser } from "@/lib/clerk-session";
+import { getCachedAuth } from "@/lib/clerk-session";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { DevRoleSwitcher } from "@/components/dashboard/dev-role-switcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,6 @@ import {
   NAVIGATION_BY_ROLE,
   getDefaultDashboardPath,
   getRoleLabel,
-  parseAppRoleFromClaims,
 } from "@/lib/roles";
 
 export default async function DashboardPage() {
@@ -20,21 +19,10 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  const claimsRole = parseAppRoleFromClaims(sessionClaims);
-  const clerkUser =
-    claimsRole === "customer" ? await getCachedCurrentUser() : null;
-  const clerkRole = clerkUser ? parseAppRoleFromClaims(clerkUser) : "customer";
-  const role =
-    claimsRole !== "customer"
-      ? claimsRole
-      : clerkRole !== "customer"
-        ? clerkRole
-      : (
-          await resolveAppRoleForSession({
-            clerkUserId: userId,
-            sessionClaims,
-          })
-        ).role;
+  const { role } = await resolveAppRoleForSession({
+    clerkUserId: userId,
+    sessionClaims,
+  });
   const navItems = NAVIGATION_BY_ROLE[role] ?? [];
   const workspaceItems = navItems.filter((item) => item.href !== "/dashboard");
 
