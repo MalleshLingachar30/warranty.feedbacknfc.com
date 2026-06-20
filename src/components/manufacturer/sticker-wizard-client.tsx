@@ -1064,6 +1064,31 @@ export function StickerWizardClient({
                 selectedBatchId && hasSymbology(selectedBatch, "data_matrix")
                   ? `/api/manufacturer/tag-generation/batches/${encodeURIComponent(
                       selectedBatchId,
+                    )}/exports/data-matrix?format=html`
+                  : undefined
+              }
+              target="_blank"
+              rel="noreferrer"
+              className={
+                selectedBatchId && hasSymbology(selectedBatch, "data_matrix")
+                  ? "inline-flex"
+                  : "pointer-events-none inline-flex opacity-60"
+              }
+            >
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!selectedBatchId || !hasSymbology(selectedBatch, "data_matrix")}
+              >
+                Open Print Sheet
+              </Button>
+            </a>
+
+            <a
+              href={
+                selectedBatchId && hasSymbology(selectedBatch, "data_matrix")
+                  ? `/api/manufacturer/tag-generation/batches/${encodeURIComponent(
+                      selectedBatchId,
                     )}/exports/data-matrix?format=csv`
                   : undefined
               }
