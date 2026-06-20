@@ -5,10 +5,12 @@ import { db } from "@/lib/db";
 import {
   ASSET_PRODUCT_CLASSES,
   asAssetProductClass,
+  asTagOutputFormat,
   asTagMaterialVariant,
   asTagSymbology,
   asTagViewerPolicy,
   buildAssetPublicCode,
+  buildMicroResolverCode,
   buildTagEncodedValue,
   buildTagPublicCode,
   formatSerialNumber,
@@ -16,6 +18,7 @@ import {
   recommendedSymbologiesFromPolicy,
   tagClassForProductClass,
   type TagSymbology,
+  type TagOutputFormat,
 } from "@/lib/asset-generation";
 
 import {
@@ -47,7 +50,7 @@ type CreateBatchPayload = {
 type OutputProfile = {
   symbologies: TagSymbology[];
   serialPadLength?: number;
-  format?: string;
+  format?: TagOutputFormat;
   notes?: string;
 };
 
@@ -99,7 +102,7 @@ function parseOutputProfile(
 
   const symbologies = parseSymbologies(record.symbologies);
   const serialPadLengthValue = toNumber(record.serialPadLength);
-  const format = asString(record.format);
+  const format = asTagOutputFormat(record.format);
   const notes = asString(record.notes);
 
   return {
@@ -108,7 +111,7 @@ function parseOutputProfile(
       serialPadLengthValue && Number.isInteger(serialPadLengthValue)
         ? serialPadLengthValue
         : undefined,
-    format: format || undefined,
+    format: format ?? undefined,
     notes: notes || undefined,
   };
 }
@@ -241,12 +244,20 @@ export async function POST(request: Request) {
       throw new ApiError("At least one symbology must be selected.", 400);
     }
 
-    const resolvedDefaultSymbology =
-      defaultSymbology && symbologies.includes(defaultSymbology)
-        ? defaultSymbology
-        : symbologies[0];
+    const requestOutputProfile = asRecord(body.outputProfile);
+    const outputFormat = asTagOutputFormat(requestOutputProfile?.format) ?? "standard";
 
-    if (!symbologies.includes(resolvedDefaultSymbology)) {
+    const resolvedSymbologies =
+      outputFormat === "pcb_micro_dm" ? (["data_matrix"] as TagSymbology[]) : symbologies;
+
+    const resolvedDefaultSymbology =
+      outputFormat === "pcb_micro_dm"
+        ? "data_matrix"
+        : defaultSymbology && resolvedSymbologies.includes(defaultSymbology)
+          ? defaultSymbology
+          : resolvedSymbologies[0];
+
+    if (!resolvedSymbologies.includes(resolvedDefaultSymbology)) {
       throw new ApiError(
         "defaultSymbology must be one of the selected symbologies.",
         400,
@@ -308,12 +319,20 @@ export async function POST(request: Request) {
       }
     }
 
+    const resolvedPrintSizeMm =
+      outputFormat === "pcb_micro_dm"
+        ? 10
+        : printSizeMm && Number.isInteger(printSizeMm) && printSizeMm > 0
+          ? printSizeMm
+          : null;
     const createdAt = new Date();
     const batchId = crypto.randomUUID();
     const batchCode = formatTagGenerationBatchCode(batchId, createdAt);
     const tagClass = tagClassForProductClass(productClass);
     const shouldIncludeCartonTags =
-      productClass === "main_product" && includeCartonRegistrationTags;
+      outputFormat === "pcb_micro_dm"
+        ? false
+        : productClass === "main_product" && includeCartonRegistrationTags;
 
     const assetRows = Array.from({ length: quantity }, (_, index) => {
       const id = crypto.randomUUID();
@@ -342,29 +361,40 @@ export async function POST(request: Request) {
 
     let tagOffset = 0;
     const tagRows = assetRows.flatMap((asset) => {
-      const unitTags = symbologies.map((symbology) => {
+      const unitTags = resolvedSymbologies.map((symbology) => {
         const publicCode = buildTagPublicCode({
           batchId,
           offset: tagOffset,
           tagClass,
           symbology,
         });
+        const microResolverCode =
+          outputFormat === "pcb_micro_dm" && symbology === "data_matrix"
+            ? buildMicroResolverCode({
+                batchId,
+                offset: tagOffset,
+                symbology,
+              })
+            : null;
         tagOffset += 1;
 
         return {
           id: crypto.randomUUID(),
           publicCode,
+          microResolverCode,
           assetId: asset.id,
           generationBatchId: batchId,
           tagClass,
           symbology,
           status: "generated" as const,
           materialVariant,
-          printSizeMm:
-            printSizeMm && Number.isInteger(printSizeMm) && printSizeMm > 0
-              ? printSizeMm
-              : null,
-          encodedValue: buildTagEncodedValue(publicCode, symbology),
+          printSizeMm: resolvedPrintSizeMm,
+          encodedValue: buildTagEncodedValue({
+            tagPublicCode: publicCode,
+            symbology,
+            outputFormat,
+            microResolverCode,
+          }),
           viewerPolicy,
         };
       });
@@ -386,25 +416,26 @@ export async function POST(request: Request) {
         {
           id: crypto.randomUUID(),
           publicCode: cartonPublicCode,
+          microResolverCode: null,
           assetId: asset.id,
           generationBatchId: batchId,
           tagClass: "carton_registration" as const,
           symbology: "qr" as const,
           status: "generated" as const,
           materialVariant,
-          printSizeMm:
-            printSizeMm && Number.isInteger(printSizeMm) && printSizeMm > 0
-              ? printSizeMm
-              : null,
-          encodedValue: buildTagEncodedValue(cartonPublicCode, "qr"),
+          printSizeMm: resolvedPrintSizeMm,
+          encodedValue: buildTagEncodedValue({
+            tagPublicCode: cartonPublicCode,
+            symbology: "qr",
+            outputFormat,
+          }),
           viewerPolicy,
         },
       ];
     });
 
-    const requestOutputProfile = asRecord(body.outputProfile);
     const outputProfile: Record<string, unknown> = {
-      symbologies,
+      symbologies: resolvedSymbologies,
       externalItemCode: productModel.externalItemCode,
       externalItemSeriesCode: productModel.externalItemSeriesCode,
     };
@@ -413,7 +444,6 @@ export async function POST(request: Request) {
       outputProfile.serialPadLength = serialPadLength;
     }
 
-    const outputFormat = asString(requestOutputProfile?.format);
     if (outputFormat) {
       outputProfile.format = outputFormat;
     }
@@ -489,7 +519,7 @@ export async function POST(request: Request) {
         quantity: batch.quantity,
         includeCartonRegistrationTags: batch.includeCartonRegistrationTags,
         defaultSymbology: batch.defaultSymbology,
-        symbologies,
+        symbologies: resolvedSymbologies,
         serialPrefix: serialPrefix || null,
         serialStart: serialStart !== null ? String(serialStart) : null,
         serialEnd:

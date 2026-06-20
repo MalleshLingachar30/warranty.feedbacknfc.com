@@ -85,9 +85,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const resolvedTag = await db.assetTag.findUnique({
+    const resolvedTag = await db.assetTag.findFirst({
       where: {
-        publicCode: tagCode,
+        OR: [
+          {
+            publicCode: {
+              equals: tagCode,
+              mode: "insensitive",
+            },
+          },
+          {
+            microResolverCode: {
+              equals: tagCode,
+              mode: "insensitive",
+            },
+          },
+        ],
       },
       select: {
         publicCode: true,

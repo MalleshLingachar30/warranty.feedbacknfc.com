@@ -126,7 +126,20 @@ async function resolveRegistrationAsset(
 
   const byTag = await db.assetTag.findFirst({
     where: {
-      publicCode: lookupCode,
+      OR: [
+        {
+          publicCode: {
+            equals: lookupCode,
+            mode: "insensitive",
+          },
+        },
+        {
+          microResolverCode: {
+            equals: lookupCode,
+            mode: "insensitive",
+          },
+        },
+      ],
       asset: {
         organizationId,
         productClass: "main_product",

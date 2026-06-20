@@ -6,7 +6,11 @@ import type {
   SaleRegistrationStatus,
 } from "@prisma/client";
 
-import type { AssetProductClass, TagSymbology } from "@/lib/asset-generation";
+import type {
+  AssetProductClass,
+  TagOutputFormat,
+  TagSymbology,
+} from "@/lib/asset-generation";
 import type {
   ActivationMode,
   ActivationTrigger,
@@ -98,6 +102,9 @@ export type TagGenerationBatchRow = {
   includeCartonRegistrationTags: boolean;
   defaultSymbology: TagSymbology;
   symbologies: TagSymbology[];
+  outputProfile?: {
+    format?: TagOutputFormat;
+  };
   productModel: {
     id: string;
     name: string;

@@ -849,6 +849,7 @@ model AssetIdentity {
 model AssetTag {
   id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   publicCode        String          @unique @map("public_code") @db.VarChar(100)
+  microResolverCode String?         @unique @map("micro_resolver_code") @db.VarChar(16)
   assetId           String          @map("asset_id") @db.Uuid
   generationBatchId String?         @map("generation_batch_id") @db.Uuid
   tagClass          TagClass        @map("tag_class")

@@ -256,10 +256,20 @@ export async function resolveInternalServiceAssetContextByReference(
 
   const assetFromTag = await tx.assetTag.findFirst({
     where: {
-      publicCode: {
-        equals: normalized,
-        mode: "insensitive",
-      },
+      OR: [
+        {
+          publicCode: {
+            equals: normalized,
+            mode: "insensitive",
+          },
+        },
+        {
+          microResolverCode: {
+            equals: normalized,
+            mode: "insensitive",
+          },
+        },
+      ],
       asset: manufacturerFilter,
     },
     select: {
@@ -592,7 +602,10 @@ export async function affixInternalServiceLabel(input: {
       status: "active",
       materialVariant: "standard",
       printSizeMm: 30,
-      encodedValue: buildTagEncodedValue(publicCode, symbology),
+      encodedValue: buildTagEncodedValue({
+        tagPublicCode: publicCode,
+        symbology,
+      }),
       viewerPolicy: "warehouse_admin",
     },
     select: {
@@ -628,6 +641,12 @@ export async function resolveInternalServiceTrackedPartByReference(
       OR: [
         {
           publicCode: {
+            equals: normalized,
+            mode: "insensitive",
+          },
+        },
+        {
+          microResolverCode: {
             equals: normalized,
             mode: "insensitive",
           },

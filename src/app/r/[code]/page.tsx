@@ -230,9 +230,22 @@ export default async function TagResolverPage({
     lookupCode === lookupCode.toUpperCase() ? null : lookupCode.toUpperCase();
 
   const resolvedTag =
-    (await db.assetTag.findUnique({
+    (await db.assetTag.findFirst({
       where: {
-        publicCode: lookupCode,
+        OR: [
+          {
+            publicCode: {
+              equals: lookupCode,
+              mode: "insensitive",
+            },
+          },
+          {
+            microResolverCode: {
+              equals: lookupCode,
+              mode: "insensitive",
+            },
+          },
+        ],
       },
       select: {
         id: true,
@@ -302,9 +315,22 @@ export default async function TagResolverPage({
       },
     })) ??
     (normalizedCandidate
-      ? await db.assetTag.findUnique({
+      ? await db.assetTag.findFirst({
           where: {
-            publicCode: normalizedCandidate,
+            OR: [
+              {
+                publicCode: {
+                  equals: normalizedCandidate,
+                  mode: "insensitive",
+                },
+              },
+              {
+                microResolverCode: {
+                  equals: normalizedCandidate,
+                  mode: "insensitive",
+                },
+              },
+            ],
           },
           select: {
             id: true,

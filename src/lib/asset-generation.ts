@@ -22,6 +22,9 @@ export type TagClass = (typeof TAG_CLASSES)[number];
 export const TAG_SYMBOLOGIES = ["qr", "data_matrix", "nfc_uri"] as const;
 export type TagSymbology = (typeof TAG_SYMBOLOGIES)[number];
 
+export const TAG_OUTPUT_FORMATS = ["standard", "pcb_micro_dm"] as const;
+export type TagOutputFormat = (typeof TAG_OUTPUT_FORMATS)[number];
+
 export const TAG_MATERIAL_VARIANTS = [
   "standard",
   "high_temp",
@@ -54,6 +57,17 @@ export function asTagSymbology(value: unknown): TagSymbology | null {
     (TAG_SYMBOLOGIES as readonly string[]).includes(value)
   ) {
     return value as TagSymbology;
+  }
+
+  return null;
+}
+
+export function asTagOutputFormat(value: unknown): TagOutputFormat | null {
+  if (
+    typeof value === "string" &&
+    (TAG_OUTPUT_FORMATS as readonly string[]).includes(value)
+  ) {
+    return value as TagOutputFormat;
   }
 
   return null;
@@ -186,6 +200,48 @@ function tagClassShortCode(tagClass: TagClass) {
   return "PACK";
 }
 
+const MICRO_RESOLVER_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+function encodeMicroResolverValue(value: bigint, length: number) {
+  const alphabetLength = BigInt(MICRO_RESOLVER_ALPHABET.length);
+  let remaining = value;
+  let output = "";
+
+  for (let index = 0; index < length; index += 1) {
+    const alphabetIndex = Number(remaining % alphabetLength);
+    output = `${MICRO_RESOLVER_ALPHABET[alphabetIndex] ?? "A"}${output}`;
+    remaining /= alphabetLength;
+  }
+
+  return output;
+}
+
+export function buildMicroResolverCode(input: {
+  batchId: string;
+  offset: number;
+  symbology: TagSymbology;
+}) {
+  const compactBatchId = input.batchId.replace(/-/g, "").toUpperCase();
+  const leadingBits = BigInt(`0x${compactBatchId.slice(0, 10)}`);
+  const trailingBits = BigInt(`0x${compactBatchId.slice(-10)}`);
+  const symbologyBits =
+    input.symbology === "data_matrix"
+      ? BigInt(0x444d)
+      : input.symbology === "nfc_uri"
+        ? BigInt(0x4e4643)
+        : BigInt(0x5152);
+  const sequenceBits = BigInt(input.offset + 1);
+  const mixed =
+    (leadingBits ^
+      trailingBits ^
+      symbologyBits ^
+      sequenceBits * BigInt(0x9e3779b1) ^
+      (sequenceBits << BigInt(11))) &
+    ((BigInt(1) << BigInt(40)) - BigInt(1));
+
+  return encodeMicroResolverValue(mixed, 8);
+}
+
 export function buildAssetPublicCode(batchId: string, offset: number) {
   return `AST-${compactUuid(batchId)}-${String(offset + 1).padStart(6, "0")}`;
 }
@@ -202,9 +258,24 @@ export function buildTagPublicCode(input: {
   )}-${tagClassShortCode(input.tagClass)}-${symbologyShortCode(input.symbology)}`;
 }
 
-export function buildTagEncodedValue(tagPublicCode: string, symbology: TagSymbology) {
-  const suffix = symbology === "nfc_uri" ? "?src=nfc" : "";
-  return buildAbsoluteWarrantyUrl(`/r/${encodeURIComponent(tagPublicCode)}${suffix}`);
+export function buildTagEncodedValue(input: {
+  tagPublicCode: string;
+  symbology: TagSymbology;
+  outputFormat?: TagOutputFormat;
+  microResolverCode?: string | null;
+}) {
+  if (
+    input.outputFormat === "pcb_micro_dm" &&
+    input.symbology === "data_matrix" &&
+    input.microResolverCode
+  ) {
+    return input.microResolverCode;
+  }
+
+  const suffix = input.symbology === "nfc_uri" ? "?src=nfc" : "";
+  return buildAbsoluteWarrantyUrl(
+    `/r/${encodeURIComponent(input.tagPublicCode)}${suffix}`,
+  );
 }
 
 export function formatProductClassLabel(productClass: AssetProductClass) {
@@ -231,4 +302,12 @@ export function formatSymbologyLabel(symbology: TagSymbology) {
     return "NFC URI";
   }
   return "QR";
+}
+
+export function formatTagOutputFormatLabel(format: TagOutputFormat) {
+  if (format === "pcb_micro_dm") {
+    return "PCB Micro Data Matrix";
+  }
+
+  return "Standard";
 }

@@ -24,7 +24,9 @@ import {
 } from "@/components/ui/table";
 import {
   ASSET_PRODUCT_CLASSES,
+  TAG_OUTPUT_FORMATS,
   formatProductClassLabel,
+  formatTagOutputFormatLabel,
   formatSymbologyLabel,
   recommendedSymbologiesFromPolicy,
   TAG_MATERIAL_VARIANTS,
@@ -32,6 +34,7 @@ import {
   TAG_VIEWER_POLICIES,
   type AssetProductClass,
   type TagMaterialVariant,
+  type TagOutputFormat,
   type TagSymbology,
   type TagViewerPolicy,
 } from "@/lib/asset-generation";
@@ -57,6 +60,7 @@ type CreateBatchState = {
   materialVariant: TagMaterialVariant;
   viewerPolicy: TagViewerPolicy;
   printSizeMm: string;
+  outputFormat: TagOutputFormat;
 };
 
 type CreateBatchApiResponse = {
@@ -181,8 +185,9 @@ export function StickerWizardClient({
     symbologies: ["qr"],
     defaultSymbology: "qr",
     materialVariant: "standard",
-      viewerPolicy: "public",
-      printSizeMm: "30",
+    viewerPolicy: "public",
+    printSizeMm: "30",
+    outputFormat: "standard",
   });
 
   const applyWorkspacePayload = (payload: TagGenerationWorkspacePayload) => {
@@ -258,6 +263,37 @@ export function StickerWizardClient({
 
   const selectedBatch = batches.find((batch) => batch.id === selectedBatchId);
   const canGenerate = productModels.length > 0 && !isSubmitting && !isLoadingWorkspace;
+  const isPcbMicroMode = form.outputFormat === "pcb_micro_dm";
+
+  useEffect(() => {
+    if (!isPcbMicroMode) {
+      return;
+    }
+
+    setForm((current) => {
+      if (
+        current.symbologies.length === 1 &&
+        current.symbologies[0] === "data_matrix" &&
+        current.defaultSymbology === "data_matrix" &&
+        current.materialVariant === "high_temp" &&
+        current.viewerPolicy === "technician_admin" &&
+        current.printSizeMm === "10" &&
+        current.includeCartonRegistrationTags === false
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        symbologies: ["data_matrix"],
+        defaultSymbology: "data_matrix",
+        materialVariant: "high_temp",
+        viewerPolicy: "technician_admin",
+        printSizeMm: "10",
+        includeCartonRegistrationTags: false,
+      };
+    });
+  }, [isPcbMicroMode]);
 
   const applyRecommendedSymbologies = () => {
     setForm((current) => {
@@ -392,6 +428,7 @@ export function StickerWizardClient({
           printSizeMm: asPositiveInteger(form.printSizeMm),
           outputProfile: {
             source: "manufacturer_ui",
+            format: form.outputFormat,
           },
         }),
       });
@@ -417,6 +454,9 @@ export function StickerWizardClient({
         includeCartonRegistrationTags: payload.batch.includeCartonRegistrationTags,
         defaultSymbology: payload.batch.defaultSymbology,
         symbologies: payload.batch.symbologies,
+        outputProfile: {
+          format: form.outputFormat,
+        },
         productModel: {
           id: form.productModelId,
           name: model?.name ?? "Unknown Model",
@@ -736,6 +776,27 @@ export function StickerWizardClient({
             </label>
 
             <label className="space-y-1 text-sm">
+              <span>Output Format</span>
+              <select
+                value={form.outputFormat}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    outputFormat: event.target.value as TagOutputFormat,
+                  }))
+                }
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                disabled={isSubmitting}
+              >
+                {TAG_OUTPUT_FORMATS.map((format) => (
+                  <option key={format} value={format}>
+                    {formatTagOutputFormatLabel(format)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm">
               <span>Print Size (mm)</span>
               <Input
                 type="number"
@@ -746,7 +807,7 @@ export function StickerWizardClient({
                     printSizeMm: event.target.value,
                   }))
                 }
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPcbMicroMode}
               />
             </label>
 
@@ -761,7 +822,7 @@ export function StickerWizardClient({
                   }))
                 }
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPcbMicroMode}
               >
                 {TAG_MATERIAL_VARIANTS.map((variant) => (
                   <option key={variant} value={variant}>
@@ -782,7 +843,7 @@ export function StickerWizardClient({
                   }))
                 }
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPcbMicroMode}
               >
                 {TAG_VIEWER_POLICIES.map((policy) => (
                   <option key={policy} value={policy}>
@@ -851,7 +912,7 @@ export function StickerWizardClient({
                   }))
                 }
                 className="mt-0.5"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPcbMicroMode}
               />
               <span>
                 <span className="font-medium">Include carton registration tags</span>{" "}
@@ -867,7 +928,9 @@ export function StickerWizardClient({
               <div>
                 <p className="text-sm font-medium">Symbology Selection</p>
                 <p className="text-xs text-muted-foreground">
-                  Choose one or more symbologies for this batch.
+                  {isPcbMicroMode
+                    ? "PCB micro mode forces Data Matrix only with a short resolver token payload."
+                    : "Choose one or more symbologies for this batch."}
                 </p>
               </div>
               <Button
@@ -875,7 +938,7 @@ export function StickerWizardClient({
                 variant="outline"
                 size="sm"
                 onClick={applyRecommendedSymbologies}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPcbMicroMode}
               >
                 Use Policy Recommendation
               </Button>
@@ -895,7 +958,7 @@ export function StickerWizardClient({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleSymbology(symbology)}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isPcbMicroMode}
                     />
                     {formatSymbologyLabel(symbology)}
                   </label>
@@ -914,7 +977,7 @@ export function StickerWizardClient({
                   }))
                 }
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isPcbMicroMode}
               >
                 {form.symbologies.map((symbology) => (
                   <option key={symbology} value={symbology}>
@@ -924,6 +987,14 @@ export function StickerWizardClient({
               </select>
             </label>
           </div>
+
+          {isPcbMicroMode ? (
+            <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+              PCB Micro Data Matrix mode generates 10x10 mm Data Matrix-only labels
+              with 8-character resolver tokens for high-density board labeling and
+              print-sheet packing up to 250 labels per A4 page.
+            </div>
+          ) : null}
 
           {error ? (
             <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">

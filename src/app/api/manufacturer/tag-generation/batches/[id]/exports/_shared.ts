@@ -5,6 +5,7 @@ import {
   asTagSymbology,
   formatTagGenerationBatchCode,
   type TagSymbology,
+  type TagOutputFormat,
 } from "@/lib/asset-generation";
 
 import { ApiError } from "../../../../_utils";
@@ -52,7 +53,7 @@ function parseOutputProfile(
         : null,
     format:
       typeof record.format === "string" && record.format.trim()
-        ? record.format.trim()
+        ? (record.format.trim() as TagOutputFormat)
         : null,
   };
 }
@@ -109,6 +110,7 @@ export async function getOwnedBatchExportData(input: {
     select: {
       id: true,
       publicCode: true,
+      microResolverCode: true,
       tagClass: true,
       symbology: true,
       status: true,
