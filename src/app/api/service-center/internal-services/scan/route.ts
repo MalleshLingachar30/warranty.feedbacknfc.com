@@ -10,12 +10,12 @@ import {
   ApiError,
   jsonError,
   parseJsonBody,
-  requireServiceCenterContext,
+  requireInternalServiceContext,
 } from "../../_utils";
 
 export async function GET(request: Request) {
   try {
-    const { organizationId } = await requireServiceCenterContext();
+    const { organizationId } = await requireInternalServiceContext();
     const url = new URL(request.url);
     const code = url.searchParams.get("code")?.trim() ?? "";
 
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { organizationId } = await requireServiceCenterContext();
+    const { organizationId } = await requireInternalServiceContext();
     const body = parseJsonBody<{ assetId?: unknown }>(await request.json());
     const assetId =
       typeof body.assetId === "string" && body.assetId.trim().length > 0

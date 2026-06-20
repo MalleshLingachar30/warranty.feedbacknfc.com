@@ -77,7 +77,7 @@ export async function GET() {
         clerkUserId: authData.userId,
         orgRole: authData.orgRole,
         sessionClaims: authData.sessionClaims,
-        requiredRole: "technician",
+        requiredRole: "field_technician",
       });
 
       if (!hasRequiredRole) {

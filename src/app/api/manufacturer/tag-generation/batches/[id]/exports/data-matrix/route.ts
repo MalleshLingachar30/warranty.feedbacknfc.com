@@ -1,4 +1,7 @@
-import { jsonError, requireManufacturerContext } from "../../../../../_utils";
+import {
+  jsonError,
+  requireManufacturerWorkspaceContext,
+} from "../../../../../_utils";
 
 import { getOwnedBatchExportData } from "../_shared";
 import bwipjs from "bwip-js";
@@ -365,7 +368,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { organizationId } = await requireManufacturerContext();
+    const { organizationId } = await requireManufacturerWorkspaceContext();
     const { id } = await params;
     const url = new URL(request.url);
     const format = parseFormat(url.searchParams.get("format"));

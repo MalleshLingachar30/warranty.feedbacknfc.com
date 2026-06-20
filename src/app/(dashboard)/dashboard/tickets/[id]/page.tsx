@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { db } from "@/lib/db";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveFieldServicePageContext } from "../../_lib/service-center-context";
 
 interface TicketLogisticsPageProps {
   params: Promise<{ id: string }>;
@@ -42,7 +42,7 @@ function formatDateTime(date: Date | null) {
 export default async function ServiceCenterTicketLogisticsPage({
   params,
 }: TicketLogisticsPageProps) {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
   const { id } = await params;
 
   if (!organizationId || !id) {

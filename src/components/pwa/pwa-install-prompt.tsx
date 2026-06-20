@@ -7,7 +7,10 @@ import type { AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 
 const DISMISS_KEY = "warranty-pwa-install-dismissed-until";
-const PROMPT_ROLES = new Set<AppRole>(["technician", "service_center_admin"]);
+const PROMPT_ROLES = new Set<AppRole>([
+  "field_technician",
+  "service_center_admin",
+]);
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;

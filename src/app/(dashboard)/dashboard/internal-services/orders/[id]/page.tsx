@@ -9,7 +9,7 @@ import {
   verifyInternalServiceStationLease,
 } from "@/lib/internal-service-bench";
 
-import { resolveServiceCenterPageContext } from "../../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../../_lib/service-center-context";
 
 interface DepotInternalServiceOrderDetailPageProps {
   params: Promise<{ id: string }>;
@@ -49,7 +49,7 @@ export default async function DepotInternalServiceOrderDetailPage({
   params,
   searchParams,
 }: DepotInternalServiceOrderDetailPageProps) {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
   const { id } = await params;
   const query = await searchParams;
 

@@ -3,7 +3,12 @@ import { cache } from "react";
 
 import { getCachedAuth } from "@/lib/clerk-session";
 import { resolveOrganizationContext } from "@/lib/org-context";
-import { clerkOrDbHasRole } from "@/lib/rbac";
+import {
+  INTERNAL_SERVICE_ROLES,
+  SERVICE_CENTER_FIELD_ROLES,
+  type AppRole,
+} from "@/lib/roles";
+import { clerkOrDbHasAnyRole } from "@/lib/rbac";
 
 export type ServiceCenterPageContext = {
   organizationId: string | null;
@@ -11,8 +16,10 @@ export type ServiceCenterPageContext = {
   dbUserId: string | null;
 };
 
-export const resolveServiceCenterPageContext = cache(
-  async (): Promise<ServiceCenterPageContext> => {
+async function resolveScopedServiceCenterPageContext(input: {
+  allowedRoles: AppRole[];
+  requiredLabel: string;
+}): Promise<ServiceCenterPageContext> {
     const authData = await getCachedAuth();
 
     if (!authData.userId) {
@@ -21,16 +28,16 @@ export const resolveServiceCenterPageContext = cache(
 
     if (process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true") {
       const hasRequiredRole = authData.userId
-        ? await clerkOrDbHasRole({
+        ? await clerkOrDbHasAnyRole({
             clerkUserId: authData.userId,
             orgRole: authData.orgRole,
             sessionClaims: authData.sessionClaims,
-            requiredRole: "service_center_admin",
+            requiredRoles: input.allowedRoles,
           })
         : false;
 
       if (!hasRequiredRole) {
-        redirect("/dashboard?access=denied&required=service_center_admin");
+        redirect(`/dashboard?access=denied&required=${input.requiredLabel}`);
       }
     }
 
@@ -51,7 +58,30 @@ export const resolveServiceCenterPageContext = cache(
       clerkUserId,
       dbUserId,
     };
-  },
+}
+
+export const resolveServiceCenterPageContext = cache(
+  async (): Promise<ServiceCenterPageContext> =>
+    resolveScopedServiceCenterPageContext({
+      allowedRoles: [...new Set([...SERVICE_CENTER_FIELD_ROLES, ...INTERNAL_SERVICE_ROLES])],
+      requiredLabel: "service_center",
+    }),
+);
+
+export const resolveFieldServicePageContext = cache(
+  async (): Promise<ServiceCenterPageContext> =>
+    resolveScopedServiceCenterPageContext({
+      allowedRoles: SERVICE_CENTER_FIELD_ROLES,
+      requiredLabel: "field_service",
+    }),
+);
+
+export const resolveInternalServicePageContext = cache(
+  async (): Promise<ServiceCenterPageContext> =>
+    resolveScopedServiceCenterPageContext({
+      allowedRoles: INTERNAL_SERVICE_ROLES,
+      requiredLabel: "internal_services",
+    }),
 );
 
 export function decimalToNumber(value: unknown) {

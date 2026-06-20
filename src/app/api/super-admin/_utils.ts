@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
-const REQUIRED_ROLE = "super_admin";
+const REQUIRED_ROLE = "platform_owner";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -51,7 +51,7 @@ export async function requireSuperAdminContext() {
       orgRole: authData.orgRole,
       sessionClaims: authData.sessionClaims,
       requiredRole: REQUIRED_ROLE,
-      allowSuperAdmin: true,
+      allowPlatformOwner: true,
     });
 
     if (!hasRequiredRole) {

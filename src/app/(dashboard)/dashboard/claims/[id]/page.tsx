@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 
 import {
   decimalToNumber,
-  resolveServiceCenterPageContext,
+  resolveFieldServicePageContext,
 } from "../../_lib/service-center-context";
 
 type GenericRecord = Record<string, unknown>;
@@ -47,7 +47,7 @@ export default async function ServiceCenterClaimReviewPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
   const { id } = await params;
 
   if (!organizationId) {

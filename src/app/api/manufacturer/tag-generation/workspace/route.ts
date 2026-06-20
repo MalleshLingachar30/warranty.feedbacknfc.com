@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 
 import { getTagGenerationWorkspaceData } from "@/lib/manufacturer/tag-generation-workspace";
 
-import { jsonError, requireManufacturerContext } from "../../_utils";
+import { jsonError, requireManufacturerWorkspaceContext } from "../../_utils";
 
 export async function GET() {
   try {
-    const { organizationId } = await requireManufacturerContext();
+    const { organizationId } = await requireManufacturerWorkspaceContext();
     const workspace = await getTagGenerationWorkspaceData(organizationId);
 
     return NextResponse.json(workspace);

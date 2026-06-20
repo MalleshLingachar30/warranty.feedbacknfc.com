@@ -8,7 +8,11 @@ import {
   type TagSymbology,
 } from "@/lib/asset-generation";
 
-import { ApiError, jsonError, requireManufacturerContext } from "../../../_utils";
+import {
+  ApiError,
+  jsonError,
+  requireManufacturerWorkspaceContext,
+} from "../../../_utils";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -54,7 +58,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { organizationId } = await requireManufacturerContext();
+    const { organizationId } = await requireManufacturerWorkspaceContext();
     const { id } = await params;
 
     if (!id) {

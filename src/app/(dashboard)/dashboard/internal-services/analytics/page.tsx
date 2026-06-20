@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../_lib/service-center-context";
 
 type MonthlyRow = {
   month: Date;
@@ -44,7 +44,7 @@ function monthLabel(value: Date) {
 }
 
 export default async function DepotInternalServicesAnalyticsPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
 
   if (!organizationId) {
     return (

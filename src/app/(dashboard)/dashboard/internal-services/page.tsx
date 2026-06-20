@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/table";
 import { db } from "@/lib/db";
 
-import { resolveServiceCenterPageContext } from "../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../_lib/service-center-context";
 
 const BENCH_STATUSES: InternalServiceStatus[] = [
   "awaiting_triage",
@@ -86,7 +86,7 @@ function formatDateTime(value: Date | null) {
 }
 
 export default async function DepotInternalServicesOverviewPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
 
   if (!organizationId) {
     return (

@@ -23,7 +23,7 @@ import {
 import { db } from "@/lib/db";
 import { formatInternalServiceStatus } from "@/lib/internal-services";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../_lib/service-center-context";
 
 function statusTone(status: InternalServiceStatus) {
   switch (status) {
@@ -53,7 +53,7 @@ function formatDateTime(value: Date | null) {
 }
 
 export default async function DepotInternalServicesQaPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
 
   if (!organizationId) {
     return (

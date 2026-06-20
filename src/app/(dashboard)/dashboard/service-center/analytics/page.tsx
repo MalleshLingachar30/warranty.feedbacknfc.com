@@ -31,7 +31,7 @@ import { db } from "@/lib/db";
 
 import {
   decimalToNumber,
-  resolveServiceCenterPageContext,
+  resolveFieldServicePageContext,
 } from "../../_lib/service-center-context";
 
 type ServiceCenterAnalyticsSummaryRow = {
@@ -164,7 +164,7 @@ function buildMonthBuckets(months: number) {
 }
 
 export default async function ServiceCenterAnalyticsPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
 
   if (!organizationId) {
     return (

@@ -7,7 +7,7 @@ import {
   ApiError,
   jsonError,
   parseJsonBody,
-  requireServiceCenterContext,
+  requireInternalServiceContext,
 } from "../_utils";
 import {
   createInternalServiceOrder,
@@ -17,7 +17,7 @@ import {
 
 export async function POST(request: Request) {
   try {
-    const { organizationId, dbUserId } = await requireServiceCenterContext();
+    const { organizationId, dbUserId } = await requireInternalServiceContext();
 
     if (!dbUserId) {
       throw new ApiError("Service-center user is not linked to a local user record.", 400);

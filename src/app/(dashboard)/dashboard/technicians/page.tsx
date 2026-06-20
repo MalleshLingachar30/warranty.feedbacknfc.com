@@ -25,7 +25,7 @@ import { db } from "@/lib/db";
 
 import {
   decimalToNumber,
-  resolveServiceCenterPageContext,
+  resolveFieldServicePageContext,
 } from "../_lib/service-center-context";
 
 function formatHours(value: number) {
@@ -44,7 +44,7 @@ type TechnicianServiceRatingRow = {
 };
 
 export default async function ServiceCenterTechniciansPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
 
   if (!organizationId) {
     return (
@@ -331,7 +331,7 @@ export default async function ServiceCenterTechniciansPage() {
                       </TableCell>
                       <TableCell>
                         <SendInstallInviteButton
-                          target="technician"
+                          target="field_technician"
                           technicianId={technician.id}
                         />
                       </TableCell>

@@ -4,7 +4,7 @@ import { ClerkFailed, ClerkLoaded, ClerkLoading, SignUp, useAuth } from "@clerk/
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
-import { parseAppRoleFromClaims } from "@/lib/roles";
+import { getDefaultDashboardPath, parseAppRoleFromClaims } from "@/lib/roles";
 
 const clerkPublicAuthEnabled = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
@@ -49,14 +49,7 @@ function SignUpCard() {
 
     const role = parseAppRoleFromClaims(sessionClaims);
 
-    switch (role) {
-      case "manufacturer_admin":
-        return "/dashboard/manufacturer/integrations";
-      case "super_admin":
-        return "/dashboard/settings";
-      default:
-        return redirectTarget;
-    }
+    return getDefaultDashboardPath(role);
   }, [redirectTarget, sessionClaims]);
 
   useEffect(() => {

@@ -1133,7 +1133,7 @@ export default async function NfcStickerPage({
     );
   }
 
-  if (role === "technician") {
+  if (role === "field_technician") {
     const assignedToCurrentTechnician =
       Boolean(openTicket?.assignedTechnicianId) &&
       openTicket?.assignedTechnicianId === technicianProfileId;
@@ -1255,7 +1255,7 @@ export default async function NfcStickerPage({
   if (
     role === "service_center_admin" ||
     role === "manufacturer_admin" ||
-    role === "super_admin"
+    role === "platform_owner"
   ) {
     after(async () => {
       await writeScanLog({

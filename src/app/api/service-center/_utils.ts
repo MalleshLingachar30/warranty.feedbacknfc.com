@@ -2,9 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { resolveOrganizationContext } from "@/lib/org-context";
-import { clerkOrDbHasRole } from "@/lib/rbac";
-
-const REQUIRED_ROLE = "service_center_admin";
+import {
+  INTERNAL_SERVICE_ROLES,
+  SERVICE_CENTER_FIELD_ROLES,
+  type AppRole,
+} from "@/lib/roles";
+import { clerkOrDbHasAnyRole } from "@/lib/rbac";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -42,7 +45,14 @@ export type ServiceCenterContext = {
   clerkUserId: string;
 };
 
-export async function requireServiceCenterContext(): Promise<ServiceCenterContext> {
+type RequireServiceCenterContextOptions = {
+  allowedRoles?: AppRole[];
+  requiredLabel?: string;
+};
+
+export async function requireServiceCenterContext(
+  options: RequireServiceCenterContextOptions = {},
+): Promise<ServiceCenterContext> {
   const authData = await auth();
 
   if (!authData.userId) {
@@ -53,15 +63,20 @@ export async function requireServiceCenterContext(): Promise<ServiceCenterContex
     process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
 
   if (!roleGuardDisabled) {
-    const hasRequiredRole = await clerkOrDbHasRole({
+    const hasRequiredRole = await clerkOrDbHasAnyRole({
       clerkUserId: authData.userId,
       orgRole: authData.orgRole,
       sessionClaims: authData.sessionClaims,
-      requiredRole: REQUIRED_ROLE,
+      requiredRoles: options.allowedRoles ?? SERVICE_CENTER_FIELD_ROLES,
     });
 
     if (!hasRequiredRole) {
-      throw new ApiError("Forbidden", 403);
+      throw new ApiError(
+        `Forbidden${
+          options.requiredLabel ? `: ${options.requiredLabel} access required.` : ""
+        }`,
+        403,
+      );
     }
   }
 
@@ -83,6 +98,13 @@ export async function requireServiceCenterContext(): Promise<ServiceCenterContex
     dbUserId,
     clerkUserId: authData.userId,
   };
+}
+
+export async function requireInternalServiceContext() {
+  return requireServiceCenterContext({
+    allowedRoles: INTERNAL_SERVICE_ROLES,
+    requiredLabel: "internal_services",
+  });
 }
 
 export function parseJsonBody<T extends object>(value: unknown) {

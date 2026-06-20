@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { InwardReceiptClient } from "@/components/internal-services/inward-receipt-client";
 import { db } from "@/lib/db";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../_lib/service-center-context";
 
 interface DepotInternalServicesInwardPageProps {
   searchParams: Promise<{ asset?: string | string[] }>;
@@ -13,7 +13,7 @@ interface DepotInternalServicesInwardPageProps {
 export default async function DepotInternalServicesInwardPage({
   searchParams,
 }: DepotInternalServicesInwardPageProps) {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
   const query = await searchParams;
   const prefilledAssetReference =
     typeof query.asset === "string"

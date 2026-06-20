@@ -194,7 +194,7 @@ export async function GET(
   }
 
   if (
-    dbUser.role !== "super_admin" &&
+    dbUser.role !== "platform_owner" &&
     dbUser.role !== "manufacturer_admin" &&
     dbUser.role !== "service_center_admin"
   ) {

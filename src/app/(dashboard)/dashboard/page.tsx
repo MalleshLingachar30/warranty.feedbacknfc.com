@@ -8,6 +8,7 @@ import { DevRoleSwitcher } from "@/components/dashboard/dev-role-switcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   NAVIGATION_BY_ROLE,
+  getDefaultDashboardPath,
   getRoleLabel,
   parseAppRoleFromClaims,
 } from "@/lib/roles";
@@ -37,20 +38,9 @@ export default async function DashboardPage() {
   const navItems = NAVIGATION_BY_ROLE[role] ?? [];
   const workspaceItems = navItems.filter((item) => item.href !== "/dashboard");
 
-  if (role === "manufacturer_admin") {
-    redirect("/dashboard/manufacturer/integrations");
-  }
-
-  if (role === "service_center_admin") {
-    redirect("/dashboard/service-center-overview");
-  }
-
-  if (role === "customer") {
-    redirect("/dashboard/customer");
-  }
-
-  if (role === "super_admin") {
-    redirect("/dashboard/settings");
+  const defaultPath = getDefaultDashboardPath(role);
+  if (defaultPath !== "/dashboard") {
+    redirect(defaultPath);
   }
 
   const showDevRoleSwitcher = process.env.NODE_ENV === "development";

@@ -4,7 +4,7 @@ import {
   ApiError,
   jsonError,
   parseJsonBody,
-  requireServiceCenterContext,
+  requireInternalServiceContext,
 } from "@/app/api/service-center/_utils";
 import {
   InternalServiceOrderActionError,
@@ -20,7 +20,7 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { organizationId, dbUserId } = await requireServiceCenterContext();
+    const { organizationId, dbUserId } = await requireInternalServiceContext();
     const { id } = await context.params;
     const body = parseJsonBody<UpdateInternalServiceOrderRequest>(await request.json());
 

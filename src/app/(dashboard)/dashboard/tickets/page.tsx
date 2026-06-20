@@ -24,7 +24,7 @@ import {
 import { db } from "@/lib/db";
 import { getSlaIndicator, type SlaIndicatorState } from "@/lib/sla-config";
 
-import { resolveServiceCenterPageContext } from "../_lib/service-center-context";
+import { resolveFieldServicePageContext } from "../_lib/service-center-context";
 
 const OPEN_STATUSES: TicketStatus[] = [
   "reported",
@@ -119,7 +119,7 @@ function metricValue(value: number | null | undefined) {
 }
 
 export default async function ServiceCenterTicketsPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
 
   if (!organizationId) {
     return (

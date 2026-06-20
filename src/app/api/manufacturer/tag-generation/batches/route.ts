@@ -25,7 +25,7 @@ import {
   ApiError,
   jsonError,
   parseJsonBody,
-  requireManufacturerContext,
+  requireManufacturerWorkspaceContext,
   toNumber,
 } from "../../_utils";
 
@@ -136,7 +136,7 @@ function summarizeSymbologyCounts(
 
 export async function POST(request: Request) {
   try {
-    const { organizationId, dbUserId } = await requireManufacturerContext();
+    const { organizationId, dbUserId } = await requireManufacturerWorkspaceContext();
     if (!dbUserId) {
       throw new ApiError(
         "Your manufacturer account is missing a linked platform user. Run the user bootstrap and retry.",
@@ -536,7 +536,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const { organizationId } = await requireManufacturerContext();
+    const { organizationId } = await requireManufacturerWorkspaceContext();
     const url = new URL(request.url);
     const limitValue = toNumber(url.searchParams.get("limit"));
     const limit =

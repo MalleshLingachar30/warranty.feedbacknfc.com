@@ -18,7 +18,13 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { NAVIGATION_BY_ROLE, type AppRole, getRoleLabel } from "@/lib/roles";
+import {
+  NAVIGATION_BY_ROLE,
+  type AppRole,
+  getRoleLabel,
+  isFieldTechnicianRole,
+  getWorkspaceTitle,
+} from "@/lib/roles";
 
 interface DashboardShellProps {
   role: AppRole;
@@ -71,8 +77,9 @@ export function DashboardShell({
   children,
 }: DashboardShellProps) {
   const roleLabel = getRoleLabel(role);
+  const workspaceTitle = getWorkspaceTitle(role);
   const secondaryLabel =
-    role === "technician" && userDisplayName ? userDisplayName : roleLabel;
+    isFieldTechnicianRole(role) && userDisplayName ? userDisplayName : roleLabel;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -81,7 +88,7 @@ export function DashboardShell({
         <aside className="hidden w-64 border-r border-slate-200 bg-white px-4 py-6 md:block">
           <div className="mb-6 px-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
-              FeedbackNFC | Warranty
+              {workspaceTitle}
             </p>
             {organizationName ? (
               <p className="text-sm font-medium text-slate-700">
@@ -108,7 +115,7 @@ export function DashboardShell({
                   </SheetTrigger>
                   <SheetContent side="left" className="w-[280px]">
                     <SheetHeader>
-                      <SheetTitle>FeedbackNFC | Warranty</SheetTitle>
+                      <SheetTitle>{workspaceTitle}</SheetTitle>
                       <SheetDescription>
                         {organizationName ? (
                           <span className="flex flex-col gap-0.5">
@@ -129,7 +136,7 @@ export function DashboardShell({
                 </Sheet>
                 <div>
                   <p className="text-sm font-semibold text-slate-900 md:text-base">
-                    FeedbackNFC | Warranty
+                    {workspaceTitle}
                   </p>
                   <p className="text-xs text-slate-500 md:hidden">
                     {organizationName ?? "Dashboard"}

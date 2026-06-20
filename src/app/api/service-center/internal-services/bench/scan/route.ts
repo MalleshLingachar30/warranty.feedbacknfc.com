@@ -6,12 +6,12 @@ import { resolveInternalServiceBenchScanContext } from "@/lib/internal-service-b
 import {
   ApiError,
   jsonError,
-  requireServiceCenterContext,
+  requireInternalServiceContext,
 } from "../../../_utils";
 
 export async function GET(request: Request) {
   try {
-    const { organizationId } = await requireServiceCenterContext();
+    const { organizationId } = await requireInternalServiceContext();
     const url = new URL(request.url);
     const code = url.searchParams.get("code")?.trim() ?? "";
 

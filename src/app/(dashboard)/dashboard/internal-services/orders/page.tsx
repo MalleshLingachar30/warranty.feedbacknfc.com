@@ -3,10 +3,10 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { InternalServiceOrdersTable } from "@/components/internal-services/orders-table";
 import { db } from "@/lib/db";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../_lib/service-center-context";
 
 export default async function DepotInternalServicesOrdersPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
 
   if (!organizationId) {
     return (

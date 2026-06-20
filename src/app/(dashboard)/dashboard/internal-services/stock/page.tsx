@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { db } from "@/lib/db";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../_lib/service-center-context";
 
 interface DepotInternalServicesStockPageProps {
   searchParams: Promise<{ updated?: string | string[]; error?: string | string[] }>;
@@ -40,7 +40,7 @@ function formatActionNotice(action: string | null) {
 export default async function DepotInternalServicesStockPage({
   searchParams,
 }: DepotInternalServicesStockPageProps) {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
   const query = await searchParams;
 
   if (!organizationId) {

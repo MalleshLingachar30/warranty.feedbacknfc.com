@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { sendEmail, sendSMS } from "@/lib/notifications";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 
-type InviteRole = "service_center_admin" | "technician";
+type InviteRole = "service_center_admin" | "field_technician";
 
 type InviteMetadataRecord = Record<string, unknown>;
 
@@ -21,7 +21,7 @@ function firstName(name: string | null) {
 }
 
 function getDashboardPath(role: InviteRole) {
-  return role === "technician" ? "/dashboard/my-jobs" : "/dashboard";
+  return role === "field_technician" ? "/dashboard/my-jobs" : "/dashboard";
 }
 
 function buildInstallInviteUrl(role: InviteRole) {
@@ -108,12 +108,12 @@ export async function sendInstallInviteIfNeeded(input: {
   const name = firstName(user.name);
 
   const smsBody =
-    input.role === "technician"
+    input.role === "field_technician"
       ? `Hi ${name}, open FeedbackNFC Warranty on your phone: ${installUrl} Sign in, then add it to your home screen. No app store download needed.`
       : `Hi ${name}, open FeedbackNFC Warranty on your phone: ${installUrl} Sign in to ${dashboardPath} and add it to your home screen. No app store download needed.`;
 
   const emailBody =
-    input.role === "technician"
+    input.role === "field_technician"
       ? `Hi ${name},\n\nOpen FeedbackNFC Warranty on your phone using this link:\n${installUrl}\n\nAfter you sign in, you can add it to your home screen for faster access. No App Store or Play Store download is required.\n`
       : `Hi ${name},\n\nOpen FeedbackNFC Warranty on your phone using this link:\n${installUrl}\n\nAfter you sign in, you can add it to your home screen for faster access to your service-center workspace. No App Store or Play Store download is required.\n`;
 

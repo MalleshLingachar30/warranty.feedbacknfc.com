@@ -18,10 +18,10 @@ export const runtime = "nodejs";
 
 type ViewerRole =
   | "owner"
-  | "technician"
+  | "field_technician"
   | "service_center_admin"
   | "manufacturer_admin"
-  | "super_admin"
+  | "platform_owner"
   | "unknown";
 
 interface TrackingRequestBody {
@@ -64,15 +64,15 @@ function isTrackingAction(value: unknown): value is TechnicianTrackingAction {
 }
 
 function isInternalViewerRole(role: string): role is
-  | "technician"
+  | "field_technician"
   | "service_center_admin"
   | "manufacturer_admin"
-  | "super_admin" {
+  | "platform_owner" {
   return (
-    role === "technician" ||
+    role === "field_technician" ||
     role === "service_center_admin" ||
     role === "manufacturer_admin" ||
-    role === "super_admin"
+    role === "platform_owner"
   );
 }
 
@@ -159,14 +159,14 @@ export async function GET(
           : inferredRole;
 
       if (isInternalViewerRole(effectiveRole)) {
-        if (effectiveRole === "technician") {
+        if (effectiveRole === "field_technician") {
           const isAssignedViewer =
             Boolean(ticket.assignedTechnicianId) &&
             dbUser?.technicianProfile?.id === ticket.assignedTechnicianId;
 
           if (isAssignedViewer) {
             canRead = true;
-            viewerRole = "technician";
+            viewerRole = "field_technician";
           }
         } else {
           canRead = true;
@@ -228,7 +228,7 @@ export async function POST(
         clerkUserId: authData.userId,
         orgRole: authData.orgRole,
         sessionClaims: authData.sessionClaims,
-        requiredRole: "technician",
+        requiredRole: "field_technician",
       });
 
       if (!hasRequiredRole) {

@@ -2,11 +2,19 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { getCachedAuth } from "@/lib/clerk-session";
-import { clerkOrDbHasRole } from "@/lib/rbac";
+import {
+  MANUFACTURER_WORKSPACE_ROLES,
+  type AppRole,
+} from "@/lib/roles";
+import { clerkOrDbHasAnyRole } from "@/lib/rbac";
 
-const REQUIRED_ROLE = "manufacturer_admin";
+type EnsureManufacturerAccessOptions = {
+  allowedRoles?: AppRole[];
+  requiredLabel?: string;
+};
 
-export const ensureManufacturerAdmin = cache(async () => {
+export const ensureManufacturerAccess = cache(
+  async (options: EnsureManufacturerAccessOptions = {}) => {
   const authData = await getCachedAuth();
 
   if (!authData.userId) {
@@ -18,18 +26,35 @@ export const ensureManufacturerAdmin = cache(async () => {
     return authData;
   }
 
-  const hasRequiredRole = authData.userId
-    ? await clerkOrDbHasRole({
+    const hasRequiredRole = authData.userId
+      ? await clerkOrDbHasAnyRole({
         clerkUserId: authData.userId,
         orgRole: authData.orgRole,
         sessionClaims: authData.sessionClaims,
-        requiredRole: REQUIRED_ROLE,
+        requiredRoles: options.allowedRoles ?? ["manufacturer_admin"],
       })
-    : false;
+      : false;
 
-  if (!hasRequiredRole) {
-    redirect("/dashboard?access=denied&required=manufacturer_admin");
-  }
+    if (!hasRequiredRole) {
+      redirect(
+        `/dashboard?access=denied&required=${options.requiredLabel ?? "manufacturer_admin"}`,
+      );
+    }
 
-  return authData;
-});
+    return authData;
+  },
+);
+
+export const ensureManufacturerAdmin = cache(async () =>
+  ensureManufacturerAccess({
+    allowedRoles: ["manufacturer_admin"],
+    requiredLabel: "manufacturer_admin",
+  }),
+);
+
+export const ensureManufacturerWorkspaceAccess = cache(async () =>
+  ensureManufacturerAccess({
+    allowedRoles: MANUFACTURER_WORKSPACE_ROLES,
+    requiredLabel: "manufacturer_workspace",
+  }),
+);

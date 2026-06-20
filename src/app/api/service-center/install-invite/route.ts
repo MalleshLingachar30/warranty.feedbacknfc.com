@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const body = parseJsonBody<InstallInvitePayload>(await request.json());
     const target = asString(body.target);
 
-    if (target !== "technician" && target !== "service_center_admin") {
+    if (target !== "field_technician" && target !== "service_center_admin") {
       throw new ApiError("Valid invite target is required.", 400);
     }
 
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
 
     const result = await sendInstallInviteIfNeeded({
       userId: technician.userId,
-      role: "technician",
+      role: "field_technician",
       fallbackEmail: technician.user.email,
       fallbackPhone: technician.phone ?? technician.user.phone,
       force: true,

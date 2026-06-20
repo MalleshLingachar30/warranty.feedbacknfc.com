@@ -25,7 +25,7 @@ import { db } from "@/lib/db";
 
 import {
   decimalToNumber,
-  resolveServiceCenterPageContext,
+  resolveFieldServicePageContext,
 } from "../_lib/service-center-context";
 
 const money = new Intl.NumberFormat("en-IN", {
@@ -60,7 +60,7 @@ function statusClass(status: ClaimStatus) {
 }
 
 export default async function ServiceCenterClaimsPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
 
   if (!organizationId) {
     return (

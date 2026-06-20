@@ -214,7 +214,7 @@ export async function POST(
             clerkUserId: authData.userId,
             orgRole: authData.orgRole,
             sessionClaims: authData.sessionClaims,
-            requiredRole: "technician",
+            requiredRole: "field_technician",
           }),
           clerkOrDbHasRole({
             clerkUserId: authData.userId,

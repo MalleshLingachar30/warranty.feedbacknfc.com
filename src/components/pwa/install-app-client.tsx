@@ -49,7 +49,7 @@ function isInAppBrowser(userAgent: string) {
 }
 
 function getTargetPath(role: AppRole | null, nextPath: string) {
-  if (role === "technician") {
+  if (role === "field_technician") {
     return "/dashboard/my-jobs";
   }
 

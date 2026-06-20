@@ -3,9 +3,11 @@ import { type ClaimStatus, type TicketStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { resolveOrganizationContext } from "@/lib/org-context";
-import { clerkOrDbHasRole } from "@/lib/rbac";
-
-const REQUIRED_ROLE = "manufacturer_admin";
+import {
+  MANUFACTURER_WORKSPACE_ROLES,
+  type AppRole,
+} from "@/lib/roles";
+import { clerkOrDbHasAnyRole } from "@/lib/rbac";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -77,7 +79,14 @@ export type ManufacturerContext = {
   clerkUserId: string;
 };
 
-export async function requireManufacturerContext(): Promise<ManufacturerContext> {
+type RequireManufacturerContextOptions = {
+  allowedRoles?: AppRole[];
+  requiredLabel?: string;
+};
+
+export async function requireManufacturerContext(
+  options: RequireManufacturerContextOptions = {},
+): Promise<ManufacturerContext> {
   const authData = await auth();
 
   if (!authData.userId) {
@@ -88,15 +97,20 @@ export async function requireManufacturerContext(): Promise<ManufacturerContext>
     process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
 
   if (!roleGuardDisabled) {
-    const hasRequiredRole = await clerkOrDbHasRole({
+    const hasRequiredRole = await clerkOrDbHasAnyRole({
       clerkUserId: authData.userId,
       orgRole: authData.orgRole,
       sessionClaims: authData.sessionClaims,
-      requiredRole: REQUIRED_ROLE,
+      requiredRoles: options.allowedRoles ?? ["manufacturer_admin"],
     });
 
     if (!hasRequiredRole) {
-      throw new ApiError("Forbidden", 403);
+      throw new ApiError(
+        `Forbidden${
+          options.requiredLabel ? `: ${options.requiredLabel} access required.` : ""
+        }`,
+        403,
+      );
     }
   }
 
@@ -118,6 +132,13 @@ export async function requireManufacturerContext(): Promise<ManufacturerContext>
     dbUserId,
     clerkUserId: authData.userId,
   };
+}
+
+export async function requireManufacturerWorkspaceContext() {
+  return requireManufacturerContext({
+    allowedRoles: MANUFACTURER_WORKSPACE_ROLES,
+    requiredLabel: "manufacturer_workspace",
+  });
 }
 
 export function toNumber(value: unknown) {

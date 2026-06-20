@@ -32,11 +32,16 @@ export default async function AnalyticsPage() {
     redirect("/dashboard/manufacturer/analytics");
   }
 
-  if (role === "service_center_admin") {
+  if (
+    role === "field_super_admin" ||
+    role === "field_service_admin" ||
+    role === "service_center_admin" ||
+    role === "field_dispatcher"
+  ) {
     redirect("/dashboard/service-center/analytics");
   }
 
-  if (role === "technician") {
+  if (role === "field_technician") {
     redirect("/dashboard/my-performance");
   }
 

@@ -6,7 +6,7 @@ import { Loader2, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type SendInstallInviteButtonProps = {
-  target: "technician" | "service_center_admin";
+  target: "field_technician" | "service_center_admin";
   technicianId?: string;
   variant?: "default" | "outline" | "secondary";
   size?: "default" | "sm";

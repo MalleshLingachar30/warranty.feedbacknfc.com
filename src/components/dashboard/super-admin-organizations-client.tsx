@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Building2, Link2, ShieldPlus, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
+import type { AppRole } from "@/lib/roles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,12 +29,7 @@ type AdminMember = {
   name: string;
   email: string;
   clerkId: string;
-  role:
-    | "super_admin"
-    | "manufacturer_admin"
-    | "service_center_admin"
-    | "technician"
-    | "customer";
+  role: AppRole;
 };
 
 type OrganizationRow = {

@@ -24,7 +24,7 @@ import {
 import { db } from "@/lib/db";
 import { formatInternalServiceStatus, formatInternalServiceType } from "@/lib/internal-services";
 
-import { resolveServiceCenterPageContext } from "../../_lib/service-center-context";
+import { resolveInternalServicePageContext } from "../../_lib/service-center-context";
 
 const BENCH_STATUSES: InternalServiceStatus[] = [
   "awaiting_triage",
@@ -69,7 +69,7 @@ function notePreview(value: string | null) {
 }
 
 export default async function DepotInternalServicesBenchPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveInternalServicePageContext();
 
   if (!organizationId) {
     return (

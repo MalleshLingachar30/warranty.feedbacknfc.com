@@ -24,18 +24,35 @@ export async function clerkOrDbHasRole(input: {
   orgRole: string | null | undefined;
   sessionClaims: unknown;
   requiredRole: string;
-  allowSuperAdmin?: boolean;
+  allowPlatformOwner?: boolean;
 }): Promise<boolean> {
-  const allowSuperAdmin = input.allowSuperAdmin ?? true;
-
-  const hasClerkRole = sessionHasRole({
+  return clerkOrDbHasAnyRole({
+    clerkUserId: input.clerkUserId,
     orgRole: input.orgRole,
     sessionClaims: input.sessionClaims,
-    requiredRole: input.requiredRole,
+    requiredRoles: [input.requiredRole],
+    allowPlatformOwner: input.allowPlatformOwner,
   });
+}
 
-  if (hasClerkRole) {
-    return true;
+export async function clerkOrDbHasAnyRole(input: {
+  clerkUserId: string;
+  orgRole: string | null | undefined;
+  sessionClaims: unknown;
+  requiredRoles: string[];
+  allowPlatformOwner?: boolean;
+}): Promise<boolean> {
+  const allowPlatformOwner = input.allowPlatformOwner ?? true;
+  for (const requiredRole of input.requiredRoles) {
+    const hasClerkRole = sessionHasRole({
+      orgRole: input.orgRole,
+      sessionClaims: input.sessionClaims,
+      requiredRole,
+    });
+
+    if (hasClerkRole) {
+      return true;
+    }
   }
 
   const dbUser = await fetchDbUserRole(input.clerkUserId);
@@ -44,9 +61,9 @@ export async function clerkOrDbHasRole(input: {
     return false;
   }
 
-  if (allowSuperAdmin && dbUser.role === "super_admin") {
+  if (allowPlatformOwner && dbUser.role === "platform_owner") {
     return true;
   }
 
-  return dbUser.role === input.requiredRole;
+  return input.requiredRoles.includes(dbUser.role);
 }

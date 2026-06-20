@@ -158,11 +158,11 @@ export async function POST(request: Request) {
 
     if (
       existingUser &&
-      existingUser.role !== "technician" &&
+      existingUser.role !== "field_technician" &&
       existingUser.role !== "customer"
     ) {
       throw new ApiError(
-        `This Clerk user is already registered as ${existingUser.role}. Ask a super admin to change roles.`,
+        `This Clerk user is already registered as ${existingUser.role}. Ask a platform owner to change roles.`,
         409,
       );
     }
@@ -195,14 +195,14 @@ export async function POST(request: Request) {
       },
       create: {
         clerkId,
-        role: "technician",
+        role: "field_technician",
         organizationId,
         name: nameInput,
         phone: phoneInput ? normalizePhone(phoneInput) : null,
         email: emailInput,
       },
       update: {
-        role: "technician",
+        role: "field_technician",
         organizationId,
         name: nameInput ?? undefined,
         phone: phoneInput ? normalizePhone(phoneInput) : undefined,
@@ -278,7 +278,7 @@ export async function POST(request: Request) {
 
     void sendInstallInviteIfNeeded({
       userId: user.id,
-      role: "technician",
+      role: "field_technician",
       fallbackEmail: user.email,
       fallbackPhone: resolvedPhone,
     }).catch((error) => {

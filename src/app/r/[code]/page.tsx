@@ -118,10 +118,10 @@ function formatDateTime(value: Date | null) {
 
 function isStaffRole(role: ResolverViewerRole) {
   return (
-    role === "technician" ||
+    role === "field_technician" ||
     role === "service_center_admin" ||
     role === "manufacturer_admin" ||
-    role === "super_admin"
+    role === "platform_owner"
   );
 }
 
@@ -553,7 +553,7 @@ export default async function TagResolverPage({
               </span>
             </p>
             {staffForAssetOrg &&
-            (viewer.role === "manufacturer_admin" || viewer.role === "super_admin") ? (
+            (viewer.role === "manufacturer_admin" || viewer.role === "platform_owner") ? (
               <div className="pt-2">
                 <Link
                   href={`/dashboard/manufacturer/sales?lookup=${encodeURIComponent(
@@ -667,7 +667,7 @@ export default async function TagResolverPage({
 
             {staffForAssetOrg ? (
               <div className="flex flex-wrap gap-2 pt-2">
-                {viewer.role === "technician" ? (
+                {viewer.role === "field_technician" ? (
                   <Link
                     href="/dashboard/my-jobs"
                     className="inline-flex rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700"
@@ -675,7 +675,7 @@ export default async function TagResolverPage({
                     Open My Jobs
                   </Link>
                 ) : null}
-                {viewer.role === "manufacturer_admin" || viewer.role === "super_admin" ? (
+                {viewer.role === "manufacturer_admin" || viewer.role === "platform_owner" ? (
                   <Link
                     href="/dashboard/manufacturer/installations"
                     className="inline-flex rounded-md bg-slate-900 px-3 py-2 font-medium text-white hover:bg-slate-700"
@@ -972,7 +972,7 @@ export default async function TagResolverPage({
         ) : null}
 
         <div className="flex flex-wrap gap-2 pt-1">
-          {viewer.role === "technician" ? (
+          {viewer.role === "field_technician" ? (
             <>
               <Link
                 href={`/dashboard/my-jobs?tab=service&${serviceWorkflowQuery}`}
@@ -1004,7 +1004,7 @@ export default async function TagResolverPage({
               Open Service Tickets
             </Link>
           ) : null}
-          {viewer.role === "manufacturer_admin" || viewer.role === "super_admin" ? (
+          {viewer.role === "manufacturer_admin" || viewer.role === "platform_owner" ? (
             <>
               <Link
                 href="/dashboard/manufacturer/installations"

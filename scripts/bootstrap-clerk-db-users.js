@@ -19,17 +19,17 @@
  *     "serviceCenterOrgId": null
  *   },
  *   "users": [
- *     { "clerkId": "user_xxx", "email": "ml+super@feedbacknfc.com", "name": "ml super", "role": "super_admin" },
+ *     { "clerkId": "user_xxx", "email": "ml+owner@feedbacknfc.com", "name": "ml owner", "role": "platform_owner" },
  *     { "clerkId": "user_xxx", "email": "ml+mfg@feedbacknfc.com", "name": "ml mfg", "role": "manufacturer_admin" },
  *     { "clerkId": "user_xxx", "email": "ml+sc@feedbacknfc.com", "name": "ml sc", "role": "service_center_admin" },
- *     { "clerkId": "user_xxx", "email": "ml+tech@feedbacknfc.com", "name": "ml tech", "role": "technician" },
+ *     { "clerkId": "user_xxx", "email": "ml+tech@feedbacknfc.com", "name": "ml tech", "role": "field_technician" },
  *     { "clerkId": "user_xxx", "email": "ml+customer@feedbacknfc.com", "name": "ml customer", "role": "customer" }
  *   ]
  * }
  *
  * Notes:
  * - For manufacturer admins, `organizationId` defaults to `defaults.manufacturerOrgId`.
- * - For service-center admins/technicians, `organizationId` defaults to `defaults.serviceCenterOrgId`.
+ * - For service-center admins/field technicians, `organizationId` defaults to `defaults.serviceCenterOrgId`.
  * - You can override per user by specifying `organizationId` in the user record.
  */
 
@@ -41,10 +41,20 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const USER_ROLES = new Set([
-  "super_admin",
+  "platform_owner",
+  "field_super_admin",
+  "field_service_admin",
   "manufacturer_admin",
   "service_center_admin",
-  "technician",
+  "field_dispatcher",
+  "field_technician",
+  "internal_service_super_admin",
+  "internal_service_admin",
+  "internal_inward_operator",
+  "internal_service_engineer",
+  "internal_service_qa",
+  "internal_service_stock",
+  "internal_label_admin",
   "customer",
 ]);
 
@@ -126,7 +136,7 @@ function inferOrganizationId({ role, explicitOrgId, defaults }) {
     return defaults.manufacturerOrgId ?? null;
   }
 
-  if (role === "service_center_admin" || role === "technician") {
+  if (role === "service_center_admin" || role === "field_technician") {
     return defaults.serviceCenterOrgId ?? null;
   }
 
@@ -189,7 +199,7 @@ async function ensureDefaultOrganizations(users, defaults) {
     const role = asString(user?.role);
     const explicitOrgId = normalizeOptionalString(user?.organizationId);
     return (
-      (role === "service_center_admin" || role === "technician") && !explicitOrgId
+      (role === "service_center_admin" || role === "field_technician") && !explicitOrgId
     );
   });
 

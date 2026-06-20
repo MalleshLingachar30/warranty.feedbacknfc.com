@@ -31,7 +31,7 @@ import { db } from "@/lib/db";
 
 import {
   decimalToNumber,
-  resolveServiceCenterPageContext,
+  resolveFieldServicePageContext,
 } from "../_lib/service-center-context";
 
 const OPEN_STATUSES: TicketStatus[] = [
@@ -129,7 +129,7 @@ function metricValue(value: number | null | undefined) {
 }
 
 export default async function ServiceCenterDashboardPage() {
-  const { organizationId } = await resolveServiceCenterPageContext();
+  const { organizationId } = await resolveFieldServicePageContext();
 
   if (!organizationId) {
     return (

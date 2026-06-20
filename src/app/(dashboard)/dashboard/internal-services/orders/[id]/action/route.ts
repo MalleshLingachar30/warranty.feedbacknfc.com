@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requireServiceCenterContext } from "@/app/api/service-center/_utils";
+import { requireInternalServiceContext } from "@/app/api/service-center/_utils";
 import {
   InternalServiceOrderActionError,
   type UpdateInternalServiceOrderRequest,
@@ -34,7 +34,7 @@ export async function POST(
   const detailPath = `/dashboard/internal-services/orders/${id}`;
 
   try {
-    const { organizationId, dbUserId } = await requireServiceCenterContext();
+    const { organizationId, dbUserId } = await requireInternalServiceContext();
     const formData = await request.formData();
     const returnTo = sanitizeReturnTo(
       asFormString(formData.get("returnTo")),
@@ -102,7 +102,7 @@ export async function GET(
   const detailPath = `/dashboard/internal-services/orders/${id}`;
 
   try {
-    const { organizationId, dbUserId } = await requireServiceCenterContext();
+    const { organizationId, dbUserId } = await requireInternalServiceContext();
     const action = request.nextUrl.searchParams.get("action") ?? undefined;
     const finalDisposition =
       request.nextUrl.searchParams.get("finalDisposition") ?? undefined;

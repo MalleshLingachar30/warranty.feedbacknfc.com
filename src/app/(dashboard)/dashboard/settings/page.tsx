@@ -131,7 +131,7 @@ export default async function SettingsPage() {
     );
   }
 
-  if (role === "technician") {
+  if (role === "field_technician") {
     const technicianUser = await db.user.findUnique({
       where: {
         clerkId: userId,
@@ -235,7 +235,7 @@ export default async function SettingsPage() {
     );
   }
 
-  if (role === "super_admin") {
+  if (role === "platform_owner") {
     const [organizations, adminUsers, centers] = await Promise.all([
       db.organization.findMany({
         orderBy: {

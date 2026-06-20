@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic";
 
 import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
+import { ensureManufacturerWorkspaceAccess } from "@/lib/auth";
 
 const StickerWizardClient = dynamic(
   () =>
@@ -12,6 +13,8 @@ const StickerWizardClient = dynamic(
   },
 );
 
-export default function ManufacturerStickersPage() {
+export default async function ManufacturerStickersPage() {
+  await ensureManufacturerWorkspaceAccess();
+
   return <StickerWizardClient />;
 }

@@ -17,7 +17,7 @@ function readInviteRole(value: string | string[] | undefined): AppRole | null {
   }
 
   const role = parseAppRole(value);
-  return role === "technician" || role === "service_center_admin"
+  return role === "field_technician" || role === "service_center_admin"
     ? role
     : null;
 }
