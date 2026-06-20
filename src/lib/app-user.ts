@@ -144,6 +144,60 @@ function extractPrimaryPhone(clerk: unknown): string | null {
   return null;
 }
 
+function extractVerifiedEmails(clerk: unknown): string[] {
+  if (!isRecord(clerk)) {
+    return [];
+  }
+
+  const emailAddresses = Array.isArray(clerk.emailAddresses)
+    ? clerk.emailAddresses
+    : [];
+
+  const verified = new Set<string>();
+
+  for (const entry of emailAddresses) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const email = asString(entry.emailAddress);
+    if (!email) {
+      continue;
+    }
+
+    verified.add(normalizeEmail(email));
+  }
+
+  return [...verified];
+}
+
+function extractVerifiedPhones(clerk: unknown): string[] {
+  if (!isRecord(clerk)) {
+    return [];
+  }
+
+  const phoneNumbers = Array.isArray(clerk.phoneNumbers)
+    ? clerk.phoneNumbers
+    : [];
+
+  const verified = new Set<string>();
+
+  for (const entry of phoneNumbers) {
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const phone = asString(entry.phoneNumber);
+    if (!phone) {
+      continue;
+    }
+
+    verified.add(normalizePhone(phone));
+  }
+
+  return [...verified];
+}
+
 export type DbUserSnapshot = {
   id: string;
   clerkId: string;
@@ -207,14 +261,136 @@ const ensureDbUserForClerkUserCached = cache(
     }
 
     const clerk = await getCachedCurrentUser();
+    const displayName = extractUserName(clerk);
+    const verifiedEmails = extractVerifiedEmails(clerk);
+    const verifiedPhones = extractVerifiedPhones(clerk);
+    const primaryEmail =
+      extractPrimaryEmail(clerk) ?? verifiedEmails[0] ?? null;
+    const primaryPhone =
+      extractPrimaryPhone(clerk) ?? verifiedPhones[0] ?? null;
+
+    const contactOrClauses = [
+      verifiedEmails.length > 0
+        ? {
+            email: {
+              in: verifiedEmails,
+            },
+          }
+        : null,
+      verifiedPhones.length > 0
+        ? {
+            phone: {
+              in: verifiedPhones,
+            },
+          }
+        : null,
+    ].filter((clause): clause is NonNullable<typeof clause> => Boolean(clause));
+
+    if (contactOrClauses.length > 0) {
+      const candidates = await withDatabaseRetry(() =>
+        db.user.findMany({
+          where: {
+            isActive: true,
+            OR: contactOrClauses,
+          },
+          select: {
+            id: true,
+            clerkId: true,
+            role: true,
+            organizationId: true,
+            email: true,
+            phone: true,
+            name: true,
+            createdAt: true,
+            technicianProfile: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        }),
+      );
+
+      const preferredCandidate =
+        candidates
+          .filter((candidate) => candidate.role !== "customer")
+          .sort((left, right) => {
+            const leftEmailMatched =
+              left.email && verifiedEmails.includes(normalizeEmail(left.email));
+            const rightEmailMatched =
+              right.email &&
+              verifiedEmails.includes(normalizeEmail(right.email));
+
+            if (leftEmailMatched !== rightEmailMatched) {
+              return leftEmailMatched ? -1 : 1;
+            }
+
+            const leftPhoneMatched =
+              left.phone && verifiedPhones.includes(normalizePhone(left.phone));
+            const rightPhoneMatched =
+              right.phone &&
+              verifiedPhones.includes(normalizePhone(right.phone));
+
+            if (leftPhoneMatched !== rightPhoneMatched) {
+              return leftPhoneMatched ? -1 : 1;
+            }
+
+            return left.createdAt.getTime() - right.createdAt.getTime();
+          })[0] ??
+        candidates
+          .filter((candidate) => candidate.clerkId.startsWith("customer_"))
+          .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())[0];
+
+      if (preferredCandidate) {
+        const claimed = await withDatabaseRetry(() =>
+          db.user.update({
+            where: {
+              id: preferredCandidate.id,
+            },
+            data: {
+              clerkId: clerkUserId,
+              name: preferredCandidate.name ?? displayName,
+              email: preferredCandidate.email ?? primaryEmail,
+              phone: preferredCandidate.phone ?? primaryPhone,
+            },
+            select: {
+              id: true,
+              clerkId: true,
+              role: true,
+              organizationId: true,
+              email: true,
+              phone: true,
+              name: true,
+              technicianProfile: {
+                select: {
+                  id: true,
+                },
+              },
+            },
+          }),
+        );
+
+        return {
+          id: claimed.id,
+          clerkId: claimed.clerkId,
+          role: claimed.role,
+          organizationId: claimed.organizationId,
+          email: claimed.email,
+          phone: claimed.phone,
+          name: claimed.name,
+          technicianProfileId: claimed.technicianProfile?.id ?? null,
+        };
+      }
+    }
+
     const created = await withDatabaseRetry(() =>
       db.user.create({
         data: {
           clerkId: clerkUserId,
           role: defaultRole,
-          name: extractUserName(clerk),
-          email: extractPrimaryEmail(clerk),
-          phone: extractPrimaryPhone(clerk),
+          name: displayName,
+          email: primaryEmail,
+          phone: primaryPhone,
         },
         select: {
           id: true,
