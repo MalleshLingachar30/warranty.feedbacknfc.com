@@ -271,7 +271,7 @@ export function InstallationJobsClient({
         description="Assign service centers, schedule installation work, and keep the asset lifecycle aligned with queue planning."
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
           title="Open Jobs"
           value={jobs.length.toLocaleString()}
@@ -316,50 +316,22 @@ export function InstallationJobsClient({
             </p>
           ) : null}
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Job</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Assigned Center</TableHead>
-                <TableHead>Scheduled</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Asset Lifecycle</TableHead>
-                <TableHead>Activation</TableHead>
-                <TableHead>Report</TableHead>
-                <TableHead className="text-right">Plan</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {jobs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-muted-foreground">
-                    No installation jobs have been created yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                jobs.map((job) => (
-                  <TableRow key={job.id}>
-                    <TableCell>
+          {jobs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No installation jobs have been created yet.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-4 xl:hidden">
+                {jobs.map((job) => (
+                  <div
+                    key={job.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-1">
-                        <p className="font-medium">{job.jobNumber}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Created {formatDateTime(job.createdAt)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Sale reg {formatDateTime(job.saleRegisteredAt)}
-                        </p>
-                        {job.installationRequest ? (
-                          <p className="text-xs text-muted-foreground">
-                            Request {formatRequestChannel(job.installationRequest.channel)}{" "}
-                            • {formatDateTime(job.installationRequest.requestedAt)}
-                          </p>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <p>{job.productModel.name}</p>
+                        <p className="font-semibold text-slate-900">{job.jobNumber}</p>
+                        <p className="text-sm text-slate-700">{job.productModel.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {job.productModel.modelNumber
                             ? `${job.productModel.modelNumber} • `
@@ -369,116 +341,126 @@ export function InstallationJobsClient({
                         <p className="text-xs text-muted-foreground">
                           Serial {job.serialNumber}
                         </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className={jobStatusClass(job.status)}>
+                          {formatWorkflowLabel(job.status)}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={lifecycleClass(job.assetLifecycleState)}
+                        >
+                          {formatWorkflowLabel(job.assetLifecycleState)}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium text-slate-900">Timeline</p>
+                        <p className="text-muted-foreground">
+                          Created {formatDateTime(job.createdAt)}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Sale reg {formatDateTime(job.saleRegisteredAt)}
+                        </p>
+                        {job.installationRequest ? (
+                          <p className="text-muted-foreground">
+                            Request {formatRequestChannel(job.installationRequest.channel)} •{" "}
+                            {formatDateTime(job.installationRequest.requestedAt)}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium text-slate-900">Assignment</p>
+                        {job.assignedServiceCenter ? (
+                          <>
+                            <p className="text-muted-foreground">
+                              {job.assignedServiceCenter.name}
+                              {job.assignedServiceCenter.city
+                                ? ` • ${job.assignedServiceCenter.city}`
+                                : ""}
+                            </p>
+                            <p className="text-muted-foreground">
+                              Technician {job.assignedTechnicianName ?? "Pending"}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-muted-foreground">Not assigned</p>
+                        )}
+                        <p className="text-muted-foreground">
+                          Scheduled {formatDateTime(job.scheduledFor)}
+                        </p>
+                        {job.installationRequest?.preferredDate ? (
+                          <p className="text-muted-foreground">
+                            Preferred {formatPreferredDate(job.installationRequest.preferredDate)}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium text-slate-900">Site & Contact</p>
                         {job.installationRequest?.siteName ? (
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-muted-foreground">
                             Site {job.installationRequest.siteName}
                           </p>
                         ) : null}
                         {job.installationRequest?.requesterName ||
                         job.installationRequest?.requesterPhone ? (
-                          <p className="text-xs text-muted-foreground">
-                            Contact{" "}
+                          <p className="text-muted-foreground">
                             {job.installationRequest.requesterName ?? "Unknown"}
                             {job.installationRequest.requesterPhone
                               ? ` • ${job.installationRequest.requesterPhone}`
                               : ""}
                           </p>
-                        ) : null}
+                        ) : (
+                          <p className="text-muted-foreground">No requester details</p>
+                        )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {job.assignedServiceCenter ? (
-                        <div className="space-y-1">
-                          <p>{job.assignedServiceCenter.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {job.assignedServiceCenter.city}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Technician {job.assignedTechnicianName ?? "Pending"}
-                          </p>
-                          {job.installationRequest?.preferredDate ? (
-                            <p className="text-xs text-muted-foreground">
-                              Preferred {formatPreferredDate(job.installationRequest.preferredDate)}
+
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium text-slate-900">Activation & Report</p>
+                        <p className="text-muted-foreground">
+                          {job.activationTriggeredAt
+                            ? formatDateTime(job.activationTriggeredAt)
+                            : job.status === "pending_customer_authorization"
+                              ? "Awaiting customer authorization"
+                              : "-"}
+                        </p>
+                        {job.installationReport ? (
+                          <>
+                            <p className="text-muted-foreground">
+                              {job.installationReport.customerName}
                             </p>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          Not assigned
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{formatDateTime(job.scheduledFor)}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={jobStatusClass(job.status)}
-                      >
-                        {formatWorkflowLabel(job.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={lifecycleClass(job.assetLifecycleState)}
-                      >
-                        {formatWorkflowLabel(job.assetLifecycleState)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {job.activationTriggeredAt
-                        ? formatDateTime(job.activationTriggeredAt)
-                        : job.status === "pending_customer_authorization"
-                          ? "Awaiting customer authorization"
-                          : "-"}
-                    </TableCell>
-                    <TableCell>
-                      {job.installationReport ? (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">
-                            {job.installationReport.customerName}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatWorkflowLabel(
-                              job.installationReport.submittedByRole,
-                            )}{" "}
-                            • {formatDateTime(job.installationReport.submittedAt)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {job.installationReport.customerAuthorizedAt
-                              ? `Authorized ${formatDateTime(
-                                  job.installationReport.customerAuthorizedAt,
-                                )}`
-                              : "Waiting for customer authorization"}
-                          </p>
-                          <div className="flex flex-col gap-1 text-xs">
-                            <a
-                              href={job.installationReport.pdfUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="underline"
-                            >
-                              View PDF
-                            </a>
-                            {!job.installationReport.customerAuthorizedAt ? (
+                            <div className="flex flex-wrap gap-3 text-xs">
                               <a
-                                href={job.installationReport.authorizationUrl}
+                                href={job.installationReport.pdfUrl}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="underline"
                               >
-                                Open authorization page
+                                View PDF
                               </a>
-                            ) : null}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">
-                          Pending
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
+                              {!job.installationReport.customerAuthorizedAt ? (
+                                <a
+                                  href={job.installationReport.authorizationUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="underline"
+                                >
+                                  Open authorization page
+                                </a>
+                              ) : null}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-muted-foreground">Pending</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
                       <Button
                         variant="outline"
                         size="sm"
@@ -486,12 +468,186 @@ export function InstallationJobsClient({
                       >
                         Plan Job
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto xl:block">
+                <Table className="min-w-[1180px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Job</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Assigned Center</TableHead>
+                      <TableHead>Scheduled</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Asset Lifecycle</TableHead>
+                      <TableHead>Activation</TableHead>
+                      <TableHead>Report</TableHead>
+                      <TableHead className="text-right">Plan</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {jobs.map((job) => (
+                      <TableRow key={job.id}>
+                        <TableCell className="align-top">
+                          <div className="space-y-1">
+                            <p className="font-medium">{job.jobNumber}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Created {formatDateTime(job.createdAt)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Sale reg {formatDateTime(job.saleRegisteredAt)}
+                            </p>
+                            {job.installationRequest ? (
+                              <p className="text-xs text-muted-foreground">
+                                Request {formatRequestChannel(job.installationRequest.channel)} •{" "}
+                                {formatDateTime(job.installationRequest.requestedAt)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <div className="space-y-1">
+                            <p>{job.productModel.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {job.productModel.modelNumber
+                                ? `${job.productModel.modelNumber} • `
+                                : ""}
+                              {job.assetCode}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Serial {job.serialNumber}
+                            </p>
+                            {job.installationRequest?.siteName ? (
+                              <p className="text-xs text-muted-foreground">
+                                Site {job.installationRequest.siteName}
+                              </p>
+                            ) : null}
+                            {job.installationRequest?.requesterName ||
+                            job.installationRequest?.requesterPhone ? (
+                              <p className="text-xs text-muted-foreground">
+                                Contact{" "}
+                                {job.installationRequest.requesterName ?? "Unknown"}
+                                {job.installationRequest.requesterPhone
+                                  ? ` • ${job.installationRequest.requesterPhone}`
+                                  : ""}
+                              </p>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {job.assignedServiceCenter ? (
+                            <div className="space-y-1">
+                              <p>{job.assignedServiceCenter.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {job.assignedServiceCenter.city}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Technician {job.assignedTechnicianName ?? "Pending"}
+                              </p>
+                              {job.installationRequest?.preferredDate ? (
+                                <p className="text-xs text-muted-foreground">
+                                  Preferred{" "}
+                                  {formatPreferredDate(job.installationRequest.preferredDate)}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              Not assigned
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {formatDateTime(job.scheduledFor)}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <Badge
+                            variant="outline"
+                            className={jobStatusClass(job.status)}
+                          >
+                            {formatWorkflowLabel(job.status)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <Badge
+                            variant="outline"
+                            className={lifecycleClass(job.assetLifecycleState)}
+                          >
+                            {formatWorkflowLabel(job.assetLifecycleState)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {job.activationTriggeredAt
+                            ? formatDateTime(job.activationTriggeredAt)
+                            : job.status === "pending_customer_authorization"
+                              ? "Awaiting customer authorization"
+                              : "-"}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          {job.installationReport ? (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">
+                                {job.installationReport.customerName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatWorkflowLabel(
+                                  job.installationReport.submittedByRole,
+                                )}{" "}
+                                • {formatDateTime(job.installationReport.submittedAt)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {job.installationReport.customerAuthorizedAt
+                                  ? `Authorized ${formatDateTime(
+                                      job.installationReport.customerAuthorizedAt,
+                                    )}`
+                                  : "Waiting for customer authorization"}
+                              </p>
+                              <div className="flex flex-col gap-1 text-xs">
+                                <a
+                                  href={job.installationReport.pdfUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="underline"
+                                >
+                                  View PDF
+                                </a>
+                                {!job.installationReport.customerAuthorizedAt ? (
+                                  <a
+                                    href={job.installationReport.authorizationUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline"
+                                  >
+                                    Open authorization page
+                                  </a>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              Pending
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right align-top">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openPlanner(job)}
+                          >
+                            Plan Job
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

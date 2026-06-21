@@ -4,6 +4,7 @@ import {
   Briefcase,
   ChartColumn,
   ClipboardList,
+  CalendarClock,
   Gauge,
   LifeBuoy,
   Package,
@@ -81,6 +82,11 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
   manufacturer_admin: [
     { label: "Dashboard", href: "/dashboard/manufacturer", icon: Gauge },
     { label: "Products", href: "/dashboard/manufacturer/products", icon: Package },
+    {
+      label: "Installations",
+      href: "/dashboard/manufacturer/installations",
+      icon: CalendarClock,
+    },
     { label: "Stickers", href: "/dashboard/manufacturer/stickers", icon: Sticker },
     { label: "Tickets", href: "/dashboard/manufacturer/tickets", icon: Ticket },
     {
