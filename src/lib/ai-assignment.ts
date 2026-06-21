@@ -129,6 +129,40 @@ function ratingScore(rating: number): number {
   return Math.min(1, Math.max(0, rating / 5));
 }
 
+function normalizeCategoryKey(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  switch (normalized) {
+    case "ventilator":
+    case "medical_ventilator":
+      return "medical_ventilator";
+    case "air_conditioner":
+    case "ac":
+      return "ac";
+    case "fridge":
+    case "refrigerator":
+      return "refrigerator";
+    case "washingmachine":
+    case "washing_machine":
+      return "washing_machine";
+    case "tv":
+    case "television":
+      return "television";
+    case "water_heater":
+    case "geyser":
+      return "geyser";
+    case "waterpurifier":
+    case "water_purifier":
+      return "water_purifier";
+    default:
+      return normalized;
+  }
+}
+
 function hasCategorySupport(
   supportedCategories: string[],
   category: string,
@@ -137,10 +171,10 @@ function hasCategorySupport(
     return true;
   }
 
-  const normalizedCategory = category.trim().toLowerCase();
+  const normalizedCategory = normalizeCategoryKey(category);
 
   return supportedCategories.some(
-    (entry) => entry.trim().toLowerCase() === normalizedCategory,
+    (entry) => normalizeCategoryKey(entry) === normalizedCategory,
   );
 }
 

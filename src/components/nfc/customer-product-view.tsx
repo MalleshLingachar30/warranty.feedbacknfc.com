@@ -40,6 +40,17 @@ interface CustomerProductViewProps {
   languageToggle?: ReactNode;
 }
 
+interface TicketCreateResponse {
+  message?: string;
+  error?: string;
+  ticket?: {
+    ticketNumber?: string;
+  } | null;
+  assignment?: {
+    status?: "awaiting_technician_acceptance" | "assigned" | "escalated";
+  } | null;
+}
+
 const severityOptionsBase: Array<{
   value: WarrantyTicketSeverity;
   indicatorClass: string;
@@ -72,6 +83,26 @@ function daysUntil(dateValue: string) {
   const end = new Date(dateValue).getTime();
   const now = Date.now();
   return Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
+}
+
+function buildTicketSuccessMessage(input: {
+  language: NfcLanguage;
+  ticketNumber: string;
+  assignmentStatus?: "awaiting_technician_acceptance" | "assigned" | "escalated";
+}) {
+  if (input.language === "hi") {
+    if (input.assignmentStatus === "escalated") {
+      return `सर्विस अनुरोध भेज दिया गया! टिकट #${input.ticketNumber}. मैन्युअल असाइनमेंट के लिए हमारी टीम को सूचित कर दिया गया है।`;
+    }
+
+    return `सर्विस अनुरोध भेज दिया गया! टिकट #${input.ticketNumber}. टेक्नीशियन असाइनमेंट की पुष्टि की जा रही है।`;
+  }
+
+  if (input.assignmentStatus === "escalated") {
+    return `Service request submitted! Ticket #${input.ticketNumber}. Manual assignment is required and the service team has been notified.`;
+  }
+
+  return `Service request submitted! Ticket #${input.ticketNumber}. Technician acceptance is being confirmed.`;
 }
 
 function fileToDataUrl(file: File) {
@@ -253,14 +284,22 @@ export function CustomerProductView({
         }),
       });
 
-      const payload = (await response.json()) as { message?: string; error?: string };
+      const payload = (await response.json()) as TicketCreateResponse;
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to submit service request");
       }
 
+      const createdTicketNumber = payload.ticket?.ticketNumber?.trim();
+
       setSubmitSuccessMessage(
-        payload.message ?? copy.customerProductView.reportSuccessFallback,
+        createdTicketNumber
+          ? buildTicketSuccessMessage({
+              language,
+              ticketNumber: createdTicketNumber,
+              assignmentStatus: payload.assignment?.status,
+            })
+          : payload.message ?? copy.customerProductView.reportSuccessFallback,
       );
       resetForm();
       setShowReportForm(false);
