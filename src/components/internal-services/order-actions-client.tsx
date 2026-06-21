@@ -222,7 +222,9 @@ export function InternalServiceOrderActionsClient({
     currentFinalDisposition ?? "returned_to_stock",
   );
   const [tracedPartReference, setTracedPartReference] = useState("");
+  const [removedPartReference, setRemovedPartReference] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState<"traced" | "removed">("traced");
   const benchExecutionLocked =
     Boolean(benchStationLockedReason) ||
     (benchScanRequired && !benchScanVerified);
@@ -231,6 +233,11 @@ export function InternalServiceOrderActionsClient({
   const workflowButtons = workflowButtonsForStatus(status);
   const successNotice = formatActionNotice(noticeAction);
   const handleTracedPartDetected = (scanResult: MobileCodeScannerResult) => {
+    if (scannerTarget === "removed") {
+      setRemovedPartReference(scanResult.value);
+      return;
+    }
+
     setTracedPartReference(scanResult.value);
   };
 
@@ -413,7 +420,10 @@ export function InternalServiceOrderActionsClient({
                       "h-9 px-3 text-xs",
                     )}
                     disabled={partUsageLocked}
-                    onClick={() => setScannerOpen(true)}
+                    onClick={() => {
+                      setScannerTarget("traced");
+                      setScannerOpen(true);
+                    }}
                   >
                     <Camera className="mr-1.5 size-3.5" />
                     Scan with camera
@@ -466,10 +476,24 @@ export function InternalServiceOrderActionsClient({
             open={scannerOpen}
             onOpenChange={setScannerOpen}
             onDetected={handleTracedPartDetected}
-            title="Scan traced spare with camera"
-            description="Use the phone camera to read the spare's QR or Data Matrix label and attach that traced part to this internal-service order."
-            initialManualValue={tracedPartReference}
-            manualLabel="If the spare label cannot be decoded from the camera, type or paste the traced spare value and continue with the same internal repair flow."
+            title={
+              scannerTarget === "removed"
+                ? "Scan removed part with camera"
+                : "Scan traced spare with camera"
+            }
+            description={
+              scannerTarget === "removed"
+                ? "Use the phone camera to read the failed part's QR, Data Matrix, or micro Data Matrix label and capture that returned identity on this internal-service order."
+                : "Use the phone camera to read the spare's QR, Data Matrix, or micro Data Matrix label and attach that traced part to this internal-service order."
+            }
+            initialManualValue={
+              scannerTarget === "removed" ? removedPartReference : tracedPartReference
+            }
+            manualLabel={
+              scannerTarget === "removed"
+                ? "If the failed part label cannot be decoded from the camera, type or paste the traced removed-part value and continue with the same return capture flow."
+                : "If the spare label cannot be decoded from the camera, type or paste the traced spare value and continue with the same internal repair flow."
+            }
           />
 
           <form method="post" action={actionPath} className="space-y-4 rounded-lg border border-dashed border-amber-200 bg-amber-50/60 p-4">
@@ -488,12 +512,37 @@ export function InternalServiceOrderActionsClient({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">Removed part reference</label>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm font-medium text-slate-900">Removed part reference</label>
+                  <button
+                    type="button"
+                    className={cn(
+                      buttonVariants({ variant: "outline" }),
+                      "h-9 px-3 text-xs",
+                    )}
+                    disabled={partUsageLocked}
+                    onClick={() => {
+                      setScannerTarget("removed");
+                      setScannerOpen(true);
+                    }}
+                  >
+                    <Camera className="mr-1.5 size-3.5" />
+                    Scan with camera
+                  </button>
+                </div>
                 <Input
                   name="partReference"
+                  value={removedPartReference}
+                  onChange={(event) => setRemovedPartReference(event.target.value)}
                   disabled={partUsageLocked}
                   placeholder="Optional traced tag / asset / serial reference"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
+                <p className="text-xs text-slate-500">
+                  Scan the failed part&apos;s QR, Data Matrix, or micro Data Matrix label if it already carries its own traced identity.
+                </p>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-900">Removed part name</label>

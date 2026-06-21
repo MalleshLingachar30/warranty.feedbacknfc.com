@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRightCircle,
+  Camera,
   Loader2,
   ScanLine,
   ShieldCheck,
@@ -23,6 +24,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { MobileCodeScannerDialog } from "@/components/scanning/mobile-code-scanner-dialog";
+import type { MobileCodeScannerResult } from "@/lib/mobile-code-scanner";
 
 type AssetSuggestion = {
   publicCode: string;
@@ -151,6 +154,7 @@ export function InwardReceiptClient({
   const [createdOrder, setCreatedOrder] = useState<CreatedOrderState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoResolveSeed, setAutoResolveSeed] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const recentAssetButtons = useMemo(() => assetSuggestions.slice(0, 6), [assetSuggestions]);
   const isBusy = submissionState !== "idle" || scanState === "resolving" || scanState === "affixing";
@@ -227,8 +231,8 @@ export function InwardReceiptClient({
     setAutoResolveSeed(null);
   };
 
-  const resolveIdentity = async () => {
-    const trimmedReference = assetReference.trim();
+  const resolveIdentity = async (seededReference?: string) => {
+    const trimmedReference = (seededReference ?? assetReference).trim();
 
     if (!trimmedReference) {
       setError("Scan or type an asset code, serial number, or tag code first.");
@@ -279,6 +283,11 @@ export function InwardReceiptClient({
           : "Unable to resolve internal-service identity.",
       );
     }
+  };
+
+  const handleIdentityDetected = async (scanResult: MobileCodeScannerResult) => {
+    setAssetReference(scanResult.value);
+    await resolveIdentity(scanResult.value);
   };
 
   const affixLabel = async () => {
@@ -447,7 +456,8 @@ export function InwardReceiptClient({
   };
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       <Card className="border-indigo-200 bg-indigo-50 text-indigo-950">
         <CardHeader>
           <CardTitle>Sticker-led inward receipt for {organizationContextLabel}</CardTitle>
@@ -478,7 +488,18 @@ export function InwardReceiptClient({
                   disabled={identityLocked || isBusy}
                 />
                 <div className="flex gap-2">
-                  <Button onClick={resolveIdentity} disabled={isBusy || identityLocked}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setScannerOpen(true)}
+                    disabled={identityLocked || isBusy}
+                  >
+                    <Camera className="size-4" />
+                    Scan with camera
+                  </Button>
+                  <Button
+                    onClick={() => void resolveIdentity()}
+                    disabled={isBusy || identityLocked}
+                  >
                     {scanState === "resolving" ? (
                       <Loader2 className="size-4 animate-spin" />
                     ) : (
@@ -496,6 +517,10 @@ export function InwardReceiptClient({
                   </Button>
                 </div>
               </div>
+
+              <p className="text-xs text-slate-500">
+                Use the PWA camera to read the current QR, Data Matrix, or micro Data Matrix identity on the incoming item, or type the known asset code, serial, or tag manually.
+              </p>
 
               {scanContext ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -807,6 +832,17 @@ export function InwardReceiptClient({
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+
+      <MobileCodeScannerDialog
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onDetected={handleIdentityDetected}
+        title="Scan inward identity with camera"
+        description="Use the phone camera to read the incoming unit's QR, Data Matrix, or micro Data Matrix identity and continue the inward receipt flow."
+        initialManualValue={assetReference}
+        manualLabel="If the sticker cannot be decoded from the camera, type or paste the asset code, serial, tag code, or full /r/... value and continue with the same inward resolution flow."
+      />
+    </>
   );
 }

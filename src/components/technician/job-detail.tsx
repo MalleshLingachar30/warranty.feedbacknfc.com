@@ -148,6 +148,9 @@ export function JobDetail({
   const [showReceivedSparePicker, setShowReceivedSparePicker] = useState(false);
   const [showRemovedPartCatalog, setShowRemovedPartCatalog] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState<"installed" | "removed">(
+    "installed",
+  );
   const [scannerResolving, setScannerResolving] = useState(false);
   const consumedScannedRowsRef = useRef<Set<string>>(new Set());
   const trackingEnabled =
@@ -171,6 +174,7 @@ export function JobDetail({
     setShowReceivedSparePicker(false);
     setShowRemovedPartCatalog(false);
     setScannerOpen(false);
+    setScannerTarget("installed");
     setScannerResolving(false);
     setActionError(null);
     setActionSuccess(null);
@@ -200,6 +204,7 @@ export function JobDetail({
     setParts((previous) => {
       const duplicate = previous.some(
         (part) =>
+          part.usageType === (input.usageType ?? "installed") &&
           part.assetCode.trim().toLowerCase() === input.assetCode.toLowerCase() &&
           part.tagCode.trim().toLowerCase() === input.tagCode.toLowerCase(),
       );
@@ -222,13 +227,19 @@ export function JobDetail({
     });
   }, [job.partsCatalog]);
 
-  const consumeResolvedPartScan = useCallback((scan: PartScanPayload) => {
-    const rowKey = `${job.id}:${partScanSignature(scan)}`;
+  const consumeResolvedPartScan = useCallback((
+    scan: PartScanPayload,
+    usageType: PartSelection["usageType"] = "installed",
+  ) => {
+    const rowKey = `${job.id}:${usageType}:${partScanSignature(scan)}`;
+    const isRemovedFlow = usageType === "removed";
 
     if (consumedScannedRowsRef.current.has(rowKey)) {
       setActionError(null);
       setActionSuccess(
-        `Scanned part ${scan.assetCode} (${scan.tagCode || "no tag"}) is already attached to this ticket draft.`,
+        isRemovedFlow
+          ? `Scanned failed part ${scan.assetCode} (${scan.tagCode || "no tag"}) is already attached to this return draft.`
+          : `Scanned part ${scan.assetCode} (${scan.tagCode || "no tag"}) is already attached to this ticket draft.`,
       );
       return;
     }
@@ -238,13 +249,16 @@ export function JobDetail({
       tagCode: scan.tagCode,
       partName: scan.partName,
       partNumber: scan.partNumber,
-      usageType: "installed",
+      usageType,
+      cost: isRemovedFlow ? 0 : undefined,
     });
 
     consumedScannedRowsRef.current.add(rowKey);
     setActionError(null);
     setActionSuccess(
-      `Scanned part ${scan.assetCode} (${scan.tagCode || "no tag"}) added to this ticket.`,
+      isRemovedFlow
+        ? `Scanned failed part ${scan.assetCode} (${scan.tagCode || "no tag"}) added to old parts removed for return.`
+        : `Scanned part ${scan.assetCode} (${scan.tagCode || "no tag"}) added to this ticket.`,
     );
   }, [attachPartToDrafts, job.id]);
 
@@ -396,7 +410,7 @@ export function JobDetail({
           );
         }
 
-        consumeResolvedPartScan(payload.scan);
+        consumeResolvedPartScan(payload.scan, scannerTarget);
       } catch (error) {
         setActionError(
           error instanceof Error
@@ -407,7 +421,7 @@ export function JobDetail({
         setScannerResolving(false);
       }
     },
-    [consumeResolvedPartScan, job.id],
+    [consumeResolvedPartScan, job.id, scannerTarget],
   );
 
   const replacementParts = useMemo(
@@ -904,6 +918,11 @@ export function JobDetail({
           })
         }
       />
+      {part.usageType === "removed" ? (
+        <p className="text-[11px] text-slate-500">
+          Removed parts can be scanned with the PWA camera when they already carry a QR, Data Matrix, or micro Data Matrix identity.
+        </p>
+      ) : null}
     </div>
   );
 
@@ -1199,7 +1218,10 @@ export function JobDetail({
                         size="sm"
                         variant="outline"
                         className="h-9 border-emerald-300 bg-white text-emerald-950"
-                        onClick={() => setScannerOpen(true)}
+                        onClick={() => {
+                          setScannerTarget("installed");
+                          setScannerOpen(true);
+                        }}
                       >
                         <Camera className="h-4 w-4" />
                         Scan with camera
@@ -1304,17 +1326,36 @@ export function JobDetail({
                         manufacturer/depot follow-up.
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-9 border-amber-300 bg-white text-amber-950"
-                      onClick={handleAddRemovedPart}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add Removed Old Part
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 border-amber-300 bg-white text-amber-950"
+                        onClick={() => {
+                          setScannerTarget("removed");
+                          setScannerOpen(true);
+                        }}
+                      >
+                        <Camera className="h-4 w-4" />
+                        Scan with camera
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 border-amber-300 bg-white text-amber-950"
+                        onClick={handleAddRemovedPart}
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Removed Old Part
+                      </Button>
+                    </div>
                   </div>
+
+                  <p className="text-xs text-amber-900">
+                    Scan failed boards or returned assemblies directly when they already carry QR, Data Matrix, or micro Data Matrix identities.
+                  </p>
 
                   {removedParts.length === 0 ? (
                     <p className="text-xs text-amber-900">
@@ -1450,9 +1491,21 @@ export function JobDetail({
           open={scannerOpen}
           onOpenChange={setScannerOpen}
           onDetected={handleCameraDetected}
-          title="Scan replacement part with camera"
-          description="Use the phone camera to read QR, Data Matrix, or micro Data Matrix part labels and attach that traced part to this ticket."
-          manualLabel="If the label cannot be decoded from the camera, type or paste the asset code, tag code, serial, micro token, or full /r/... URL."
+          title={
+            scannerTarget === "removed"
+              ? "Scan removed old part with camera"
+              : "Scan replacement part with camera"
+          }
+          description={
+            scannerTarget === "removed"
+              ? "Use the phone camera to read QR, Data Matrix, or micro Data Matrix labels on failed assemblies being returned from site."
+              : "Use the phone camera to read QR, Data Matrix, or micro Data Matrix part labels and attach that traced part to this ticket."
+          }
+          manualLabel={
+            scannerTarget === "removed"
+              ? "If the failed-part label cannot be decoded from the camera, type or paste the asset code, tag code, serial, micro token, or full /r/... URL."
+              : "If the label cannot be decoded from the camera, type or paste the asset code, tag code, serial, micro token, or full /r/... URL."
+          }
         />
 
         {actionError ? (
