@@ -479,7 +479,11 @@ export default async function TagResolverPage({
         })
       : null;
 
+  const hasActivatedCustomerProduct =
+    isMainAsset && linkedProduct?.sticker?.stickerNumber && linkedProduct.warrantyStatus === "active";
+
   const hasResolverInstallationFlow =
+    !hasActivatedCustomerProduct &&
     isMainAsset &&
     (isInstallationPendingLifecycle(resolvedTag.asset.lifecycleState) ||
       Boolean(resolvedTag.asset.saleRegistration) ||
@@ -487,9 +491,10 @@ export default async function TagResolverPage({
 
   if (isMainAsset && linkedProduct?.sticker?.stickerNumber) {
     const shouldFollowNfcFlow =
-      !hasResolverInstallationFlow &&
-      (linkedProduct.warrantyStatus !== "pending_activation" ||
-        resolvedTag.asset.productModel.activationMode !== "installation_driven");
+      hasActivatedCustomerProduct ||
+      (!hasResolverInstallationFlow &&
+        (linkedProduct.warrantyStatus !== "pending_activation" ||
+          resolvedTag.asset.productModel.activationMode !== "installation_driven"));
 
     if (shouldFollowNfcFlow) {
       redirect(
