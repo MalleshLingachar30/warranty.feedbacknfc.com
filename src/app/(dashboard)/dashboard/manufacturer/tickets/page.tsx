@@ -2,6 +2,11 @@ import { Prisma, type TicketStatus } from "@prisma/client";
 import { AlertTriangle, Clock3, TicketCheck, TimerReset } from "lucide-react";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
+import { TicketQueueClient } from "@/components/manufacturer/ticket-queue-client";
+import type {
+  ServiceCenterOption,
+  TechnicianOption,
+} from "@/components/manufacturer/types";
 import { PartReturnsClient } from "@/components/manufacturer/part-returns-client";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -36,34 +41,6 @@ const OPEN_STATUSES: TicketStatus[] = [
   "escalated",
 ];
 
-function statusLabel(status: TicketStatus) {
-  return status.replace(/_/g, " ");
-}
-
-function statusClass(status: TicketStatus) {
-  switch (status) {
-    case "reported":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-    case "awaiting_technician_acceptance":
-      return "border-sky-200 bg-sky-50 text-sky-700";
-    case "assigned":
-    case "technician_enroute":
-      return "border-indigo-200 bg-indigo-50 text-indigo-700";
-    case "work_in_progress":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "pending_confirmation":
-      return "border-orange-200 bg-orange-50 text-orange-700";
-    case "resolved":
-    case "closed":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "reopened":
-    case "escalated":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
-  }
-}
-
 function formatDateTime(date: Date) {
   return date.toLocaleString("en-IN", {
     day: "2-digit",
@@ -76,19 +53,6 @@ function formatDateTime(date: Date) {
 
 function formatHours(value: number) {
   return `${value.toFixed(1)}h`;
-}
-
-function slaIndicatorClass(state: SlaIndicatorState) {
-  switch (state) {
-    case "on_track":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "at_risk":
-      return "border-amber-200 bg-amber-50 text-amber-800";
-    case "breached":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
-  }
 }
 
 function slaIndicatorLabel(state: SlaIndicatorState) {
@@ -113,6 +77,40 @@ function metricValue(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+type TicketQueueView = {
+  id: string;
+  ticketNumber: string;
+  status: TicketStatus;
+  issueCategory: string | null;
+  issueSeverity: string;
+  reportedAt: string;
+  assignedAt: string | null;
+  slaBreached: boolean;
+  slaResponseDeadline: string | null;
+  slaResolutionDeadline: string | null;
+  assignedServiceCenter: {
+    id: string;
+    name: string;
+  } | null;
+  assignedTechnician: {
+    id: string;
+    name: string;
+  } | null;
+  product: {
+    serialNumber: string | null;
+    customerCity: string | null;
+    productModel: {
+      name: string;
+      modelNumber: string | null;
+    };
+  };
+  sla: {
+    state: "on_track" | "at_risk" | "breached" | "none";
+    label: string;
+    deadline: string | null;
+  };
+};
+
 export default async function ManufacturerTicketsPage() {
   const { organizationId } = await resolveManufacturerPageContext();
 
@@ -124,7 +122,7 @@ export default async function ManufacturerTicketsPage() {
     );
   }
 
-  const [tickets, aggregate, metricRows] = await Promise.all([
+  const [tickets, aggregate, metricRows, serviceCenters, technicians] = await Promise.all([
     db.ticket.findMany({
       where: {
         product: {
@@ -148,11 +146,13 @@ export default async function ManufacturerTicketsPage() {
         slaResolutionDeadline: true,
         assignedServiceCenter: {
           select: {
+            id: true,
             name: true,
           },
         },
         assignedTechnician: {
           select: {
+            id: true,
             name: true,
           },
         },
@@ -213,6 +213,54 @@ export default async function ManufacturerTicketsPage() {
         )::double precision AS "avgResolutionHours"
       FROM latest_tickets
     `),
+    db.serviceCenter.findMany({
+      where: {
+        OR: [
+          {
+            manufacturerAuthorizations: {
+              has: organizationId,
+            },
+          },
+          {
+            organizationId,
+          },
+        ],
+      },
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        city: true,
+      },
+    }),
+    db.technician.findMany({
+      where: {
+        isAvailable: true,
+        serviceCenter: {
+          OR: [
+            {
+              manufacturerAuthorizations: {
+                has: organizationId,
+              },
+            },
+            {
+              organizationId,
+            },
+          ],
+        },
+      },
+      orderBy: [{ name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        serviceCenterId: true,
+        serviceCenter: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    }),
   ]);
 
   const partReturns = await db.ticketPartReturn.findMany({
@@ -364,6 +412,53 @@ export default async function ManufacturerTicketsPage() {
   );
   const avgResolutionHours = metricValue(metricRows[0]?.avgResolutionHours);
 
+  const ticketRows: TicketQueueView[] = tickets.map((ticket) => {
+    const indicator = getSlaIndicator({
+      status: ticket.status,
+      assignedAt: ticket.assignedAt,
+      reportedAt: ticket.reportedAt,
+      slaResponseDeadline: ticket.slaResponseDeadline,
+      slaResolutionDeadline: ticket.slaResolutionDeadline,
+      slaBreached: ticket.slaBreached,
+    });
+    const normalizedSlaState =
+      indicator.state === "unknown" ? "none" : indicator.state;
+
+    return {
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      status: ticket.status,
+      issueCategory: ticket.issueCategory,
+      issueSeverity: ticket.issueSeverity,
+      reportedAt: ticket.reportedAt.toISOString(),
+      assignedAt: ticket.assignedAt?.toISOString() ?? null,
+      slaBreached: ticket.slaBreached,
+      slaResponseDeadline: ticket.slaResponseDeadline?.toISOString() ?? null,
+      slaResolutionDeadline: ticket.slaResolutionDeadline?.toISOString() ?? null,
+      assignedServiceCenter: ticket.assignedServiceCenter,
+      assignedTechnician: ticket.assignedTechnician,
+      product: ticket.product,
+      sla: {
+        state: normalizedSlaState,
+        label: slaIndicatorLabel(indicator.state),
+        deadline: indicator.deadline?.toISOString() ?? null,
+      },
+    };
+  });
+
+  const serviceCenterOptions: ServiceCenterOption[] = serviceCenters.map((center) => ({
+    id: center.id,
+    name: center.name,
+    city: center.city ?? "",
+  }));
+
+  const technicianOptions: TechnicianOption[] = technicians.map((technician) => ({
+    id: technician.id,
+    name: technician.name,
+    serviceCenterId: technician.serviceCenterId,
+    serviceCenterName: technician.serviceCenter.name,
+  }));
+
   return (
     <div>
       <PageHeader
@@ -398,111 +493,11 @@ export default async function ManufacturerTicketsPage() {
         />
       </div>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Ticket Queue</CardTitle>
-          <CardDescription>
-            Latest ticket activity for products owned by this manufacturer.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ticket</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Issue</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Service Center</TableHead>
-                <TableHead>Technician</TableHead>
-                <TableHead>Region</TableHead>
-                <TableHead>Reported</TableHead>
-                <TableHead>SLA</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tickets.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-muted-foreground">
-                    No tickets have been created for this organization yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                tickets.map((ticket) => (
-                  <TableRow key={ticket.id}>
-                    <TableCell className="font-medium">
-                      {ticket.ticketNumber}
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p>{ticket.product.productModel.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {ticket.product.productModel.modelNumber
-                            ? `${ticket.product.productModel.modelNumber} • `
-                            : ""}
-                          {ticket.product.serialNumber ?? "Serial unavailable"}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p>{ticket.issueCategory ?? "General issue"}</p>
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {ticket.issueSeverity}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`capitalize ${statusClass(ticket.status)}`}
-                      >
-                        {statusLabel(ticket.status)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {ticket.assignedServiceCenter?.name ?? "-"}
-                    </TableCell>
-                    <TableCell>
-                      {ticket.assignedTechnician?.name ?? "-"}
-                    </TableCell>
-                    <TableCell>{ticket.product.customerCity ?? "-"}</TableCell>
-                    <TableCell>{formatDateTime(ticket.reportedAt)}</TableCell>
-                    <TableCell>
-                      {(() => {
-                        const indicator = getSlaIndicator({
-                          status: ticket.status,
-                          assignedAt: ticket.assignedAt,
-                          reportedAt: ticket.reportedAt,
-                          slaResponseDeadline: ticket.slaResponseDeadline,
-                          slaResolutionDeadline: ticket.slaResolutionDeadline,
-                          slaBreached: ticket.slaBreached,
-                        });
-
-                        return (
-                          <div className="space-y-1">
-                            <Badge
-                              variant="outline"
-                              className={slaIndicatorClass(indicator.state)}
-                            >
-                              {slaIndicatorLabel(indicator.state)}
-                            </Badge>
-                            {indicator.deadline ? (
-                              <p className="text-xs text-muted-foreground">
-                                Due {formatDateTime(indicator.deadline)}
-                              </p>
-                            ) : null}
-                          </div>
-                        );
-                      })()}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <TicketQueueClient
+        initialTickets={ticketRows}
+        serviceCenters={serviceCenterOptions}
+        technicians={technicianOptions}
+      />
 
       <PartReturnsClient
         rows={partReturns.map((partReturn) => ({
