@@ -81,19 +81,6 @@ function createUsageDraft(): InstallationPartUsageDraft {
   };
 }
 
-function readFormString(
-  formData: FormData,
-  name: string,
-  fallback: string,
-): string {
-  const value = formData.get(name);
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  return value;
-}
-
 function parseRequiredKitCodes(
   includedKitDefinition: Record<string, unknown>,
 ): string[] {
@@ -178,7 +165,6 @@ export function InstallationJobDetail({
   >({});
   const [partUsages, setPartUsages] = useState<InstallationPartUsageDraft[]>([]);
   const consumedScannedRowsRef = useRef<Set<string>>(new Set());
-  const reportFormRef = useRef<HTMLFormElement | null>(null);
 
   const requiredKitCodes = parseRequiredKitCodes(
     job.productModel.includedKitDefinition,
@@ -352,58 +338,16 @@ export function InstallationJobDetail({
     setActionSuccess(null);
 
     try {
-      const formData = new FormData(reportFormRef.current ?? undefined);
-
-      const resolvedCustomerName = readFormString(
-        formData,
-        "customerName",
-        customerName,
-      );
-      const resolvedCustomerPhone = readFormString(
-        formData,
-        "customerPhone",
-        customerPhone,
-      );
-      const resolvedCustomerEmail = readFormString(
-        formData,
-        "customerEmail",
-        customerEmail,
-      );
-      const resolvedInstallAddress = readFormString(
-        formData,
-        "installAddress",
-        installAddress,
-      );
-      const resolvedInstallCity = readFormString(
-        formData,
-        "installCity",
-        installCity,
-      );
-      const resolvedInstallState = readFormString(
-        formData,
-        "installState",
-        installState,
-      );
-      const resolvedInstallPincode = readFormString(
-        formData,
-        "installPincode",
-        installPincode,
-      );
-      const resolvedInstallationDate = readFormString(
-        formData,
-        "installationDate",
-        installationDate,
-      );
-      const resolvedInstallerName = readFormString(
-        formData,
-        "installerName",
-        installerName,
-      );
-      const resolvedUnitSerialNumber = readFormString(
-        formData,
-        "unitSerialNumber",
-        unitSerialNumber,
-      );
+      const resolvedCustomerName = customerName.trim();
+      const resolvedCustomerPhone = customerPhone.trim();
+      const resolvedCustomerEmail = customerEmail.trim();
+      const resolvedInstallAddress = installAddress.trim();
+      const resolvedInstallCity = installCity.trim();
+      const resolvedInstallState = installState.trim();
+      const resolvedInstallPincode = installPincode.trim();
+      const resolvedInstallationDate = installationDate.trim();
+      const resolvedInstallerName = installerName.trim();
+      const resolvedUnitSerialNumber = unitSerialNumber.trim();
 
       if (!resolvedCustomerName.trim() || !resolvedCustomerPhone.trim()) {
         throw new Error("Customer name and phone are required.");
@@ -532,7 +476,7 @@ export function InstallationJobDetail({
 
   return (
     <form
-      ref={reportFormRef}
+      noValidate
       className="space-y-3 pb-28"
       onSubmit={(event) => {
         event.preventDefault();
@@ -1036,9 +980,10 @@ export function InstallationJobDetail({
 
         {job.status === "commissioning" ? (
           <Button
-            type="submit"
+            type="button"
             className="h-12 w-full"
             disabled={actionLoading}
+            onClick={() => void submitReport()}
           >
             {actionLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

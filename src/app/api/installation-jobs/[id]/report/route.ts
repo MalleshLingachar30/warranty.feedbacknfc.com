@@ -741,6 +741,11 @@ export async function POST(
         pdfUrl,
         languagePreference: updated.customer.languagePreference,
         customerEmail,
+      }).catch((notificationError) => {
+        console.error(
+          "Failed to send installation report authorization notification",
+          notificationError,
+        );
       });
     }
 
