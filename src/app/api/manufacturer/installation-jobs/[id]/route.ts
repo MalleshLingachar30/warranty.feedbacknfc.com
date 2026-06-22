@@ -58,6 +58,7 @@ export async function PATCH(
         id: true,
         assetId: true,
         status: true,
+        assignedTechnicianId: true,
       },
     });
 
@@ -165,6 +166,41 @@ export async function PATCH(
         },
         select: installationJobSelect,
       });
+
+      const previousTechnicianId = job.assignedTechnicianId;
+      const nextTechnicianId = technician?.id ?? null;
+
+      if (
+        previousTechnicianId &&
+        previousTechnicianId !== nextTechnicianId
+      ) {
+        await tx.technician.update({
+          where: {
+            id: previousTechnicianId,
+          },
+          data: {
+            activeJobCount: {
+              decrement: 1,
+            },
+          },
+        });
+      }
+
+      if (
+        nextTechnicianId &&
+        nextTechnicianId !== previousTechnicianId
+      ) {
+        await tx.technician.update({
+          where: {
+            id: nextTechnicianId,
+          },
+          data: {
+            activeJobCount: {
+              increment: 1,
+            },
+          },
+        });
+      }
 
       await tx.assetIdentity.update({
         where: {

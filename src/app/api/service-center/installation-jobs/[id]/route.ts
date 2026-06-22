@@ -37,6 +37,8 @@ function canDispatchFromStatus(status: string) {
   );
 }
 
+const DEFAULT_MAX_CONCURRENT_JOBS = 3;
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -126,8 +128,11 @@ export async function PATCH(
       );
     }
 
-    const isAtCapacity =
-      technician.activeJobCount >= technician.maxConcurrentJobs;
+    const maxConcurrentJobs =
+      technician.maxConcurrentJobs > 0
+        ? technician.maxConcurrentJobs
+        : DEFAULT_MAX_CONCURRENT_JOBS;
+    const isAtCapacity = technician.activeJobCount >= maxConcurrentJobs;
     if (
       (isAtCapacity || !technician.isAvailable) &&
       technician.id !== job.assignedTechnicianId
@@ -156,6 +161,38 @@ export async function PATCH(
         },
         select: installationJobSelect,
       });
+
+      const previousTechnicianId = job.assignedTechnicianId;
+      const nextTechnicianId = technician.id;
+
+      if (
+        previousTechnicianId &&
+        previousTechnicianId !== nextTechnicianId
+      ) {
+        await tx.technician.update({
+          where: {
+            id: previousTechnicianId,
+          },
+          data: {
+            activeJobCount: {
+              decrement: 1,
+            },
+          },
+        });
+      }
+
+      if (nextTechnicianId !== previousTechnicianId) {
+        await tx.technician.update({
+          where: {
+            id: nextTechnicianId,
+          },
+          data: {
+            activeJobCount: {
+              increment: 1,
+            },
+          },
+        });
+      }
 
       await tx.assetIdentity.update({
         where: {

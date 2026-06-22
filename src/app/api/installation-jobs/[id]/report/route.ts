@@ -700,6 +700,19 @@ export async function POST(
         select: installationJobSelect,
       });
 
+      if (job.assignedTechnicianId) {
+        await tx.technician.update({
+          where: {
+            id: job.assignedTechnicianId,
+          },
+          data: {
+            activeJobCount: {
+              decrement: 1,
+            },
+          },
+        });
+      }
+
       await tx.assetIdentity.update({
         where: {
           id: job.assetId,

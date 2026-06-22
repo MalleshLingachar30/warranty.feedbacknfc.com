@@ -2,13 +2,17 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { autoAssignInstallationJob } from "@/lib/installation-auto-assignment";
 import { createInstallationJobFromSaleRegistration } from "@/lib/installation-job-creation";
 import {
   installationJobLifecycleState,
   parseOptionalDate,
   parseOptionalString,
 } from "@/lib/installation-workflow";
-import { serializeInstallationJobRow } from "@/lib/installation-workflow-view";
+import {
+  installationJobSelect,
+  serializeInstallationJobRow,
+} from "@/lib/installation-workflow-view";
 import { isValidOtpPhone, normalizePhone } from "@/lib/otp-session";
 
 export const runtime = "nodejs";
@@ -236,11 +240,33 @@ export async function POST(request: Request) {
       return job;
     });
 
+    let resolvedJob = created;
+    let successMessage =
+      "Installation request received. The service team will assign this machine for scheduling.";
+    try {
+      const assignment = await autoAssignInstallationJob(created.id);
+      if (assignment.status === "assigned") {
+        successMessage =
+          "Installation request received and an installation engineer has been assigned.";
+        const refreshed = await db.installationJob.findUnique({
+          where: {
+            id: created.id,
+          },
+          select: installationJobSelect,
+        });
+
+        if (refreshed) {
+          resolvedJob = refreshed;
+        }
+      }
+    } catch (error) {
+      console.error("Automatic installation assignment failed", error);
+    }
+
     return NextResponse.json(
       {
-        job: serializeInstallationJobRow(created),
-        successMessage:
-          "Installation request received. The service team will assign this machine for scheduling.",
+        job: serializeInstallationJobRow(resolvedJob),
+        successMessage,
       },
       { status: 201 },
     );
