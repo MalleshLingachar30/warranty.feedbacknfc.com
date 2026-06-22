@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Camera } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
+import { Camera, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { MobileCodeScannerDialog } from "@/components/scanning/mobile-code-scanner-dialog";
 import type { MobileCodeScannerResult } from "@/lib/mobile-code-scanner";
@@ -161,19 +163,64 @@ function SubmitControl({
   disabled?: boolean;
   variant?: "default" | "outline";
 }) {
-  return (
-    <>
-      <input type="hidden" name="action" value={action} />
+  function SubmitButton() {
+    const { pending } = useFormStatus();
+
+    return (
       <button
         type="submit"
         className={cn(buttonVariants({ variant }))}
         formAction={actionPath}
         formMethod="post"
-        disabled={disabled}
+        disabled={disabled || pending}
       >
-        {label}
+        {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+        {pending ? "Working..." : label}
       </button>
+    );
+  }
+
+  return (
+    <>
+      <input type="hidden" name="action" value={action} />
+      <SubmitButton />
     </>
+  );
+}
+
+function RouteTransitionButton({
+  href,
+  label,
+  variant = "default",
+  className,
+}: {
+  href: string;
+  label: string;
+  variant?: "default" | "outline";
+  className?: string;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    router.prefetch(href);
+  }, [href, router]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        startTransition(() => {
+          router.push(href);
+        });
+      }}
+      disabled={isPending}
+      className={cn(buttonVariants({ variant }), className)}
+      aria-busy={isPending}
+    >
+      {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+      {isPending ? "Opening..." : label}
+    </button>
   );
 }
 
@@ -284,12 +331,14 @@ export function InternalServiceOrderActionsClient({
           ) : (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
               Sticker-led bench execution is locked until this unit is opened from Bench Scan.
-              <a
-                href={benchScanHref}
-                className="ml-2 font-medium underline underline-offset-2"
-              >
-                Open Bench Scan
-              </a>
+              <span className="ml-3 inline-flex align-middle">
+                <RouteTransitionButton
+                  href={benchScanHref}
+                  label="Open Bench Scan"
+                  variant="outline"
+                  className="h-8 border-indigo-300 bg-white/80 px-3 text-xs text-indigo-700 hover:bg-indigo-100"
+                />
+              </span>
             </div>
           )
         ) : null}
@@ -620,38 +669,32 @@ export function InternalServiceOrderActionsClient({
                 </p>
               </div>
               {status === "ready_for_disposition" ? (
-                <a
+                <RouteTransitionButton
                   href={`${actionPath}?action=complete_disposition&finalDisposition=${encodeURIComponent(selectedDisposition)}&returnTo=${encodeURIComponent(returnToPath)}${benchScanVerified && benchStationLease ? `&station=bench&stationLease=${encodeURIComponent(benchStationLease)}` : ""}`}
-                  className={cn(buttonVariants({ variant: "default" }))}
-                >
-                  Complete Disposition
-                </a>
+                  label="Complete Disposition"
+                />
               ) : null}
             </form>
           </div>
 
           <div className="flex flex-wrap gap-3">
             {benchExecutionLocked ? (
-              <a
+              <RouteTransitionButton
                 href={benchScanHref}
-                className={cn(
-                  buttonVariants({ variant: "outline" }),
-                  "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
-                )}
-              >
-                Open Bench Scan
-              </a>
+                label="Open Bench Scan"
+                variant="outline"
+                className="border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+              />
             ) : (
               workflowButtons
                 .filter((button) => button.action !== "complete_disposition")
                 .map((button) => (
-                  <a
+                  <RouteTransitionButton
                     key={button.action}
                     href={`${actionPath}?action=${encodeURIComponent(button.action)}&returnTo=${encodeURIComponent(returnToPath)}${benchScanVerified && benchStationLease ? `&station=bench&stationLease=${encodeURIComponent(benchStationLease)}` : ""}`}
-                    className={cn(buttonVariants({ variant: button.variant }))}
-                  >
-                    {button.label}
-                  </a>
+                    label={button.label}
+                    variant={button.variant}
+                  />
                 ))
             )}
           </div>
