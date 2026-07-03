@@ -1,10 +1,11 @@
 "use client";
 
+import type { UserRole } from "@prisma/client";
 import { useMemo, useState } from "react";
 import { Building2, Link2, ShieldPlus, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/page-header";
-import { getRoleLabel, type AppRole } from "@/lib/roles";
+import { getRoleLabel } from "@/lib/roles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +30,7 @@ type AdminMember = {
   name: string;
   email: string;
   clerkId: string;
-  role: AppRole;
+  role: UserRole;
 };
 
 type OrganizationRow = {
