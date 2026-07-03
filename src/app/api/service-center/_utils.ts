@@ -1,13 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+import { resolveAppRoleForSession } from "@/lib/app-user";
 import { resolveOrganizationContext } from "@/lib/org-context";
 import {
   INTERNAL_SERVICE_ROLES,
   SERVICE_CENTER_FIELD_ROLES,
   type AppRole,
 } from "@/lib/roles";
-import { clerkOrDbHasAnyRole } from "@/lib/rbac";
 
 type GenericRecord = Record<string, unknown>;
 
@@ -43,6 +43,7 @@ export type ServiceCenterContext = {
   organizationId: string;
   dbUserId: string | null;
   clerkUserId: string;
+  role: AppRole;
 };
 
 type RequireServiceCenterContextOptions = {
@@ -62,29 +63,39 @@ export async function requireServiceCenterContext(
   const roleGuardDisabled =
     process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD === "true";
 
+  const { role, dbUser } = await resolveAppRoleForSession({
+    clerkUserId: authData.userId,
+    sessionClaims: authData.sessionClaims,
+  });
+
   if (!roleGuardDisabled) {
-    const hasRequiredRole = await clerkOrDbHasAnyRole({
-      clerkUserId: authData.userId,
-      orgRole: authData.orgRole,
-      sessionClaims: authData.sessionClaims,
-      requiredRoles: options.allowedRoles ?? SERVICE_CENTER_FIELD_ROLES,
-    });
+    const hasRequiredRole = (
+      options.allowedRoles ?? SERVICE_CENTER_FIELD_ROLES
+    ).includes(role);
 
     if (!hasRequiredRole) {
       throw new ApiError(
         `Forbidden${
-          options.requiredLabel ? `: ${options.requiredLabel} access required.` : ""
+          options.requiredLabel
+            ? `: ${options.requiredLabel} access required.`
+            : ""
         }`,
         403,
       );
     }
   }
 
-  const { organizationId, dbUserId } = await resolveOrganizationContext({
-    clerkUserId: authData.userId,
-    clerkOrgId: authData.orgId ?? null,
-    requiredOrganizationType: "service_center",
-  });
+  const { organizationId, dbUserId } =
+    dbUser.organizationId && dbUser.organizationType === "service_center"
+      ? {
+          organizationId: dbUser.organizationId,
+          dbUserId: dbUser.id,
+        }
+      : await resolveOrganizationContext({
+          clerkUserId: authData.userId,
+          clerkOrgId: authData.orgId ?? null,
+          requiredOrganizationType: "service_center",
+        });
 
   if (!organizationId) {
     throw new ApiError(
@@ -97,6 +108,7 @@ export async function requireServiceCenterContext(
     organizationId,
     dbUserId,
     clerkUserId: authData.userId,
+    role,
   };
 }
 

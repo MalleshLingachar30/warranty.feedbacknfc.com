@@ -3,67 +3,74 @@ import { cache } from "react";
 
 import { getCachedAuth } from "@/lib/clerk-session";
 import { resolveOrganizationContext } from "@/lib/org-context";
+import { resolveAppRoleForSession } from "@/lib/app-user";
 import {
   INTERNAL_SERVICE_ROLES,
   SERVICE_CENTER_FIELD_ROLES,
   type AppRole,
 } from "@/lib/roles";
-import { clerkOrDbHasAnyRole } from "@/lib/rbac";
 
 export type ServiceCenterPageContext = {
   organizationId: string | null;
   clerkUserId: string;
   dbUserId: string | null;
+  role: AppRole;
 };
 
 async function resolveScopedServiceCenterPageContext(input: {
   allowedRoles: AppRole[];
   requiredLabel: string;
 }): Promise<ServiceCenterPageContext> {
-    const authData = await getCachedAuth();
+  const authData = await getCachedAuth();
 
-    if (!authData.userId) {
-      authData.redirectToSignIn();
-    }
+  if (!authData.userId) {
+    authData.redirectToSignIn();
+  }
 
-    if (process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true") {
-      const hasRequiredRole = authData.userId
-        ? await clerkOrDbHasAnyRole({
-            clerkUserId: authData.userId,
-            orgRole: authData.orgRole,
-            sessionClaims: authData.sessionClaims,
-            requiredRoles: input.allowedRoles,
-          })
-        : false;
+  const clerkUserId = authData.userId;
 
-      if (!hasRequiredRole) {
-        redirect(`/dashboard?access=denied&required=${input.requiredLabel}`);
-      }
-    }
+  if (!clerkUserId) {
+    throw new Error("Authenticated clerk user id is required.");
+  }
 
-    const clerkUserId = authData.userId;
+  const { role, dbUser } = await resolveAppRoleForSession({
+    clerkUserId,
+    sessionClaims: authData.sessionClaims,
+  });
 
-    if (!clerkUserId) {
-      throw new Error("Authenticated clerk user id is required.");
-    }
+  if (
+    process.env.NEXT_PUBLIC_DISABLE_ROLE_GUARD !== "true" &&
+    !input.allowedRoles.includes(role)
+  ) {
+    redirect(`/dashboard?access=denied&required=${input.requiredLabel}`);
+  }
 
-    const { organizationId, dbUserId } = await resolveOrganizationContext({
-      clerkUserId,
-      clerkOrgId: authData.orgId ?? null,
-      requiredOrganizationType: "service_center",
-    });
+  const { organizationId, dbUserId } =
+    dbUser.organizationId && dbUser.organizationType === "service_center"
+      ? {
+          organizationId: dbUser.organizationId,
+          dbUserId: dbUser.id,
+        }
+      : await resolveOrganizationContext({
+          clerkUserId,
+          clerkOrgId: authData.orgId ?? null,
+          requiredOrganizationType: "service_center",
+        });
 
-    return {
-      organizationId,
-      clerkUserId,
-      dbUserId,
-    };
+  return {
+    organizationId,
+    clerkUserId,
+    dbUserId,
+    role,
+  };
 }
 
 export const resolveServiceCenterPageContext = cache(
   async (): Promise<ServiceCenterPageContext> =>
     resolveScopedServiceCenterPageContext({
-      allowedRoles: [...new Set([...SERVICE_CENTER_FIELD_ROLES, ...INTERNAL_SERVICE_ROLES])],
+      allowedRoles: [
+        ...new Set([...SERVICE_CENTER_FIELD_ROLES, ...INTERNAL_SERVICE_ROLES]),
+      ],
       requiredLabel: "service_center",
     }),
 );
@@ -83,6 +90,13 @@ export const resolveInternalServicePageContext = cache(
       requiredLabel: "internal_services",
     }),
 );
+
+export async function resolveRestrictedInternalServicePageContext(input: {
+  allowedRoles: AppRole[];
+  requiredLabel: string;
+}) {
+  return resolveScopedServiceCenterPageContext(input);
+}
 
 export function decimalToNumber(value: unknown) {
   if (typeof value === "number") {

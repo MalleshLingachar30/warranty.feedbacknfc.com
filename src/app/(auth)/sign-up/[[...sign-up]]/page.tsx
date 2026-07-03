@@ -1,6 +1,12 @@
 "use client";
 
-import { ClerkFailed, ClerkLoaded, ClerkLoading, SignUp, useAuth } from "@clerk/nextjs";
+import {
+  ClerkFailed,
+  ClerkLoaded,
+  ClerkLoading,
+  SignUp,
+  useAuth,
+} from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
@@ -45,9 +51,7 @@ const signUpGuidance = (
         tickets.
       </p>
       <p>
-        <span className="font-semibold text-slate-900">
-          Internal Services:
-        </span>{" "}
+        <span className="font-semibold text-slate-900">Internal Services:</span>{" "}
         inward receipt, bench repair, QA, stock release, and label generation.
       </p>
       <p>
@@ -85,27 +89,14 @@ function SignUpCard() {
       return;
     }
 
-    let isActive = true;
+    void fetch("/api/auth/client-trust", {
+      method: "POST",
+      keepalive: true,
+    }).catch((error: unknown) => {
+      console.error("Failed to bootstrap Clerk user session", error);
+    });
 
-    const bootstrapSession = async () => {
-      try {
-        await fetch("/api/auth/client-trust", {
-          method: "POST",
-        });
-      } catch (error) {
-        console.error("Failed to bootstrap Clerk user session", error);
-      }
-
-      if (isActive) {
-        router.replace(resolvedRedirectTarget);
-      }
-    };
-
-    void bootstrapSession();
-
-    return () => {
-      isActive = false;
-    };
+    router.replace(resolvedRedirectTarget);
   }, [authLoaded, resolvedRedirectTarget, router, userId]);
 
   if (authLoaded && userId) {

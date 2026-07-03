@@ -1,8 +1,8 @@
 "use client";
 
-import { ClerkFailed, ClerkLoaded, ClerkLoading, SignIn, useAuth } from "@clerk/nextjs";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { ClerkFailed, ClerkLoaded, ClerkLoading, SignIn } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
+import { useMemo } from "react";
 
 const clerkPublicAuthEnabled = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
@@ -52,7 +52,9 @@ const operatorGuidance = (
         </p>
       </div>
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-sm font-semibold text-slate-900">Internal Services</p>
+        <p className="text-sm font-semibold text-slate-900">
+          Internal Services
+        </p>
         <p className="mt-2 text-sm text-slate-600">
           Use for inward receipt, bench repair, QA, stock disposition, and
           sticker-led internal service work.
@@ -75,69 +77,28 @@ const operatorGuidance = (
 );
 
 function getRedirectTarget(searchParams: URLSearchParams): string {
-  return (
+  const target =
     searchParams.get("redirect_url") ??
     searchParams.get("redirectUrl") ??
-    "/dashboard"
-  );
+    "/dashboard";
+
+  return target === "/dashboard" ? "/auth/continue" : target;
 }
 
 function SignInCard() {
-  const { userId, isLoaded: authLoaded } = useAuth();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTarget = useMemo(
     () => getRedirectTarget(searchParams),
     [searchParams],
   );
-  const resolvedRedirectTarget = useMemo(
-    () => (redirectTarget === "/dashboard" ? "/dashboard" : redirectTarget),
-    [redirectTarget],
-  );
-
-  useEffect(() => {
-    if (!authLoaded || !userId) {
-      return;
-    }
-
-    let isActive = true;
-
-    const bootstrapSession = async () => {
-      try {
-        await fetch("/api/auth/client-trust", {
-          method: "POST",
-        });
-      } catch (error) {
-        console.error("Failed to bootstrap Clerk user session", error);
-      }
-
-      if (isActive) {
-        router.replace(resolvedRedirectTarget);
-      }
-    };
-
-    void bootstrapSession();
-
-    return () => {
-      isActive = false;
-    };
-  }, [authLoaded, resolvedRedirectTarget, router, userId]);
-
-  if (authLoaded && userId) {
-    return (
-      <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
-        Redirecting to your account...
-      </div>
-    );
-  }
 
   return (
     <SignIn
       fallback={loadingState}
-      fallbackRedirectUrl={resolvedRedirectTarget}
+      fallbackRedirectUrl={redirectTarget}
       path="/sign-in"
       routing="path"
-      signUpFallbackRedirectUrl={resolvedRedirectTarget}
+      signUpFallbackRedirectUrl={redirectTarget}
       signUpUrl="/sign-up"
     />
   );

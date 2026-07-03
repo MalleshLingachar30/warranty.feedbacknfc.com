@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { getCachedAuth } from "@/lib/clerk-session";
-import { db } from "@/lib/db";
-import { withDatabaseRetry } from "@/lib/db-retry";
 
 export default async function DashboardLayout({
   children,
@@ -23,27 +21,10 @@ export default async function DashboardLayout({
       sessionClaims,
     });
 
-    const organizationId = dbUser?.organizationId ?? null;
-
-    const organizationName = organizationId
-      ? (
-          await withDatabaseRetry(() =>
-            db.organization.findUnique({
-              where: {
-                id: organizationId,
-              },
-              select: {
-                name: true,
-              },
-            }),
-          )
-        )?.name ?? null
-      : null;
-
     return (
       <DashboardShell
         role={role}
-        organizationName={organizationName ?? undefined}
+        organizationName={dbUser.organizationName ?? undefined}
         userDisplayName={dbUser?.name ?? undefined}
       >
         {children}

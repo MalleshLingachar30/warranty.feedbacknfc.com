@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import type { UserRole } from "@prisma/client";
+import type { OrganizationType, UserRole } from "@prisma/client";
 
 import { getCachedCurrentUser } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
@@ -203,6 +203,8 @@ export type DbUserSnapshot = {
   clerkId: string;
   role: UserRole;
   organizationId: string | null;
+  organizationName: string | null;
+  organizationType: OrganizationType | null;
   email: string | null;
   phone: string | null;
   name: string | null;
@@ -214,6 +216,10 @@ function toDbUserSnapshot(row: {
   clerkId: string;
   role: UserRole;
   organizationId: string | null;
+  organization: {
+    name: string;
+    type: OrganizationType;
+  } | null;
   email: string | null;
   phone: string | null;
   name: string | null;
@@ -226,6 +232,8 @@ function toDbUserSnapshot(row: {
     clerkId: row.clerkId,
     role: row.role,
     organizationId: row.organizationId,
+    organizationName: row.organization?.name ?? null,
+    organizationType: row.organization?.type ?? null,
     email: row.email,
     phone: row.phone,
     name: row.name,
@@ -245,6 +253,12 @@ const fetchDbUser = cache(
           clerkId: true,
           role: true,
           organizationId: true,
+          organization: {
+            select: {
+              name: true,
+              type: true,
+            },
+          },
           email: true,
           phone: true,
           name: true,
@@ -254,14 +268,14 @@ const fetchDbUser = cache(
             },
           },
         },
-      })
+      }),
     ).then((row) => {
-        if (!row) {
-          return null;
-        }
+      if (!row) {
+        return null;
+      }
 
-        return toDbUserSnapshot(row);
-      });
+      return toDbUserSnapshot(row);
+    });
   },
 );
 
@@ -271,6 +285,14 @@ const ensureDbUserForClerkUserCached = cache(
     defaultRole: UserRole,
   ): Promise<DbUserSnapshot> => {
     const existing = await fetchDbUser(clerkUserId);
+
+    // Provisioning and identity reconciliation only need Clerk's Backend API
+    // when the local user does not exist. Existing sessions stay on the fast,
+    // database-only path for every dashboard navigation.
+    if (existing) {
+      return existing;
+    }
+
     const clerk = await getCachedCurrentUser();
     const displayName = extractUserName(clerk);
     const verifiedEmails = extractVerifiedEmails(clerk);
@@ -297,80 +319,73 @@ const ensureDbUserForClerkUserCached = cache(
         : null,
     ].filter((clause): clause is NonNullable<typeof clause> => Boolean(clause));
 
-    const reconcileOperationalCandidate = async (
-      existingCustomerUserId?: string,
-    ): Promise<DbUserSnapshot | null> => {
-      if (contactOrClauses.length === 0) {
-        return null;
-      }
-
-      const candidates = await withDatabaseRetry(() =>
-        db.user.findMany({
-          where: {
-            isActive: true,
-            role: {
-              not: "customer",
-            },
-            OR: contactOrClauses,
-          },
-          select: {
-            id: true,
-            clerkId: true,
-            role: true,
-            organizationId: true,
-            email: true,
-            phone: true,
-            name: true,
-            createdAt: true,
-            technicianProfile: {
-              select: {
-                id: true,
-              },
-            },
-          },
-        }),
-      );
-
-      const preferredCandidate = candidates.sort((left, right) => {
-        const leftEmailMatched =
-          left.email && verifiedEmails.includes(normalizeEmail(left.email));
-        const rightEmailMatched =
-          right.email && verifiedEmails.includes(normalizeEmail(right.email));
-
-        if (leftEmailMatched !== rightEmailMatched) {
-          return leftEmailMatched ? -1 : 1;
+    const reconcileOperationalCandidate =
+      async (): Promise<DbUserSnapshot | null> => {
+        if (contactOrClauses.length === 0) {
+          return null;
         }
 
-        const leftPhoneMatched =
-          left.phone && verifiedPhones.includes(normalizePhone(left.phone));
-        const rightPhoneMatched =
-          right.phone && verifiedPhones.includes(normalizePhone(right.phone));
-
-        if (leftPhoneMatched !== rightPhoneMatched) {
-          return leftPhoneMatched ? -1 : 1;
-        }
-
-        return left.createdAt.getTime() - right.createdAt.getTime();
-      })[0];
-
-      if (!preferredCandidate) {
-        return null;
-      }
-
-      const claimed = await withDatabaseRetry(() =>
-        db.$transaction(async (tx) => {
-          if (existingCustomerUserId) {
-            await tx.user.update({
-              where: {
-                id: existingCustomerUserId,
+        const candidates = await withDatabaseRetry(() =>
+          db.user.findMany({
+            where: {
+              isActive: true,
+              role: {
+                not: "customer",
               },
-              data: {
-                clerkId: `customer_reclaimed_${existingCustomerUserId}`,
+              OR: contactOrClauses,
+            },
+            select: {
+              id: true,
+              clerkId: true,
+              role: true,
+              organizationId: true,
+              organization: {
+                select: {
+                  name: true,
+                  type: true,
+                },
               },
-            });
+              email: true,
+              phone: true,
+              name: true,
+              createdAt: true,
+              technicianProfile: {
+                select: {
+                  id: true,
+                },
+              },
+            },
+          }),
+        );
+
+        const preferredCandidate = candidates.sort((left, right) => {
+          const leftEmailMatched =
+            left.email && verifiedEmails.includes(normalizeEmail(left.email));
+          const rightEmailMatched =
+            right.email && verifiedEmails.includes(normalizeEmail(right.email));
+
+          if (leftEmailMatched !== rightEmailMatched) {
+            return leftEmailMatched ? -1 : 1;
           }
 
-          return tx.user.update({
+          const leftPhoneMatched =
+            left.phone && verifiedPhones.includes(normalizePhone(left.phone));
+          const rightPhoneMatched =
+            right.phone && verifiedPhones.includes(normalizePhone(right.phone));
+
+          if (leftPhoneMatched !== rightPhoneMatched) {
+            return leftPhoneMatched ? -1 : 1;
+          }
+
+          return left.createdAt.getTime() - right.createdAt.getTime();
+        })[0];
+
+        if (!preferredCandidate) {
+          return null;
+        }
+
+        const claimed = await withDatabaseRetry(() =>
+          db.user.update({
             where: {
               id: preferredCandidate.id,
             },
@@ -385,6 +400,12 @@ const ensureDbUserForClerkUserCached = cache(
               clerkId: true,
               role: true,
               organizationId: true,
+              organization: {
+                select: {
+                  name: true,
+                  type: true,
+                },
+              },
               email: true,
               phone: true,
               name: true,
@@ -394,25 +415,11 @@ const ensureDbUserForClerkUserCached = cache(
                 },
               },
             },
-          });
-        }),
-      );
+          }),
+        );
 
-      return toDbUserSnapshot(claimed);
-    };
-
-    if (existing) {
-      if (existing.role !== "customer") {
-        return existing;
-      }
-
-      const reconciledExisting = await reconcileOperationalCandidate(existing.id);
-      if (reconciledExisting) {
-        return reconciledExisting;
-      }
-
-      return existing;
-    }
+        return toDbUserSnapshot(claimed);
+      };
 
     if (contactOrClauses.length > 0) {
       const reconciled = await reconcileOperationalCandidate();
@@ -435,6 +442,12 @@ const ensureDbUserForClerkUserCached = cache(
           clerkId: true,
           role: true,
           organizationId: true,
+          organization: {
+            select: {
+              name: true,
+              type: true,
+            },
+          },
           email: true,
           phone: true,
           name: true,
