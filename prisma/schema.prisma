@@ -34,6 +34,7 @@ enum UserRole {
   internal_service_admin
   internal_inward_operator
   internal_service_engineer
+  internal_service_commercial
   internal_service_qa
   internal_service_stock
   internal_label_admin
@@ -180,6 +181,11 @@ enum AssetLifecycleState {
   in_service_inventory
   awaiting_triage
   under_diagnosis
+  awaiting_commercial_review
+  oem_claim_in_progress
+  oem_exchange_in_progress
+  replacement_approved
+  no_oem_support
   awaiting_parts
   under_repair
   awaiting_qc
@@ -327,6 +333,11 @@ enum InternalServiceStatus {
   inward_received
   awaiting_triage
   under_diagnosis
+  awaiting_commercial_review
+  oem_claim_in_progress
+  oem_exchange_in_progress
+  replacement_approved
+  no_oem_support
   awaiting_parts
   repair_in_progress
   awaiting_qc
