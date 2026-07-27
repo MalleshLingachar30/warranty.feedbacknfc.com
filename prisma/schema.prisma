@@ -274,6 +274,31 @@ enum CustomerAcknowledgementType {
   digital_acceptance
 }
 
+enum PreventiveMaintenanceEventType {
+  preventive_maintenance
+  calibration
+}
+
+enum PreventiveMaintenancePlanStatus {
+  active
+  inactive
+}
+
+enum PreventiveMaintenanceCadenceType {
+  interval_days
+  month_offsets
+  manual
+}
+
+enum PreventiveMaintenanceEventStatus {
+  due
+  scheduled
+  in_progress
+  completed
+  overdue
+  cancelled
+}
+
 enum PartUsageType {
   installed
   consumed
@@ -475,6 +500,8 @@ model Organization {
   mappedSerializedDispatchRecords   ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchDistributor")
   manufacturerInternalServiceOrders InternalServiceOrder[]        @relation("ManufacturerInternalServiceOrders")
   sourceInternalServiceOrders       InternalServiceOrder[]        @relation("SourceOrganizationInternalServiceOrders")
+  preventiveMaintenancePlans        PreventiveMaintenancePlan[]
+  preventiveMaintenanceEvents       PreventiveMaintenanceEvent[]
 
   @@index([externalCode], map: "idx_organizations_external_code")
   @@index([parentOrganizationId], map: "idx_organizations_parent_org")
@@ -495,24 +522,25 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  organization                   Organization?              @relation(fields: [organizationId], references: [id])
-  technicianProfile              Technician?
-  reportedTickets                Ticket[]                   @relation("ReportedTickets")
-  approvedClaims                 WarrantyClaim[]            @relation("ClaimApprover")
-  timelineEvents                 TicketTimeline[]           @relation("TimelineActor")
-  stickerAllocations             StickerAllocation[]        @relation("AllocatedByUser")
-  createdTagGenerationBatches    TagGenerationBatch[]       @relation("TagGenerationBatchCreator")
-  customerAssetIdentities        AssetIdentity[]            @relation("AssetIdentityCustomer")
-  customerProducts               Product[]                  @relation("CustomerProducts")
-  scanLogs                       ScanLog[]                  @relation("ScanLogActor")
-  submittedInstallationReports   InstallationReport[]
-  linkedPartUsages               JobPartUsage[]
-  createdPartDispatches          TicketPartDispatch[]       @relation("TicketPartDispatchCreator")
-  createdPartReturns             TicketPartReturn[]         @relation("TicketPartReturnCreator")
-  integrationReplayRequests      IntegrationReplayRequest[] @relation("IntegrationReplayRequestedBy")
-  requestedInternalServiceOrders InternalServiceOrder[]     @relation("RequestedInternalServiceOrders")
-  receivedInternalServiceOrders  InternalServiceOrder[]     @relation("ReceivedInternalServiceOrders")
-  internalServiceTimelineEvents  InternalServiceTimeline[]  @relation("InternalServiceTimelineActor")
+  organization                      Organization?               @relation(fields: [organizationId], references: [id])
+  technicianProfile                 Technician?
+  reportedTickets                   Ticket[]                    @relation("ReportedTickets")
+  approvedClaims                    WarrantyClaim[]             @relation("ClaimApprover")
+  timelineEvents                    TicketTimeline[]            @relation("TimelineActor")
+  stickerAllocations                StickerAllocation[]         @relation("AllocatedByUser")
+  createdTagGenerationBatches       TagGenerationBatch[]        @relation("TagGenerationBatchCreator")
+  customerAssetIdentities           AssetIdentity[]             @relation("AssetIdentityCustomer")
+  customerProducts                  Product[]                   @relation("CustomerProducts")
+  scanLogs                          ScanLog[]                   @relation("ScanLogActor")
+  submittedInstallationReports      InstallationReport[]
+  linkedPartUsages                  JobPartUsage[]
+  createdPartDispatches             TicketPartDispatch[]        @relation("TicketPartDispatchCreator")
+  createdPartReturns                TicketPartReturn[]          @relation("TicketPartReturnCreator")
+  integrationReplayRequests         IntegrationReplayRequest[]  @relation("IntegrationReplayRequestedBy")
+  requestedInternalServiceOrders    InternalServiceOrder[]      @relation("RequestedInternalServiceOrders")
+  receivedInternalServiceOrders     InternalServiceOrder[]      @relation("ReceivedInternalServiceOrders")
+  internalServiceTimelineEvents     InternalServiceTimeline[]   @relation("InternalServiceTimelineActor")
+  createdPreventiveMaintenancePlans PreventiveMaintenancePlan[] @relation("PreventiveMaintenancePlanCreator")
 
   @@map("users")
 }
@@ -723,13 +751,14 @@ model ProductModel {
   createdAt                       DateTime                  @default(now()) @map("created_at")
   updatedAt                       DateTime                  @updatedAt @map("updated_at")
 
-  organization              Organization                  @relation(fields: [organizationId], references: [id])
-  products                  Product[]
-  stickerAllocations        StickerAllocation[]
-  assetIdentities           AssetIdentity[]
-  tagGenerationBatches      TagGenerationBatch[]
-  erpItemMasterRecords      ErpItemMasterRecord[]
-  erpSerializedDispatchRows ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchProductModel")
+  organization               Organization                  @relation(fields: [organizationId], references: [id])
+  products                   Product[]
+  stickerAllocations         StickerAllocation[]
+  assetIdentities            AssetIdentity[]
+  tagGenerationBatches       TagGenerationBatch[]
+  erpItemMasterRecords       ErpItemMasterRecord[]
+  erpSerializedDispatchRows  ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchProductModel")
+  preventiveMaintenancePlans PreventiveMaintenancePlan[]
 
   @@unique([organizationId, externalItemCode], map: "product_models_org_external_item_code_key")
   @@index([organizationId, externalItemSeriesCode], map: "idx_product_models_org_external_series")
@@ -841,24 +870,25 @@ model AssetIdentity {
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
 
-  organization              Organization                  @relation(fields: [organizationId], references: [id])
-  productModel              ProductModel                  @relation(fields: [productModelId], references: [id])
-  customer                  User?                         @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
-  rootMainAsset             AssetIdentity?                @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
-  childAssets               AssetIdentity[]               @relation("AssetRootLineage")
-  generationBatch           TagGenerationBatch?           @relation(fields: [generationBatchId], references: [id])
-  serializedSalesLine       SerializedSalesLine?
-  saleRegistration          SaleRegistration?
-  installationJobs          InstallationJob[]
-  installationReports       InstallationReport[]
-  internalServiceOrders     InternalServiceOrder[]
-  tags                      AssetTag[]
-  usagesAsMainAsset         JobPartUsage[]                @relation("JobPartUsageMainAsset")
-  usagesAsUsedAsset         JobPartUsage[]                @relation("JobPartUsageUsedAsset")
-  dispatchedPartItems       TicketPartDispatchItem[]      @relation("TicketPartDispatchItemAsset")
-  mainAssetPartReturns      TicketPartReturn[]            @relation("TicketPartReturnMainAsset")
-  removedAssetPartReturns   TicketPartReturn[]            @relation("TicketPartReturnRemovedAsset")
-  erpSerializedDispatchRows ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchAsset")
+  organization                Organization                  @relation(fields: [organizationId], references: [id])
+  productModel                ProductModel                  @relation(fields: [productModelId], references: [id])
+  customer                    User?                         @relation("AssetIdentityCustomer", fields: [customerId], references: [id])
+  rootMainAsset               AssetIdentity?                @relation("AssetRootLineage", fields: [rootMainAssetId], references: [id])
+  childAssets                 AssetIdentity[]               @relation("AssetRootLineage")
+  generationBatch             TagGenerationBatch?           @relation(fields: [generationBatchId], references: [id])
+  serializedSalesLine         SerializedSalesLine?
+  saleRegistration            SaleRegistration?
+  installationJobs            InstallationJob[]
+  installationReports         InstallationReport[]
+  internalServiceOrders       InternalServiceOrder[]
+  tags                        AssetTag[]
+  usagesAsMainAsset           JobPartUsage[]                @relation("JobPartUsageMainAsset")
+  usagesAsUsedAsset           JobPartUsage[]                @relation("JobPartUsageUsedAsset")
+  dispatchedPartItems         TicketPartDispatchItem[]      @relation("TicketPartDispatchItemAsset")
+  mainAssetPartReturns        TicketPartReturn[]            @relation("TicketPartReturnMainAsset")
+  removedAssetPartReturns     TicketPartReturn[]            @relation("TicketPartReturnRemovedAsset")
+  erpSerializedDispatchRows   ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchAsset")
+  preventiveMaintenanceEvents PreventiveMaintenanceEvent[]
 
   @@index([organizationId, productClass], map: "idx_asset_identities_org_class")
   @@index([organizationId, productModelId], map: "idx_asset_identities_org_model")
@@ -1063,6 +1093,78 @@ model InstallationReport {
   @@index([submittedAt], map: "idx_installation_reports_submitted_at")
   @@index([customerAuthorizedAt], map: "idx_installation_reports_customer_authorized_at")
   @@map("installation_reports")
+}
+
+model PreventiveMaintenancePlan {
+  id                              String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId                  String                           @map("organization_id") @db.Uuid
+  productModelId                  String                           @map("product_model_id") @db.Uuid
+  name                            String                           @db.VarChar(160)
+  eventType                       PreventiveMaintenanceEventType   @map("event_type")
+  status                          PreventiveMaintenancePlanStatus  @default(active)
+  cadenceType                     PreventiveMaintenanceCadenceType @map("cadence_type")
+  cadenceConfig                   Json                             @default(dbgenerated("'{}'::jsonb")) @map("cadence_config")
+  dueSoonThresholdDays            Int                              @default(14) @map("due_soon_threshold_days")
+  customerAcknowledgementRequired Boolean                          @default(false) @map("customer_acknowledgement_required")
+  checklistTemplate               Json                             @default(dbgenerated("'[]'::jsonb")) @map("checklist_template")
+  calibrationTemplate             Json                             @default(dbgenerated("'[]'::jsonb")) @map("calibration_template")
+  metadata                        Json                             @default(dbgenerated("'{}'::jsonb"))
+  createdByUserId                 String                           @map("created_by_user_id") @db.Uuid
+  createdAt                       DateTime                         @default(now()) @map("created_at")
+  updatedAt                       DateTime                         @updatedAt @map("updated_at")
+
+  organization  Organization                 @relation(fields: [organizationId], references: [id])
+  productModel  ProductModel                 @relation(fields: [productModelId], references: [id])
+  createdByUser User                         @relation("PreventiveMaintenancePlanCreator", fields: [createdByUserId], references: [id])
+  events        PreventiveMaintenanceEvent[]
+
+  @@index([organizationId, status], map: "idx_pm_plans_org_status")
+  @@index([productModelId, status], map: "idx_pm_plans_model_status")
+  @@map("preventive_maintenance_plans")
+}
+
+model PreventiveMaintenanceEvent {
+  id                              String                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventNumber                     String                           @unique @map("event_number") @db.VarChar(30)
+  organizationId                  String                           @map("organization_id") @db.Uuid
+  planId                          String?                          @map("plan_id") @db.Uuid
+  assetId                         String                           @map("asset_id") @db.Uuid
+  eventType                       PreventiveMaintenanceEventType   @map("event_type")
+  status                          PreventiveMaintenanceEventStatus @default(due)
+  dueDate                         DateTime                         @map("due_date")
+  scheduledFor                    DateTime?                        @map("scheduled_for")
+  assignedServiceCenterId         String?                          @map("assigned_service_center_id") @db.Uuid
+  assignedTechnicianId            String?                          @map("assigned_technician_id") @db.Uuid
+  startedAt                       DateTime?                        @map("started_at")
+  completedAt                     DateTime?                        @map("completed_at")
+  cancelledAt                     DateTime?                        @map("cancelled_at")
+  cancellationReason              String?                          @map("cancellation_reason")
+  checklistTemplateSnapshot       Json                             @default(dbgenerated("'[]'::jsonb")) @map("checklist_template_snapshot")
+  checklistResponses              Json                             @default(dbgenerated("'[]'::jsonb")) @map("checklist_responses")
+  calibrationTemplateSnapshot     Json                             @default(dbgenerated("'[]'::jsonb")) @map("calibration_template_snapshot")
+  calibrationReadings             Json                             @default(dbgenerated("'[]'::jsonb")) @map("calibration_readings")
+  remarks                         String?
+  photoUrls                       String[]                         @default([]) @map("photo_urls")
+  customerAcknowledgementRequired Boolean                          @default(false) @map("customer_acknowledgement_required")
+  customerAcknowledgedAt          DateTime?                        @map("customer_acknowledged_at")
+  customerAcknowledgementPayload  Json?                            @map("customer_acknowledgement_payload")
+  metadata                        Json                             @default(dbgenerated("'{}'::jsonb"))
+  createdAt                       DateTime                         @default(now()) @map("created_at")
+  updatedAt                       DateTime                         @updatedAt @map("updated_at")
+
+  organization          Organization               @relation(fields: [organizationId], references: [id])
+  plan                  PreventiveMaintenancePlan? @relation(fields: [planId], references: [id])
+  asset                 AssetIdentity              @relation(fields: [assetId], references: [id])
+  assignedServiceCenter ServiceCenter?             @relation(fields: [assignedServiceCenterId], references: [id])
+  assignedTechnician    Technician?                @relation(fields: [assignedTechnicianId], references: [id])
+
+  @@unique([planId, assetId, dueDate], map: "pm_events_plan_asset_due_key")
+  @@index([organizationId, status, dueDate], map: "idx_pm_events_org_status_due")
+  @@index([assetId, dueDate], map: "idx_pm_events_asset_due")
+  @@index([assignedServiceCenterId, status, scheduledFor], map: "idx_pm_events_sc_status_scheduled")
+  @@index([assignedTechnicianId, status, scheduledFor], map: "idx_pm_events_tech_status_scheduled")
+  @@index([planId, dueDate], map: "idx_pm_events_plan_due")
+  @@map("preventive_maintenance_events")
 }
 
 model JobPartUsage {
@@ -1322,13 +1424,14 @@ model ServiceCenter {
   createdAt                  DateTime              @default(now()) @map("created_at")
   updatedAt                  DateTime              @updatedAt @map("updated_at")
 
-  organization          Organization           @relation(fields: [organizationId], references: [id])
-  technicians           Technician[]
-  assignedTickets       Ticket[]               @relation("AssignedServiceCenterTickets")
-  installationJobs      InstallationJob[]      @relation("AssignedServiceCenterInstallationJobs")
-  internalServiceOrders InternalServiceOrder[]
-  partDispatches        TicketPartDispatch[]
-  partReturns           TicketPartReturn[]
+  organization                Organization                 @relation(fields: [organizationId], references: [id])
+  technicians                 Technician[]
+  assignedTickets             Ticket[]                     @relation("AssignedServiceCenterTickets")
+  installationJobs            InstallationJob[]            @relation("AssignedServiceCenterInstallationJobs")
+  internalServiceOrders       InternalServiceOrder[]
+  partDispatches              TicketPartDispatch[]
+  partReturns                 TicketPartReturn[]
+  preventiveMaintenanceEvents PreventiveMaintenanceEvent[]
 
   @@index([organizationId], map: "idx_service_centers_organization")
   @@index([location], type: Gist, map: "idx_service_centers_location")
@@ -1352,14 +1455,15 @@ model Technician {
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
 
-  user                  User                   @relation(fields: [userId], references: [id])
-  serviceCenter         ServiceCenter          @relation(fields: [serviceCenterId], references: [id])
-  assignedTickets       Ticket[]               @relation("AssignedTechnicianTickets")
-  installationJobs      InstallationJob[]      @relation("AssignedTechnicianInstallationJobs")
-  internalServiceOrders InternalServiceOrder[] @relation("AssignedTechnicianInternalServiceOrders")
-  liveStatuses          TicketLiveStatus[]
-  partDispatches        TicketPartDispatch[]   @relation("TicketPartDispatchTechnician")
-  partReturns           TicketPartReturn[]     @relation("TicketPartReturnTechnician")
+  user                        User                         @relation(fields: [userId], references: [id])
+  serviceCenter               ServiceCenter                @relation(fields: [serviceCenterId], references: [id])
+  assignedTickets             Ticket[]                     @relation("AssignedTechnicianTickets")
+  installationJobs            InstallationJob[]            @relation("AssignedTechnicianInstallationJobs")
+  internalServiceOrders       InternalServiceOrder[]       @relation("AssignedTechnicianInternalServiceOrders")
+  liveStatuses                TicketLiveStatus[]
+  partDispatches              TicketPartDispatch[]         @relation("TicketPartDispatchTechnician")
+  partReturns                 TicketPartReturn[]           @relation("TicketPartReturnTechnician")
+  preventiveMaintenanceEvents PreventiveMaintenanceEvent[]
 
   @@index([serviceCenterId], map: "idx_technicians_service_center")
   @@map("technicians")
