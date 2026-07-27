@@ -411,6 +411,7 @@ What to do:
 - Add PM event detail screen or detail panel:
   - product identity
   - customer/site details safe for technician
+  - customer/site details prefilled from the latest completed installation report where available
   - due date and scheduled date
   - checklist
   - calibration readings, when event type is calibration
@@ -427,6 +428,12 @@ What to do:
   - set `completedAt`
   - persist checklist/readings/remarks/photos/acknowledgement
   - optionally auto-generate the next interval event for interval-based recurring plans, if the plan's cadence calls for rolling generation
+- For installation-driven PM acknowledgement:
+  - use the latest completed installation report for the asset as the primary source for customer name, phone, email, and site address
+  - if no installation report exists, fall back to product/customer contact fields
+  - if product/customer contact fields are missing, fall back to sale registration or dispatch metadata
+  - allow manual customer detail entry only as a last resort, and mark the acknowledgement source as `manual`
+  - store typed customer name and typed customer phone with the source customer name/phone, source type, match result, timestamp, technician ID, and PM event ID
 
 Validation strategy:
 
@@ -677,20 +684,26 @@ The feature is complete when:
 - PM records are separate from complaint tickets but can be shown together in a lifecycle history.
 - Tests cover permissions, generation, completion, and customer visibility.
 
-## Open Decisions Before Implementation
+## Approved Decisions
 
-These decisions should be confirmed before coding:
+The user approved these defaults on 2026-07-27:
 
-- Should first release include both `preventive_maintenance` and `calibration`, or only PM with calibration-ready schema?
-- Should PM events be generated for the full warranty period upfront, or rolling one event at a time after each completion?
-- Should customers be allowed to request rescheduling from the customer module?
-- Should technician/customer acknowledgement require OTP, signature, or simple typed name in v1?
-- Should overdue status be persisted by cron, or calculated dynamically in query helpers for v1?
+- Include both `preventive_maintenance` and `calibration` in schema from day one.
+- Generate PM events upfront for the active warranty period when warranty end date is known.
+- If warranty end date is not known, generate only the next two PM events.
+- Treat upfront-generated PM events as the machine-level maintenance calendar for a given equipment.
+- Do not add customer rescheduling in v1; show the schedule/history and route changes through service-center/admin operations.
+- Use typed customer name/phone acknowledgement in v1.
+- For installation-driven maintenance, prefill acknowledgement customer details from the latest completed installation report for the asset.
+- If no installation report exists, fall back to product/customer contact fields, then sale registration or dispatch metadata, then manual entry.
+- Store acknowledgement source and match details, including whether the typed phone matches the installation-report/customer source phone.
+- Calculate overdue dynamically in query helpers first; add a persisted overdue sweep only if reporting or notification requirements demand it.
 
-Recommended defaults:
+## Remaining Open Decisions Before Implementation
 
-- Include both PM and calibration in schema from day one.
-- Generate events upfront for the active warranty period when warranty end date is known; otherwise generate the next two events only.
-- Do not add customer rescheduling in v1; show service-center/admin contact path instead.
-- Use typed customer name/phone acknowledgement in v1, following installation report patterns.
-- Calculate overdue dynamically in helpers first; add persisted overdue sweep only if reporting or notification requirements demand it.
+These decisions should still be confirmed before coding:
+
+- Should PM calendar dates be generated exactly from installation date, or should manufacturers be able to choose a preferred day/window in the due month?
+- For warranty-period upfront generation, should events due exactly on warranty end date be included or excluded?
+- Should completed PM history show technician name to customers by default, or only service-center/manufacturer name?
+- Should PM reminders/notifications be included in v1 or deferred until the schedule/history workflow is stable?
