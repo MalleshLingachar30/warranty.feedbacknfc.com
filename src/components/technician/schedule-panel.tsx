@@ -29,7 +29,10 @@ function toIsoDateKey(date: Date): string {
 }
 
 function dateKeyForJob(job: TechnicianJob): string {
-  const source = job.technicianStartedAt ?? job.reportedAt;
+  const source =
+    job.jobType === "preventive_maintenance"
+      ? job.scheduledFor ?? job.dueDate
+      : job.technicianStartedAt ?? job.reportedAt;
   const date = new Date(source);
 
   if (!Number.isFinite(date.getTime())) {
@@ -47,9 +50,36 @@ function formatDayLabel(date: Date): string {
 }
 
 function sortByTime(left: TechnicianJob, right: TechnicianJob): number {
+  const leftSource =
+    left.jobType === "preventive_maintenance"
+      ? left.scheduledFor ?? left.dueDate
+      : left.reportedAt;
+  const rightSource =
+    right.jobType === "preventive_maintenance"
+      ? right.scheduledFor ?? right.dueDate
+      : right.reportedAt;
+
   return (
-    new Date(left.reportedAt).getTime() - new Date(right.reportedAt).getTime()
+    new Date(leftSource).getTime() - new Date(rightSource).getTime()
   );
+}
+
+function jobNumber(job: TechnicianJob) {
+  return job.jobType === "preventive_maintenance"
+    ? job.eventNumber
+    : job.ticketNumber;
+}
+
+function jobSubtitle(job: TechnicianJob) {
+  return job.jobType === "preventive_maintenance"
+    ? job.eventTypeLabel
+    : job.issueCategory;
+}
+
+function jobScheduleTime(job: TechnicianJob) {
+  return job.jobType === "preventive_maintenance"
+    ? job.scheduledFor ?? job.dueDate
+    : job.technicianStartedAt ?? job.reportedAt;
 }
 
 export function SchedulePanel() {
@@ -112,7 +142,7 @@ export function SchedulePanel() {
 
     const extraFromJobs = payload.jobs
       .map((job) => {
-        const date = new Date(job.technicianStartedAt ?? job.reportedAt);
+        const date = new Date(jobScheduleTime(job));
         return Number.isFinite(date.getTime()) ? date : null;
       })
       .filter((entry): entry is Date => Boolean(entry))
@@ -258,7 +288,7 @@ export function SchedulePanel() {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      {job.ticketNumber}
+                      {jobNumber(job)}
                     </p>
                     <p className="text-sm text-slate-700">{job.productName}</p>
                   </div>
@@ -270,11 +300,11 @@ export function SchedulePanel() {
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-slate-700">
-                  {job.issueCategory}
+                  {jobSubtitle(job)}
                 </p>
                 <p className="mt-2 inline-flex items-center gap-1 text-xs text-slate-600">
                   <Clock3 className="h-3.5 w-3.5" />
-                  {formatDateTime(job.technicianStartedAt ?? job.reportedAt)}
+                  {formatDateTime(jobScheduleTime(job))}
                 </p>
                 <p className="mt-1 inline-flex items-center gap-1 text-xs text-slate-600">
                   <MapPin className="h-3.5 w-3.5" />

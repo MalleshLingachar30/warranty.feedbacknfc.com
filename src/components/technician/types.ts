@@ -10,6 +10,18 @@ export type TechnicianTicketStatus =
   | "escalated"
   | "closed";
 
+export type TechnicianPreventiveMaintenanceStatus =
+  | "due"
+  | "overdue"
+  | "scheduled"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+
+export type TechnicianJobStatus =
+  | TechnicianTicketStatus
+  | TechnicianPreventiveMaintenanceStatus;
+
 export type TechnicianIssueSeverity = "low" | "medium" | "high" | "critical";
 
 export interface TechnicianPartCatalogItem {
@@ -71,7 +83,8 @@ export interface TechnicianServiceHistoryItem {
   resolutionNotes: string | null;
 }
 
-export interface TechnicianJob {
+export interface TechnicianServiceTicketJob {
+  jobType: "service_ticket";
   id: string;
   organizationId: string;
   ticketNumber: string;
@@ -107,6 +120,40 @@ export interface TechnicianJob {
   laborHours: number | null;
   claimValue: number;
 }
+
+export interface TechnicianPreventiveMaintenanceJob {
+  jobType: "preventive_maintenance";
+  id: string;
+  organizationId: string;
+  eventNumber: string;
+  status: TechnicianPreventiveMaintenanceStatus;
+  eventType: "preventive_maintenance" | "calibration";
+  eventTypeLabel: string;
+  planName: string | null;
+  dueDate: string;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  remarks: string | null;
+  photoUrls: string[];
+  checklistTemplate: string[];
+  calibrationTemplate: string[];
+  customerAcknowledgementRequired: boolean;
+  customerAcknowledgedAt: string | null;
+  customerName: string;
+  customerPhone: string;
+  customerAddress: string;
+  customerCity: string;
+  customerPincode: string;
+  productName: string;
+  productModelNumber: string;
+  productSerialNumber: string;
+  assetCode: string;
+}
+
+export type TechnicianJob =
+  | TechnicianServiceTicketJob
+  | TechnicianPreventiveMaintenanceJob;
 
 export interface TechnicianPerformance {
   jobsCompletedThisWeek: number;

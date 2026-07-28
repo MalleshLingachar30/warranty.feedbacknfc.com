@@ -87,6 +87,11 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
       href: "/dashboard/manufacturer/installations",
       icon: CalendarClock,
     },
+    {
+      label: "Maintenance",
+      href: "/dashboard/manufacturer/preventive-maintenance",
+      icon: CalendarClock,
+    },
     { label: "Stickers", href: "/dashboard/manufacturer/stickers", icon: Sticker },
     { label: "Tickets", href: "/dashboard/manufacturer/tickets", icon: Ticket },
     {
@@ -110,6 +115,11 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
       icon: Gauge,
     },
     { label: "Tickets", href: "/dashboard/tickets", icon: Ticket },
+    {
+      label: "Maintenance",
+      href: "/dashboard/preventive-maintenance",
+      icon: CalendarClock,
+    },
     { label: "Technicians", href: "/dashboard/technicians", icon: Wrench },
     { label: "Claims", href: "/dashboard/claims", icon: ClipboardList },
     { label: "Analytics", href: "/dashboard/analytics", icon: ChartColumn },
@@ -117,6 +127,11 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
   ],
   field_dispatcher: [
     { label: "Tickets", href: "/dashboard/tickets", icon: Ticket },
+    {
+      label: "Maintenance",
+      href: "/dashboard/preventive-maintenance",
+      icon: CalendarClock,
+    },
     { label: "Technicians", href: "/dashboard/technicians", icon: Users },
     { label: "Analytics", href: "/dashboard/analytics", icon: ChartColumn },
     { label: "Settings", href: "/dashboard/settings", icon: Settings },

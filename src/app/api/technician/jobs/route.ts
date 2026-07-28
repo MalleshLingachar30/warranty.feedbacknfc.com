@@ -1,8 +1,13 @@
-import { type Prisma, type TicketStatus } from "@prisma/client";
+import {
+  type PreventiveMaintenanceEventStatus,
+  type Prisma,
+  type TicketStatus,
+} from "@prisma/client";
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
 import { db } from "@/lib/db";
+import { formatPreventiveMaintenanceLabel } from "@/lib/preventive-maintenance";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
@@ -23,6 +28,14 @@ const VISIBLE_JOB_STATUSES: TicketStatus[] = [
   "closed",
   "reopened",
   "escalated",
+];
+
+const VISIBLE_PM_STATUSES: PreventiveMaintenanceEventStatus[] = [
+  "due",
+  "overdue",
+  "scheduled",
+  "in_progress",
+  "completed",
 ];
 
 const DEFAULT_LABOR_RATE_PER_HOUR = 550;
@@ -261,6 +274,17 @@ function sanitizeStringArray(values: string[]): string[] {
   return values
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+}
+
+function parseJsonStringArray(value: Prisma.JsonValue): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function scorePartMatch(part: PartCatalogItem, keywords: string[]): number {
@@ -529,8 +553,9 @@ export async function GET() {
       new Set(tickets.map((ticket) => ticket.productId)),
     );
 
-    const historyRows = productIds.length
-      ? await db.ticket.findMany({
+    const [historyRows, preventiveMaintenanceEvents] = await Promise.all([
+      productIds.length
+        ? db.ticket.findMany({
           where: {
             productId: {
               in: productIds,
@@ -547,7 +572,69 @@ export async function GET() {
             resolutionNotes: true,
           },
         })
-      : [];
+        : Promise.resolve([]),
+      db.preventiveMaintenanceEvent.findMany({
+        where: {
+          assignedTechnicianId: technician.id,
+          status: {
+            in: VISIBLE_PM_STATUSES,
+          },
+        },
+        orderBy: [
+          {
+            scheduledFor: "asc",
+          },
+          {
+            dueDate: "asc",
+          },
+          {
+            eventNumber: "asc",
+          },
+        ],
+        take: 100,
+        select: {
+          id: true,
+          eventNumber: true,
+          organizationId: true,
+          eventType: true,
+          status: true,
+          dueDate: true,
+          scheduledFor: true,
+          startedAt: true,
+          completedAt: true,
+          remarks: true,
+          photoUrls: true,
+          checklistTemplateSnapshot: true,
+          calibrationTemplateSnapshot: true,
+          customerAcknowledgementRequired: true,
+          customerAcknowledgedAt: true,
+          plan: {
+            select: {
+              name: true,
+            },
+          },
+          asset: {
+            select: {
+              publicCode: true,
+              serialNumber: true,
+              productModel: {
+                select: {
+                  name: true,
+                  modelNumber: true,
+                },
+              },
+              customer: {
+                select: {
+                  name: true,
+                  phone: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
 
     const historyByProductId = historyRows.reduce((accumulator, row) => {
       const historyItem: JobServiceHistoryItem = {
@@ -565,7 +652,7 @@ export async function GET() {
       return accumulator;
     }, new Map<string, JobServiceHistoryItem[]>());
 
-    const jobs = tickets.map((ticket) => {
+    const serviceTicketJobs = tickets.map((ticket) => {
       const partsCatalog = parsePartCatalog(
         ticket.product.productModel.partsCatalog,
       );
@@ -589,6 +676,7 @@ export async function GET() {
       });
 
       return {
+        jobType: "service_ticket" as const,
         id: ticket.id,
         organizationId: ticket.product.productModel.organizationId,
         ticketNumber: ticket.ticketNumber,
@@ -629,6 +717,42 @@ export async function GET() {
         claimValue: Number(claimValue.toFixed(2)),
       };
     });
+
+    const preventiveMaintenanceJobs = preventiveMaintenanceEvents.map((event) => ({
+      jobType: "preventive_maintenance" as const,
+      id: event.id,
+      organizationId: event.organizationId,
+      eventNumber: event.eventNumber,
+      status: event.status,
+      eventType: event.eventType,
+      eventTypeLabel: formatPreventiveMaintenanceLabel(event.eventType),
+      planName: event.plan?.name ?? null,
+      dueDate: event.dueDate.toISOString(),
+      scheduledFor: event.scheduledFor?.toISOString() ?? null,
+      startedAt: event.startedAt?.toISOString() ?? null,
+      completedAt: event.completedAt?.toISOString() ?? null,
+      remarks: event.remarks,
+      photoUrls: sanitizeStringArray(event.photoUrls),
+      checklistTemplate: parseJsonStringArray(event.checklistTemplateSnapshot),
+      calibrationTemplate: parseJsonStringArray(
+        event.calibrationTemplateSnapshot,
+      ),
+      customerAcknowledgementRequired:
+        event.customerAcknowledgementRequired,
+      customerAcknowledgedAt:
+        event.customerAcknowledgedAt?.toISOString() ?? null,
+      customerName: event.asset.customer?.name ?? "Customer",
+      customerPhone: event.asset.customer?.phone ?? "",
+      customerAddress: "Address unavailable",
+      customerCity: "Unknown city",
+      customerPincode: "",
+      productName: event.asset.productModel.name,
+      productModelNumber: event.asset.productModel.modelNumber ?? "",
+      productSerialNumber: event.asset.serialNumber ?? "",
+      assetCode: event.asset.publicCode,
+    }));
+
+    const jobs = [...serviceTicketJobs, ...preventiveMaintenanceJobs];
 
     const weekStart = new Date();
     weekStart.setDate(weekStart.getDate() - 7);
@@ -671,7 +795,7 @@ export async function GET() {
       );
     }).length;
 
-    const totalClaimsValueGenerated = jobs.reduce(
+    const totalClaimsValueGenerated = serviceTicketJobs.reduce(
       (sum, job) =>
         sum + (COMPLETED_STATUSES.includes(job.status) ? job.claimValue : 0),
       0,

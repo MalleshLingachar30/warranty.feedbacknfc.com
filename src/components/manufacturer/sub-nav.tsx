@@ -11,6 +11,10 @@ const items = [
   { label: "Serialization", href: "/dashboard/manufacturer/stickers" },
   { label: "Sales", href: "/dashboard/manufacturer/sales" },
   { label: "Installations", href: "/dashboard/manufacturer/installations" },
+  {
+    label: "Maintenance",
+    href: "/dashboard/manufacturer/preventive-maintenance",
+  },
   { label: "Tickets", href: "/dashboard/manufacturer/tickets" },
   {
     label: "Service Network",

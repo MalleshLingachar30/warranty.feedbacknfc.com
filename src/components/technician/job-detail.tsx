@@ -17,9 +17,9 @@ import {
 } from "lucide-react";
 
 import type {
-  TechnicianJob,
   TechnicianPartCatalogItem,
   TechnicianReceivedSpareItem,
+  TechnicianServiceTicketJob,
 } from "@/components/technician/types";
 import {
   formatCurrency,
@@ -77,7 +77,7 @@ type PartAttachmentInput = {
 };
 
 interface JobDetailProps {
-  job: TechnicianJob;
+  job: TechnicianServiceTicketJob;
   technicianId?: string | null;
   onClose: () => void;
   onUpdated: (ticketId: string) => Promise<void> | void;

@@ -6,9 +6,15 @@ const LOCAL_HOSTS = new Set([
   "host.docker.internal",
 ]);
 
-const ISOLATED_TOKEN_REGEX = /(^|[-_.])(e2e|test|tests|testing|ci|sandbox|local|dev|preview|staging)($|[-_.])/i;
-const PROTECTED_TOKEN_REGEX = /(^|[-_.])(prod|production|primary|shared|main|live)($|[-_.])/i;
-const NON_ISOLATED_DEFAULT_DATABASES = new Set(["postgres", "neondb", "defaultdb"]);
+const ISOLATED_TOKEN_REGEX =
+  /(^|[-_.])(e2e|test|tests|testing|ci|sandbox|local|dev|preview|staging)($|[-_.])/i;
+const PROTECTED_TOKEN_REGEX =
+  /(^|[-_.])(prod|production|primary|shared|main|live)($|[-_.])/i;
+const NON_ISOLATED_DEFAULT_DATABASES = new Set([
+  "postgres",
+  "neondb",
+  "defaultdb",
+]);
 
 const UNSAFE_OVERRIDE_ENV = "E2E_ALLOW_UNSAFE_DATABASE_WRITE";
 const UNSAFE_OVERRIDE_VALUE =
@@ -36,18 +42,25 @@ function parseTarget(name, rawUrl) {
   }
 
   const hostname = normalize(parsed.hostname);
-  const dbName = normalize(decodeURIComponent(parsed.pathname.replace(/^\/+/, "")));
+  const dbName = normalize(
+    decodeURIComponent(parsed.pathname.replace(/^\/+/, "")),
+  );
+  const schemaName = normalize(parsed.searchParams.get("schema") || "");
 
-  const target = `${name}=host:${hostname || "<missing>"} db:${dbName || "<missing>"}`;
+  const target = `${name}=host:${hostname || "<missing>"} db:${dbName || "<missing>"} schema:${schemaName || "public"}`;
   const hostIsLocal =
-    LOCAL_HOSTS.has(hostname) || hostname.endsWith(".local") || hostname.endsWith(".internal");
+    LOCAL_HOSTS.has(hostname) ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal");
   const hostLooksIsolated = ISOLATED_TOKEN_REGEX.test(hostname);
   const dbLooksIsolated = ISOLATED_TOKEN_REGEX.test(dbName);
+  const schemaLooksIsolated = ISOLATED_TOKEN_REGEX.test(schemaName);
   const hostLooksProtected = PROTECTED_TOKEN_REGEX.test(hostname);
   const dbLooksProtected = PROTECTED_TOKEN_REGEX.test(dbName);
+  const schemaLooksProtected = PROTECTED_TOKEN_REGEX.test(schemaName);
   const dbIsDefaultShared = NON_ISOLATED_DEFAULT_DATABASES.has(dbName);
 
-  if (hostLooksProtected || dbLooksProtected) {
+  if (hostLooksProtected || dbLooksProtected || schemaLooksProtected) {
     return {
       name,
       isSafe: false,
@@ -61,6 +74,15 @@ function parseTarget(name, rawUrl) {
       name,
       isSafe: true,
       reason: `${target} is local.`,
+      target,
+    };
+  }
+
+  if (schemaLooksIsolated) {
+    return {
+      name,
+      isSafe: true,
+      reason: `${target} uses an explicitly isolated/test schema.`,
       target,
     };
   }
@@ -120,9 +142,7 @@ function assertSafeE2EDatabase(options = {}) {
     return;
   }
 
-  const details = targets
-    .map((target) => `- ${target.reason}`)
-    .join("\n");
+  const details = targets.map((target) => `- ${target.reason}`).join("\n");
 
   throw new Error(
     [

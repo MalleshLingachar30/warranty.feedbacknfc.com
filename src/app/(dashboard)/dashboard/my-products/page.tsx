@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { requireCustomerContext } from "@/lib/customer-context";
-import type { WarrantyStatus, TicketStatus } from "@prisma/client";
+import type {
+  PreventiveMaintenanceEventStatus,
+  Prisma,
+  WarrantyStatus,
+  TicketStatus,
+} from "@prisma/client";
 
 const OPEN_TICKET_STATUSES: TicketStatus[] = [
   "reported",
@@ -24,6 +29,13 @@ const OPEN_TICKET_STATUSES: TicketStatus[] = [
   "pending_confirmation",
   "reopened",
   "escalated",
+];
+
+const VISIBLE_PM_STATUSES: PreventiveMaintenanceEventStatus[] = [
+  "due",
+  "scheduled",
+  "in_progress",
+  "completed",
 ];
 
 function formatDate(date: Date) {
@@ -89,6 +101,31 @@ function ticketBadgeClass(status: TicketStatus) {
   }
 }
 
+function pmStatusBadgeClass(status: PreventiveMaintenanceEventStatus) {
+  switch (status) {
+    case "due":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "scheduled":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    case "in_progress":
+      return "border-violet-200 bg-violet-50 text-violet-700";
+    case "completed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "cancelled":
+      return "border-slate-200 bg-slate-50 text-slate-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+}
+
+function productAssetKey(input: {
+  organizationId: string;
+  productModelId: string;
+  serialNumber: string | null;
+}) {
+  return `${input.organizationId}:${input.productModelId}:${input.serialNumber ?? ""}`;
+}
+
 export default async function MyProductsPage() {
   const { dbUserId, verifiedEmails, verifiedPhones } =
     await requireCustomerContext();
@@ -109,6 +146,8 @@ export default async function MyProductsPage() {
     take: 50,
     select: {
       id: true,
+      organizationId: true,
+      productModelId: true,
       serialNumber: true,
       warrantyStatus: true,
       warrantyStartDate: true,
@@ -158,6 +197,80 @@ export default async function MyProductsPage() {
     },
   });
 
+  const assetProductClauses: Prisma.PreventiveMaintenanceEventWhereInput[] =
+    products
+      .filter((product) => Boolean(product.serialNumber))
+      .map((product) => ({
+        asset: {
+          organizationId: product.organizationId,
+          productModelId: product.productModelId,
+          serialNumber: product.serialNumber,
+        },
+      }));
+
+  const pmEvents = await db.preventiveMaintenanceEvent.findMany({
+    where: {
+      status: {
+        in: VISIBLE_PM_STATUSES,
+      },
+      OR: [
+        {
+          asset: {
+            customerId: dbUserId,
+          },
+        },
+        ...assetProductClauses,
+      ],
+    },
+    orderBy: [
+      {
+        dueDate: "asc",
+      },
+      {
+        eventNumber: "asc",
+      },
+    ],
+    take: 200,
+    select: {
+      id: true,
+      eventNumber: true,
+      status: true,
+      dueDate: true,
+      scheduledFor: true,
+      completedAt: true,
+      asset: {
+        select: {
+          organizationId: true,
+          productModelId: true,
+          serialNumber: true,
+          publicCode: true,
+        },
+      },
+      assignedServiceCenter: {
+        select: {
+          name: true,
+        },
+      },
+      assignedTechnician: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  const pmEventsByProduct = pmEvents.reduce((map, event) => {
+    const key = productAssetKey({
+      organizationId: event.asset.organizationId,
+      productModelId: event.asset.productModelId,
+      serialNumber: event.asset.serialNumber,
+    });
+    const existing = map.get(key) ?? [];
+    existing.push(event);
+    map.set(key, existing);
+    return map;
+  }, new Map<string, typeof pmEvents>());
+
   const hasVerifiedContact = verifiedPhones.length > 0 || verifiedEmails.length > 0;
 
   return (
@@ -202,6 +315,15 @@ export default async function MyProductsPage() {
             const warrantyEndDate = product.warrantyEndDate;
             const remainingDays =
               warrantyEndDate instanceof Date ? daysUntil(warrantyEndDate) : null;
+            const productPmEvents = pmEventsByProduct
+              .get(
+                productAssetKey({
+                  organizationId: product.organizationId,
+                  productModelId: product.productModelId,
+                  serialNumber: product.serialNumber,
+                }),
+              )
+              ?.slice(0, 3);
 
             return (
               <Card key={product.id} className="border-slate-200">
@@ -292,6 +414,47 @@ export default async function MyProductsPage() {
                         <Button size="sm" variant="outline" asChild>
                           <Link href={`/nfc/${stickerNumber}`}>Open sticker</Link>
                         </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {productPmEvents && productPmEvents.length > 0 ? (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-sm font-semibold text-blue-950">
+                        Preventive maintenance
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {productPmEvents.map((event) => (
+                          <div
+                            key={event.id}
+                            className="rounded-md border border-blue-100 bg-white px-3 py-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-medium text-slate-900">
+                                  {event.eventNumber}
+                                </p>
+                                <p className="text-xs text-slate-600">
+                                  Due {formatDate(event.dueDate)}
+                                  {event.scheduledFor
+                                    ? ` / scheduled ${formatDate(event.scheduledFor)}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className={pmStatusBadgeClass(event.status)}
+                              >
+                                {event.status.replace(/_/g, " ")}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {event.assignedTechnician?.name ??
+                                event.assignedServiceCenter?.name ??
+                                "Assignment pending"}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ) : null}
