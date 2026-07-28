@@ -1,8 +1,64 @@
-import type {
-  PreventiveMaintenanceCadenceType,
-  PreventiveMaintenanceEventStatus,
-  PreventiveMaintenanceEventType,
+import {
+  Prisma,
+  type PreventiveMaintenanceCadenceType,
+  type PreventiveMaintenanceEventStatus,
+  type PreventiveMaintenanceEventType,
 } from "@prisma/client";
+
+const MAX_PM_EVENT_NUMBER_ATTEMPTS = 5;
+
+const PM_EVENT_NUMBER_PREFIX = "PM-";
+
+export type PreventiveMaintenanceGenerationSkipReason =
+  | "asset_not_found"
+  | "missing_installation_date"
+  | "no_active_plans"
+  | "manual_cadence"
+  | "invalid_cadence_config"
+  | "outside_generation_window"
+  | "already_exists";
+
+export interface PreventiveMaintenanceGenerationSkippedItem {
+  planId?: string;
+  dueDate?: string;
+  reason: PreventiveMaintenanceGenerationSkipReason;
+  message?: string;
+}
+
+export interface PreventiveMaintenanceGenerationSummary {
+  assetId: string;
+  activePlanCount: number;
+  generatedEventCount: number;
+  skippedEventCount: number;
+  generatedEventIds: string[];
+  skipped: PreventiveMaintenanceGenerationSkippedItem[];
+}
+
+export interface GeneratePreventiveMaintenanceEventsForAssetInput {
+  tx: Prisma.TransactionClient;
+  assetId: string;
+  warrantyEndDate?: Date | null;
+  maxEventsWithoutWarrantyEnd?: number;
+  includeWarrantyEndDate?: boolean;
+  generatedAt?: Date;
+  generationSource?:
+    | "installation_completion"
+    | "manual_regeneration"
+    | "backfill"
+    | "seed";
+}
+
+type ExistingPreventiveMaintenanceEventKey = `${string}:${number}`;
+
+type ActivePreventiveMaintenancePlan = {
+  id: string;
+  eventType: PreventiveMaintenanceEventType;
+  cadenceType: PreventiveMaintenanceCadenceType;
+  cadenceConfig: Prisma.JsonValue;
+  customerAcknowledgementRequired: boolean;
+  checklistTemplate: Prisma.JsonValue;
+  calibrationTemplate: Prisma.JsonValue;
+};
 
 export const PREVENTIVE_MAINTENANCE_EVENT_TYPES = [
   "preventive_maintenance",
@@ -125,6 +181,198 @@ export function formatPreventiveMaintenanceEventNumber(sequence: number) {
   return `PM-${sequence.toString().padStart(6, "0")}`;
 }
 
+export async function generatePreventiveMaintenanceEventsForAsset(
+  input: GeneratePreventiveMaintenanceEventsForAssetInput,
+): Promise<PreventiveMaintenanceGenerationSummary> {
+  const summary: PreventiveMaintenanceGenerationSummary = {
+    assetId: input.assetId,
+    activePlanCount: 0,
+    generatedEventCount: 0,
+    skippedEventCount: 0,
+    generatedEventIds: [],
+    skipped: [],
+  };
+
+  const asset = await input.tx.assetIdentity.findUnique({
+    where: {
+      id: input.assetId,
+    },
+    select: {
+      id: true,
+      organizationId: true,
+      installationDate: true,
+      productModel: {
+        select: {
+          preventiveMaintenancePlans: {
+            where: {
+              status: "active",
+            },
+            select: {
+              id: true,
+              eventType: true,
+              cadenceType: true,
+              cadenceConfig: true,
+              customerAcknowledgementRequired: true,
+              checklistTemplate: true,
+              calibrationTemplate: true,
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!asset) {
+    summary.skippedEventCount += 1;
+    summary.skipped.push({
+      reason: "asset_not_found",
+      message: "Asset identity was not found.",
+    });
+    return summary;
+  }
+
+  const activePlans = asset.productModel
+    .preventiveMaintenancePlans as ActivePreventiveMaintenancePlan[];
+  summary.activePlanCount = activePlans.length;
+
+  if (activePlans.length === 0) {
+    summary.skipped.push({
+      reason: "no_active_plans",
+      message:
+        "No active preventive maintenance plans exist for this product model.",
+    });
+    return summary;
+  }
+
+  if (!asset.installationDate) {
+    summary.skippedEventCount += activePlans.length;
+    summary.skipped.push({
+      reason: "missing_installation_date",
+      message:
+        "Plan-based preventive maintenance events require an asset installation date.",
+    });
+    return summary;
+  }
+
+  const existingEvents = await input.tx.preventiveMaintenanceEvent.findMany({
+    where: {
+      assetId: asset.id,
+      planId: {
+        in: activePlans.map((plan) => plan.id),
+      },
+    },
+    select: {
+      planId: true,
+      dueDate: true,
+    },
+  });
+  const existingKeys = new Set(
+    existingEvents
+      .filter((event): event is { planId: string; dueDate: Date } =>
+        Boolean(event.planId),
+      )
+      .map((event) =>
+        buildPreventiveMaintenanceEventKey({
+          planId: event.planId,
+          dueDate: event.dueDate,
+        }),
+      ),
+  );
+  const generatedAt = input.generatedAt ?? new Date();
+  const generationSource = input.generationSource ?? "installation_completion";
+
+  for (const plan of activePlans) {
+    let dueDates: Date[];
+
+    try {
+      dueDates = expandPreventiveMaintenanceDueDates({
+        cadenceType: plan.cadenceType,
+        cadenceConfig: plan.cadenceConfig,
+        installationDate: asset.installationDate,
+        warrantyEndDate: input.warrantyEndDate,
+        maxEventsWithoutWarrantyEnd: input.maxEventsWithoutWarrantyEnd,
+        includeWarrantyEndDate: input.includeWarrantyEndDate,
+      });
+    } catch (error) {
+      summary.skippedEventCount += 1;
+      summary.skipped.push({
+        planId: plan.id,
+        reason: "invalid_cadence_config",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Preventive maintenance plan cadence is invalid.",
+      });
+      continue;
+    }
+
+    if (dueDates.length === 0) {
+      summary.skippedEventCount += 1;
+      summary.skipped.push({
+        planId: plan.id,
+        reason:
+          plan.cadenceType === "manual"
+            ? "manual_cadence"
+            : "outside_generation_window",
+        message:
+          plan.cadenceType === "manual"
+            ? "Manual cadence plans do not auto-generate events."
+            : "Plan cadence produced no dates inside the generation window.",
+      });
+      continue;
+    }
+
+    for (const dueDate of dueDates) {
+      const eventKey = buildPreventiveMaintenanceEventKey({
+        planId: plan.id,
+        dueDate,
+      });
+
+      if (existingKeys.has(eventKey)) {
+        summary.skippedEventCount += 1;
+        summary.skipped.push({
+          planId: plan.id,
+          dueDate: dueDate.toISOString(),
+          reason: "already_exists",
+        });
+        continue;
+      }
+
+      const created = await createPreventiveMaintenanceEventWithNumber({
+        tx: input.tx,
+        plan,
+        asset: {
+          id: asset.id,
+          organizationId: asset.organizationId,
+        },
+        dueDate,
+        generatedAt,
+        generationSource,
+        warrantyEndDate: input.warrantyEndDate,
+      });
+
+      if (created.created) {
+        existingKeys.add(eventKey);
+        summary.generatedEventCount += 1;
+        summary.generatedEventIds.push(created.id);
+      } else {
+        existingKeys.add(eventKey);
+        summary.skippedEventCount += 1;
+        summary.skipped.push({
+          planId: plan.id,
+          dueDate: dueDate.toISOString(),
+          reason: "already_exists",
+        });
+      }
+    }
+  }
+
+  return summary;
+}
+
 export function normalizePreventiveMaintenanceCadenceConfig(
   cadenceType: PreventiveMaintenanceCadenceType,
   value: unknown,
@@ -136,7 +384,9 @@ export function normalizePreventiveMaintenanceCadenceConfig(
       const intervalDays = readPositiveInteger(record.intervalDays);
 
       if (!intervalDays) {
-        throw new Error("interval_days cadence requires a positive intervalDays value.");
+        throw new Error(
+          "interval_days cadence requires a positive intervalDays value.",
+        );
       }
 
       return { intervalDays };
@@ -147,7 +397,9 @@ export function normalizePreventiveMaintenanceCadenceConfig(
         : [];
 
       if (monthOffsets.length === 0) {
-        throw new Error("month_offsets cadence requires at least one month offset.");
+        throw new Error(
+          "month_offsets cadence requires at least one month offset.",
+        );
       }
 
       return { monthOffsets };
@@ -223,7 +475,9 @@ export function derivePreventiveMaintenanceDisplayStatus(
 
   const dueSoonBoundary = addDaysUtc(startOfUtcDay(now), dueSoonThresholdDays);
   if (input.dueDate.getTime() <= dueSoonBoundary.getTime()) {
-    return input.status === "scheduled" || input.scheduledFor ? "scheduled" : "due_soon";
+    return input.status === "scheduled" || input.scheduledFor
+      ? "scheduled"
+      : "due_soon";
   }
 
   if (input.status === "scheduled" || input.scheduledFor) {
@@ -333,7 +587,9 @@ function expandMonthOffsetDueDates(input: {
   const dates = input.monthOffsets
     .map((offset) => addMonthsUtcClamped(input.installationDate, offset))
     .filter((date, index, list) => {
-      const firstIndex = list.findIndex((entry) => entry.getTime() === date.getTime());
+      const firstIndex = list.findIndex(
+        (entry) => entry.getTime() === date.getTime(),
+      );
       return firstIndex === index;
     });
 
@@ -378,6 +634,171 @@ function isDueDateWithinWarrantyWindow(input: {
   return input.includeWarrantyEndDate
     ? input.dueDate.getTime() <= input.warrantyEndDate.getTime()
     : input.dueDate.getTime() < input.warrantyEndDate.getTime();
+}
+
+async function createPreventiveMaintenanceEventWithNumber(input: {
+  tx: Prisma.TransactionClient;
+  plan: ActivePreventiveMaintenancePlan;
+  asset: {
+    id: string;
+    organizationId: string;
+  };
+  dueDate: Date;
+  generatedAt: Date;
+  generationSource: NonNullable<
+    GeneratePreventiveMaintenanceEventsForAssetInput["generationSource"]
+  >;
+  warrantyEndDate?: Date | null;
+}): Promise<
+  | {
+      created: true;
+      id: string;
+    }
+  | {
+      created: false;
+    }
+> {
+  for (let attempt = 0; attempt < MAX_PM_EVENT_NUMBER_ATTEMPTS; attempt += 1) {
+    try {
+      const eventNumber = await generatePreventiveMaintenanceEventNumber(
+        input.tx,
+      );
+      const created = await input.tx.preventiveMaintenanceEvent.create({
+        data: {
+          eventNumber,
+          organizationId: input.asset.organizationId,
+          planId: input.plan.id,
+          assetId: input.asset.id,
+          eventType: input.plan.eventType,
+          status: "due",
+          dueDate: input.dueDate,
+          checklistTemplateSnapshot: toInputJsonValue(
+            input.plan.checklistTemplate,
+            [],
+          ),
+          calibrationTemplateSnapshot: toInputJsonValue(
+            input.plan.calibrationTemplate,
+            [],
+          ),
+          customerAcknowledgementRequired:
+            input.plan.customerAcknowledgementRequired,
+          metadata: {
+            generationSource: input.generationSource,
+            generatedAt: input.generatedAt.toISOString(),
+            warrantyEndDate: input.warrantyEndDate?.toISOString() ?? null,
+          } satisfies Prisma.InputJsonValue,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      return {
+        created: true,
+        id: created.id,
+      };
+    } catch (error) {
+      if (isPreventiveMaintenancePlanAssetDueCollision(error)) {
+        return {
+          created: false,
+        };
+      }
+
+      if (
+        isPreventiveMaintenanceEventNumberCollision(error) &&
+        attempt < MAX_PM_EVENT_NUMBER_ATTEMPTS - 1
+      ) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Unable to allocate preventive maintenance event number.");
+}
+
+async function generatePreventiveMaintenanceEventNumber(
+  tx: Prisma.TransactionClient,
+) {
+  const latest = await tx.preventiveMaintenanceEvent.findFirst({
+    where: {
+      eventNumber: {
+        startsWith: PM_EVENT_NUMBER_PREFIX,
+      },
+    },
+    orderBy: {
+      eventNumber: "desc",
+    },
+    select: {
+      eventNumber: true,
+    },
+  });
+  const latestSequence = latest?.eventNumber.match(/^PM-(\d+)$/);
+  const nextSequence = latestSequence?.[1]
+    ? Number.parseInt(latestSequence[1], 10) + 1
+    : 1;
+
+  return formatPreventiveMaintenanceEventNumber(nextSequence);
+}
+
+function buildPreventiveMaintenanceEventKey(input: {
+  planId: string;
+  dueDate: Date;
+}): ExistingPreventiveMaintenanceEventKey {
+  return `${input.planId}:${input.dueDate.getTime()}`;
+}
+
+function toInputJsonValue(
+  value: Prisma.JsonValue,
+  fallback: Prisma.InputJsonValue,
+): Prisma.InputJsonValue {
+  return value === null ? fallback : (value as Prisma.InputJsonValue);
+}
+
+function isPreventiveMaintenanceEventNumberCollision(error: unknown) {
+  return isPrismaUniqueCollision(error, [
+    "eventNumber",
+    "event_number",
+    "preventive_maintenance_events_event_number_key",
+  ]);
+}
+
+function isPreventiveMaintenancePlanAssetDueCollision(error: unknown) {
+  return isPrismaUniqueCollision(error, [
+    "planId",
+    "plan_id",
+    "assetId",
+    "asset_id",
+    "dueDate",
+    "due_date",
+    "pm_events_plan_asset_due_key",
+  ]);
+}
+
+function isPrismaUniqueCollision(error: unknown, targets: string[]) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code !== "P2002") {
+    return false;
+  }
+
+  const target = error.meta?.target;
+  if (typeof target === "string") {
+    return targets.some((entry) => target.includes(entry));
+  }
+
+  if (Array.isArray(target)) {
+    return target.some(
+      (entry) =>
+        typeof entry === "string" &&
+        targets.some((targetEntry) => entry.includes(targetEntry)),
+    );
+  }
+
+  return false;
 }
 
 function addDaysUtc(date: Date, days: number) {

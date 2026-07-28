@@ -4,18 +4,17 @@ import { NextResponse } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
-import { installationJobSelect, serializeInstallationJobRow } from "@/lib/installation-workflow-view";
+import {
+  installationJobSelect,
+  serializeInstallationJobRow,
+} from "@/lib/installation-workflow-view";
 import {
   buildInstallationReportPdfPath,
   buildInstallationReportPdfUrl,
 } from "@/lib/installation-report-links";
-import {
-  installationReportAuthorizationSelect,
-} from "@/lib/installation-report-view";
-import {
-  authorizeOwnerAccess,
-  normalizePhone,
-} from "@/lib/otp-session";
+import { installationReportAuthorizationSelect } from "@/lib/installation-report-view";
+import { authorizeOwnerAccess, normalizePhone } from "@/lib/otp-session";
+import { generatePreventiveMaintenanceEventsForAsset } from "@/lib/preventive-maintenance";
 import { buildAbsoluteWarrantyUrl } from "@/lib/warranty-app-url";
 import {
   sendCustomerWarrantyActivatedEmail,
@@ -73,7 +72,9 @@ export async function POST(
   try {
     const authData = await getOptionalAuth();
     const cookieStore = await cookies();
-    const body = (await request.json().catch(() => ({}))) as AuthorizeInstallationReportPayload;
+    const body = (await request
+      .json()
+      .catch(() => ({}))) as AuthorizeInstallationReportPayload;
     const { id } = await params;
 
     if (!id) {
@@ -171,145 +172,156 @@ export async function POST(
       userLookup.push({ email: report.customerEmail });
     }
 
-    const updated = await db.$transaction(async (tx) => {
-      const existingCustomer =
-        userLookup.length > 0
-          ? await tx.user.findFirst({
-              where: {
-                OR: userLookup,
-              },
-              select: {
-                id: true,
-                languagePreference: true,
-              },
-            })
-          : null;
+    const updated = await db.$transaction(
+      async (tx) => {
+        const existingCustomer =
+          userLookup.length > 0
+            ? await tx.user.findFirst({
+                where: {
+                  OR: userLookup,
+                },
+                select: {
+                  id: true,
+                  languagePreference: true,
+                },
+              })
+            : null;
 
-      const customer =
-        existingCustomer ??
-        (await tx.user.create({
-          data: {
-            clerkId: buildSyntheticClerkId(normalizedCustomerPhone),
-            role: "customer",
-            name: report.customerName,
-            phone: normalizedCustomerPhone,
-            email: report.customerEmail,
-          },
-          select: {
-            id: true,
-            languagePreference: true,
-          },
-        }));
+        const customer =
+          existingCustomer ??
+          (await tx.user.create({
+            data: {
+              clerkId: buildSyntheticClerkId(normalizedCustomerPhone),
+              role: "customer",
+              name: report.customerName,
+              phone: normalizedCustomerPhone,
+              email: report.customerEmail,
+            },
+            select: {
+              id: true,
+              languagePreference: true,
+            },
+          }));
 
-      if (existingCustomer) {
-        await tx.user.update({
+        if (existingCustomer) {
+          await tx.user.update({
+            where: {
+              id: existingCustomer.id,
+            },
+            data: {
+              name: report.customerName,
+              phone: normalizedCustomerPhone,
+              email: report.customerEmail,
+            },
+          });
+        }
+
+        await tx.installationReport.update({
           where: {
-            id: existingCustomer.id,
+            id: report.id,
           },
           data: {
-            name: report.customerName,
-            phone: normalizedCustomerPhone,
-            email: report.customerEmail,
+            customerAuthorizedAt: authorizedAt,
+            customerAuthorizedByName: authorizedByName,
+            customerAuthorizedByPhone: normalizedCustomerPhone,
+            customerAuthorizationPayload: {
+              accepted: true,
+              authorizedAt: authorizedAt.toISOString(),
+              authorizedByName,
+              authorizedByPhone: normalizedCustomerPhone,
+              authorizationSource: ownerAccess.via ?? "otp",
+            } satisfies Prisma.InputJsonValue,
           },
         });
-      }
 
-      await tx.installationReport.update({
-        where: {
-          id: report.id,
-        },
-        data: {
-          customerAuthorizedAt: authorizedAt,
-          customerAuthorizedByName: authorizedByName,
-          customerAuthorizedByPhone: normalizedCustomerPhone,
-          customerAuthorizationPayload: {
-            accepted: true,
-            authorizedAt: authorizedAt.toISOString(),
-            authorizedByName,
-            authorizedByPhone: normalizedCustomerPhone,
-            authorizationSource: ownerAccess.via ?? "otp",
-          } satisfies Prisma.InputJsonValue,
-        },
-      });
+        await tx.assetIdentity.update({
+          where: {
+            id: report.assetId,
+          },
+          data: {
+            lifecycleState: "active",
+            warrantyState: "active",
+            customerId: customer.id,
+            installationDate: report.installationDate,
+            installationLocation,
+          },
+        });
 
-      await tx.assetIdentity.update({
-        where: {
-          id: report.assetId,
-        },
-        data: {
-          lifecycleState: "active",
-          warrantyState: "active",
-          customerId: customer.id,
-          installationDate: report.installationDate,
-          installationLocation,
-        },
-      });
-
-      await tx.product.update({
-        where: {
-          id: linkedProduct.id,
-        },
-        data: {
-          warrantyStartDate: authorizedAt,
-          warrantyEndDate,
-          warrantyStatus: "active",
-          installationDate: report.installationDate,
-          customerId: customer.id,
-          customerName: report.customerName,
-          customerPhone: normalizedCustomerPhone,
-          customerPhoneVerified: true,
-          customerEmail: report.customerEmail,
-          customerAddress: report.installAddress,
-          customerCity: report.installCity,
-          customerState: report.installState,
-          customerPincode: report.installPincode,
-          activatedVia: "installation_report",
-          activatedAtLocation: report.installCity,
-          installationLocation,
-          metadata: {
-            ...asRecord(linkedProduct.metadata),
-            warrantyCertificateUrl: certificateUrl,
-            warrantyCertificatePath: certificatePath,
-            activationSource: "installation_report",
+        await tx.product.update({
+          where: {
+            id: linkedProduct.id,
+          },
+          data: {
+            warrantyStartDate: authorizedAt,
+            warrantyEndDate,
+            warrantyStatus: "active",
+            installationDate: report.installationDate,
+            customerId: customer.id,
+            customerName: report.customerName,
+            customerPhone: normalizedCustomerPhone,
+            customerPhoneVerified: true,
+            customerEmail: report.customerEmail,
+            customerAddress: report.installAddress,
+            customerCity: report.installCity,
+            customerState: report.installState,
+            customerPincode: report.installPincode,
             activatedVia: "installation_report",
-            installationJobId: report.installationJobId,
-            installationReportId: report.id,
-            installationReportPdfUrl: pdfUrl,
-            installationReportPdfPath: pdfPath,
-            installationReportAuthorizedAt: authorizedAt.toISOString(),
-          } satisfies Prisma.InputJsonValue,
-        },
-      });
+            activatedAtLocation: report.installCity,
+            installationLocation,
+            metadata: {
+              ...asRecord(linkedProduct.metadata),
+              warrantyCertificateUrl: certificateUrl,
+              warrantyCertificatePath: certificatePath,
+              activationSource: "installation_report",
+              activatedVia: "installation_report",
+              installationJobId: report.installationJobId,
+              installationReportId: report.id,
+              installationReportPdfUrl: pdfUrl,
+              installationReportPdfPath: pdfPath,
+              installationReportAuthorizedAt: authorizedAt.toISOString(),
+            } satisfies Prisma.InputJsonValue,
+          },
+        });
 
-      await tx.sticker.update({
-        where: {
-          id: linkedProduct.stickerId,
-        },
-        data: {
-          status: "activated",
-        },
-      });
+        await tx.sticker.update({
+          where: {
+            id: linkedProduct.stickerId,
+          },
+          data: {
+            status: "activated",
+          },
+        });
 
-      const nextJob = await tx.installationJob.update({
-        where: {
-          id: report.installationJobId,
-        },
-        data: {
-          status: "completed",
-          technicianCompletedAt:
-            report.installationJob.technicianCompletedAt ?? report.submittedAt,
-          activationTriggeredAt: authorizedAt,
-        },
-        select: installationJobSelect,
-      });
+        const nextJob = await tx.installationJob.update({
+          where: {
+            id: report.installationJobId,
+          },
+          data: {
+            status: "completed",
+            technicianCompletedAt:
+              report.installationJob.technicianCompletedAt ??
+              report.submittedAt,
+            activationTriggeredAt: authorizedAt,
+          },
+          select: installationJobSelect,
+        });
 
-      return {
-        customer,
-        job: nextJob,
-      };
-    }, {
-      timeout: 15_000,
-    });
+        await generatePreventiveMaintenanceEventsForAsset({
+          tx,
+          assetId: report.assetId,
+          warrantyEndDate,
+          generationSource: "installation_completion",
+        });
+
+        return {
+          customer,
+          job: nextJob,
+        };
+      },
+      {
+        timeout: 15_000,
+      },
+    );
 
     void sendWarrantyActivatedNotification({
       customerPhone: normalizedCustomerPhone,
