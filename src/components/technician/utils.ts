@@ -2,7 +2,7 @@ import type {
   TechnicianInstallationJobStatus,
   TechnicianIssueSeverity,
   TechnicianJob,
-  TechnicianTicketStatus,
+  TechnicianJobStatus,
 } from "@/components/technician/types";
 
 export type JobTabValue = "assigned" | "in_progress" | "completed";
@@ -88,12 +88,18 @@ export function severityBadgeClass(severity: TechnicianIssueSeverity): string {
   }
 }
 
-export function statusLabel(status: TechnicianTicketStatus): string {
+export function statusLabel(status: TechnicianJobStatus): string {
   return status.replace(/_/g, " ");
 }
 
-export function statusBadgeClass(status: TechnicianTicketStatus): string {
+export function statusBadgeClass(status: TechnicianJobStatus): string {
   switch (status) {
+    case "due":
+      return "border-blue-300 bg-blue-100 text-blue-800";
+    case "scheduled":
+      return "border-indigo-300 bg-indigo-100 text-indigo-800";
+    case "in_progress":
+      return "border-violet-300 bg-violet-100 text-violet-800";
     case "awaiting_technician_acceptance":
       return "border-sky-300 bg-sky-100 text-sky-800";
     case "assigned":
@@ -106,6 +112,7 @@ export function statusBadgeClass(status: TechnicianTicketStatus): string {
       return "border-amber-300 bg-amber-100 text-amber-900";
     case "resolved":
     case "closed":
+    case "completed":
       return "border-emerald-300 bg-emerald-100 text-emerald-800";
     case "reopened":
       return "border-rose-300 bg-rose-100 text-rose-800";
@@ -121,14 +128,20 @@ export function selectJobsByTab(
   tab: JobTabValue,
 ): TechnicianJob[] {
   const isCompletionSubmitted = (job: TechnicianJob) =>
-    job.status === "pending_confirmation" ||
-    job.status === "resolved" ||
-    job.status === "closed" ||
-    Boolean(job.technicianCompletedAt);
+    job.jobType === "preventive_maintenance"
+      ? job.status === "completed" || Boolean(job.completedAt)
+      : job.status === "pending_confirmation" ||
+        job.status === "resolved" ||
+        job.status === "closed" ||
+        Boolean(job.technicianCompletedAt);
 
   if (tab === "assigned") {
     return jobs.filter(
       (job) =>
+        (job.jobType === "preventive_maintenance" &&
+          (job.status === "due" ||
+            job.status === "overdue" ||
+            job.status === "scheduled")) ||
         job.status === "awaiting_technician_acceptance" ||
         job.status === "assigned",
     );
@@ -137,11 +150,13 @@ export function selectJobsByTab(
   if (tab === "in_progress") {
     return jobs.filter(
       (job) =>
-        !isCompletionSubmitted(job) &&
-        (job.status === "technician_enroute" ||
-          job.status === "work_in_progress" ||
-          job.status === "reopened" ||
-          job.status === "escalated"),
+        job.jobType === "preventive_maintenance"
+          ? job.status === "in_progress"
+          : !isCompletionSubmitted(job) &&
+            (job.status === "technician_enroute" ||
+              job.status === "work_in_progress" ||
+              job.status === "reopened" ||
+              job.status === "escalated"),
     );
   }
 

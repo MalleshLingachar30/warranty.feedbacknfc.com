@@ -6,12 +6,16 @@ import { ArrowLeft, Briefcase, Clock3, MapPin, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { JobDetail } from "@/components/technician/job-detail";
+import { PreventiveMaintenanceJobDetail } from "@/components/technician/preventive-maintenance-job-detail";
 import type {
   TechnicianJob,
   TechnicianJobsResponse,
+  TechnicianPreventiveMaintenanceJob,
+  TechnicianServiceTicketJob,
 } from "@/components/technician/types";
 import {
   type JobTabValue,
+  formatDateTime,
   formatRelativeTime,
   selectJobsByTab,
   severityBadgeClass,
@@ -41,6 +45,28 @@ import { parsePartScanFromQuery } from "@/lib/part-scan-handoff";
 interface MyJobsBoardProps {
   title?: string;
   description?: string;
+}
+
+function jobNumber(job: TechnicianJob) {
+  return job.jobType === "preventive_maintenance"
+    ? job.eventNumber
+    : job.ticketNumber;
+}
+
+function jobPrimaryText(job: TechnicianJob) {
+  return job.jobType === "preventive_maintenance"
+    ? job.eventTypeLabel
+    : job.issueCategory;
+}
+
+function jobTimeLabel(job: TechnicianJob) {
+  if (job.jobType === "preventive_maintenance") {
+    return job.scheduledFor
+      ? `Scheduled ${formatDateTime(job.scheduledFor)}`
+      : `Due ${formatDateTime(job.dueDate)}`;
+  }
+
+  return `Reported ${formatRelativeTime(job.reportedAt)}`;
 }
 
 export function MyJobsBoard({
@@ -92,14 +118,18 @@ export function MyJobsBoard({
       const currentOpenJobIds = new Set(
         body.jobs
           .filter((job) =>
-            [
-              "awaiting_technician_acceptance",
-              "assigned",
-              "technician_enroute",
-              "work_in_progress",
-              "reopened",
-              "escalated",
-            ].includes(job.status),
+            job.jobType === "preventive_maintenance"
+              ? ["due", "overdue", "scheduled", "in_progress"].includes(
+                  job.status,
+                )
+              : [
+                  "awaiting_technician_acceptance",
+                  "assigned",
+                  "technician_enroute",
+                  "work_in_progress",
+                  "reopened",
+                  "escalated",
+                ].includes(job.status),
           )
           .map((job) => job.id),
       );
@@ -161,7 +191,9 @@ export function MyJobsBoard({
     }
 
     const hasReferencedTicket = payload.jobs.some(
-      (job) => job.id === scannedPart.context.ticketId,
+      (job) =>
+        job.jobType === "service_ticket" &&
+        job.id === scannedPart.context.ticketId,
     );
 
     if (hasReferencedTicket) {
@@ -178,7 +210,11 @@ export function MyJobsBoard({
       scannedPart.scan &&
       scannedPart.context.ticketId &&
       payload &&
-      !payload.jobs.some((job) => job.id === scannedPart.context.ticketId)
+      !payload.jobs.some(
+        (job) =>
+          job.jobType === "service_ticket" &&
+          job.id === scannedPart.context.ticketId,
+      )
     ) {
       return "This scanned part link references a ticket that is not assigned to you.";
     }
@@ -198,7 +234,10 @@ export function MyJobsBoard({
       return null;
     }
 
-    if (scannedPart.scan.organizationId !== selectedJob.organizationId) {
+    if (
+      selectedJob.jobType !== "service_ticket" ||
+      scannedPart.scan.organizationId !== selectedJob.organizationId
+    ) {
       return null;
     }
 
@@ -206,7 +245,7 @@ export function MyJobsBoard({
   }, [scannedPart.context.ticketId, scannedPart.scan, selectedJob]);
 
   const selectedJobScanError = useMemo(() => {
-    if (!selectedJob) {
+    if (!selectedJob || selectedJob.jobType !== "service_ticket") {
       return null;
     }
 
@@ -427,18 +466,27 @@ export function MyJobsBoard({
                     <p className="text-sm font-semibold text-slate-900">
                       {job.productName}
                     </p>
-                    <p className="text-xs text-slate-500">{job.ticketNumber}</p>
+                    <p className="text-xs text-slate-500">{jobNumber(job)}</p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={severityBadgeClass(job.severity)}
-                  >
-                    {job.severity}
-                  </Badge>
+                  {job.jobType === "service_ticket" ? (
+                    <Badge
+                      variant="outline"
+                      className={severityBadgeClass(job.severity)}
+                    >
+                      {job.severity}
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="border-cyan-200 bg-cyan-50 text-cyan-700"
+                    >
+                      PM
+                    </Badge>
+                  )}
                 </div>
 
                 <p className="mt-2 text-sm text-slate-900">
-                  {job.issueCategory}
+                  {jobPrimaryText(job)}
                 </p>
 
                 <div className="mt-2">
@@ -460,7 +508,7 @@ export function MyJobsBoard({
                   </p>
                   <p className="inline-flex items-center gap-1">
                     <Clock3 className="h-3.5 w-3.5" />
-                    Reported {formatRelativeTime(job.reportedAt)}
+                    {jobTimeLabel(job)}
                   </p>
                 </div>
               </button>
@@ -475,9 +523,9 @@ export function MyJobsBoard({
       >
         <SheetContent
           side="bottom"
-                className="h-[96dvh] gap-0 rounded-t-2xl p-0"
-                showCloseButton
-      >
+          className="h-[96dvh] gap-0 rounded-t-2xl p-0"
+          showCloseButton
+        >
           {selectedJob ? (
             <>
               <SheetHeader className="border-b border-slate-200 bg-white px-4 py-4">
@@ -494,22 +542,32 @@ export function MyJobsBoard({
                   </Button>
                 </div>
                 <SheetTitle className="text-left text-lg">
-                  {selectedJob.ticketNumber}
+                  {jobNumber(selectedJob)}
                 </SheetTitle>
                 <SheetDescription className="text-left">
                   <Briefcase className="mr-1 inline-block h-4 w-4" />
-                  Job details and actions
+                  {selectedJob.jobType === "preventive_maintenance"
+                    ? "Preventive maintenance details and actions"
+                    : "Job details and actions"}
                 </SheetDescription>
               </SheetHeader>
 
-              <JobDetail
-                job={selectedJob as TechnicianJob}
-                technicianId={payload.technician.id}
-                onClose={() => setSelectedJobId(null)}
-                onUpdated={handleJobUpdated}
-                scannedPart={scanForSelectedJob}
-                scannedPartError={selectedJobScanError}
-              />
+              {selectedJob.jobType === "preventive_maintenance" ? (
+                <PreventiveMaintenanceJobDetail
+                  job={selectedJob as TechnicianPreventiveMaintenanceJob}
+                  onClose={() => setSelectedJobId(null)}
+                  onUpdated={handleJobUpdated}
+                />
+              ) : (
+                <JobDetail
+                  job={selectedJob as TechnicianServiceTicketJob}
+                  technicianId={payload.technician.id}
+                  onClose={() => setSelectedJobId(null)}
+                  onUpdated={handleJobUpdated}
+                  scannedPart={scanForSelectedJob}
+                  scannedPartError={selectedJobScanError}
+                />
+              )}
             </>
           ) : null}
         </SheetContent>

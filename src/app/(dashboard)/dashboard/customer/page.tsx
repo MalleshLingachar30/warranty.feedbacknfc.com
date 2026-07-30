@@ -1,5 +1,10 @@
 import Link from "next/link";
-import type { Prisma, TicketStatus, WarrantyStatus } from "@prisma/client";
+import type {
+  PreventiveMaintenanceEventStatus,
+  Prisma,
+  TicketStatus,
+  WarrantyStatus,
+} from "@prisma/client";
 
 import { RegisterProductCard } from "@/components/customer/register-product-card";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -27,6 +32,13 @@ const OPEN_TICKET_STATUSES: TicketStatus[] = [
 ];
 
 const CLOSED_TICKET_STATUSES: TicketStatus[] = ["resolved", "closed"];
+
+const VISIBLE_PM_STATUSES: PreventiveMaintenanceEventStatus[] = [
+  "due",
+  "scheduled",
+  "in_progress",
+  "completed",
+];
 
 function warrantyBadgeClass(status: WarrantyStatus) {
   switch (status) {
@@ -72,6 +84,23 @@ function ticketBadgeClass(status: TicketStatus) {
     case "reopened":
     case "escalated":
       return "border-rose-200 bg-rose-50 text-rose-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+}
+
+function pmStatusBadgeClass(status: PreventiveMaintenanceEventStatus) {
+  switch (status) {
+    case "due":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "scheduled":
+      return "border-indigo-200 bg-indigo-50 text-indigo-700";
+    case "in_progress":
+      return "border-violet-200 bg-violet-50 text-violet-700";
+    case "completed":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "cancelled":
+      return "border-slate-200 bg-slate-50 text-slate-700";
     default:
       return "border-slate-200 bg-slate-50 text-slate-700";
   }
@@ -126,6 +155,8 @@ export default async function CustomerDashboardPage() {
       take: 6,
       select: {
         id: true,
+        organizationId: true,
+        productModelId: true,
         serialNumber: true,
         warrantyStatus: true,
         warrantyEndDate: true,
@@ -202,6 +233,73 @@ export default async function CustomerDashboardPage() {
       },
     }),
   ]);
+
+  const assetProductClauses: Prisma.PreventiveMaintenanceEventWhereInput[] =
+    products
+      .filter((product) => Boolean(product.serialNumber))
+      .map((product) => ({
+        asset: {
+          organizationId: product.organizationId,
+          productModelId: product.productModelId,
+          serialNumber: product.serialNumber,
+        },
+      }));
+
+  const pmEvents = await db.preventiveMaintenanceEvent.findMany({
+    where: {
+      status: {
+        in: VISIBLE_PM_STATUSES,
+      },
+      OR: [
+        {
+          asset: {
+            customerId: dbUserId,
+          },
+        },
+        ...assetProductClauses,
+      ],
+    },
+    orderBy: [
+      {
+        dueDate: "asc",
+      },
+      {
+        eventNumber: "asc",
+      },
+    ],
+    take: 5,
+    select: {
+      id: true,
+      eventNumber: true,
+      eventType: true,
+      status: true,
+      dueDate: true,
+      scheduledFor: true,
+      completedAt: true,
+      asset: {
+        select: {
+          publicCode: true,
+          productModel: {
+            select: {
+              name: true,
+              modelNumber: true,
+            },
+          },
+        },
+      },
+      assignedServiceCenter: {
+        select: {
+          name: true,
+          city: true,
+        },
+      },
+      assignedTechnician: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -380,6 +478,60 @@ export default async function CustomerDashboardPage() {
 
             <Button variant="outline" asChild>
               <Link href="/dashboard/my-tickets">Open My Tickets</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="text-base">Maintenance</CardTitle>
+            <CardDescription>
+              Upcoming and recent preventive maintenance visits.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pmEvents.length === 0 ? (
+              <p className="text-sm text-slate-600">
+                No preventive maintenance visits are scheduled yet.
+              </p>
+            ) : (
+              pmEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="rounded-md border border-slate-200 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        {event.asset.productModel.name}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {event.eventNumber} / {event.asset.publicCode}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={pmStatusBadgeClass(event.status)}
+                    >
+                      {event.status.replace(/_/g, " ")}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">
+                    Due {formatDate(event.dueDate)}
+                    {event.scheduledFor
+                      ? ` / scheduled ${formatDate(event.scheduledFor)}`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {event.assignedTechnician?.name ??
+                      event.assignedServiceCenter?.name ??
+                      "Service assignment pending"}
+                  </p>
+                </div>
+              ))
+            )}
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/my-products">Open My Products</Link>
             </Button>
           </CardContent>
         </Card>

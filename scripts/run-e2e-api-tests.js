@@ -200,6 +200,45 @@ async function main() {
     "Lead capture should return success with a sessionId",
   );
 
+  console.log("\n5b) Preventive maintenance API auth guards...");
+  const pmAuthChecks = [
+    [
+      "manufacturer-pm-plans",
+      "/api/manufacturer/preventive-maintenance/plans",
+      { method: "GET" },
+    ],
+    [
+      "manufacturer-pm-events",
+      "/api/manufacturer/preventive-maintenance/events",
+      { method: "GET" },
+    ],
+    [
+      "service-center-pm-events",
+      "/api/service-center/preventive-maintenance/events",
+      { method: "GET" },
+    ],
+    [
+      "technician-pm-start",
+      "/api/technician/preventive-maintenance/00000000-0000-0000-0000-000000000000/start",
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+    ],
+    [
+      "technician-pm-complete",
+      "/api/technician/preventive-maintenance/00000000-0000-0000-0000-000000000000/complete",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ remarks: "Unauthenticated PM completion" }),
+      },
+    ],
+  ];
+
+  for (const [label, path, options] of pmAuthChecks) {
+    const result = await apiRequest(path, options);
+    pretty(label, result);
+    assert(result.status === 401, `${label} should require authentication`);
+  }
+
   const leadRecord = await prisma.chatLead.findUnique({
     where: { sessionId: createLead.json.sessionId },
     select: {
