@@ -174,6 +174,35 @@ enum AssetProductClass {
   pack
 }
 
+enum AssetExternalIdentityType {
+  internal_asset_code
+  serial_number
+  batch_number
+  bpl_item_code
+  manufacturer_part_number
+  vendor_reference_code
+  temporary_inward_code
+  sap_equipment_number
+  sap_material_code
+  external_alias
+}
+
+enum AssetExternalIdentitySource {
+  system_backfill
+  manufacturer_tag_generation
+  manual_inward
+  manual_admin
+  sap_import
+  vendor_scan
+  provisional_onboarding
+}
+
+enum AssetExternalIdentityStatus {
+  active
+  superseded
+  retired
+}
+
 enum AssetLifecycleState {
   generated
   packed
@@ -498,6 +527,7 @@ model Organization {
   mappedDistributorMasterRecords    ErpDistributorMasterRecord[]  @relation("MappedDistributorMasterRecord")
   erpSerializedDispatchRecords      ErpSerializedDispatchRecord[] @relation("ManufacturerErpSerializedDispatchRecords")
   mappedSerializedDispatchRecords   ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchDistributor")
+  assetExternalIdentities           AssetExternalIdentity[]
   manufacturerInternalServiceOrders InternalServiceOrder[]        @relation("ManufacturerInternalServiceOrders")
   sourceInternalServiceOrders       InternalServiceOrder[]        @relation("SourceOrganizationInternalServiceOrders")
   preventiveMaintenancePlans        PreventiveMaintenancePlan[]
@@ -887,6 +917,7 @@ model AssetIdentity {
   dispatchedPartItems         TicketPartDispatchItem[]      @relation("TicketPartDispatchItemAsset")
   mainAssetPartReturns        TicketPartReturn[]            @relation("TicketPartReturnMainAsset")
   removedAssetPartReturns     TicketPartReturn[]            @relation("TicketPartReturnRemovedAsset")
+  externalIdentities          AssetExternalIdentity[]
   erpSerializedDispatchRows   ErpSerializedDispatchRecord[] @relation("ErpSerializedDispatchAsset")
   preventiveMaintenanceEvents PreventiveMaintenanceEvent[]
 
@@ -895,6 +926,29 @@ model AssetIdentity {
   @@index([serialNumber], map: "idx_asset_identities_serial")
   @@index([generationBatchId], map: "idx_asset_identities_batch")
   @@map("asset_identities")
+}
+
+model AssetExternalIdentity {
+  id              String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assetId         String                      @map("asset_id") @db.Uuid
+  organizationId  String                      @map("organization_id") @db.Uuid
+  identityType    AssetExternalIdentityType   @map("identity_type")
+  value           String                      @db.VarChar(255)
+  normalizedValue String                      @map("normalized_value") @db.VarChar(255)
+  source          AssetExternalIdentitySource @default(manual_admin)
+  status          AssetExternalIdentityStatus @default(active)
+  metadata        Json                        @default(dbgenerated("'{}'::jsonb"))
+  createdAt       DateTime                    @default(now()) @map("created_at")
+  updatedAt       DateTime                    @default(now()) @updatedAt @map("updated_at")
+
+  asset        AssetIdentity @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, identityType, normalizedValue], map: "asset_external_identities_asset_type_normalized_key")
+  @@index([assetId], map: "idx_asset_external_identities_asset")
+  @@index([organizationId, normalizedValue], map: "idx_asset_external_identities_org_normalized")
+  @@index([organizationId, identityType, normalizedValue], map: "idx_asset_external_identities_org_type_normalized")
+  @@map("asset_external_identities")
 }
 
 model AssetTag {
