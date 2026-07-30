@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
+import { createPreventiveMaintenanceTimelineEntry } from "@/lib/preventive-maintenance";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
@@ -120,6 +121,7 @@ export async function POST(
       },
       select: {
         id: true,
+        userId: true,
         name: true,
         serviceCenterId: true,
         activeJobCount: true,
@@ -206,8 +208,8 @@ export async function POST(
         ? []
         : (body.calibrationReadings as Prisma.InputJsonValue);
 
-    await db.$transaction([
-      db.preventiveMaintenanceEvent.update({
+    await db.$transaction(async (tx) => {
+      await tx.preventiveMaintenanceEvent.update({
         where: {
           id: event.id,
         },
@@ -229,22 +231,44 @@ export async function POST(
             completedVia: "technician_dashboard",
           },
         },
-      }),
-      ...(technician.activeJobCount > 0
-        ? [
-            db.technician.update({
-              where: {
-                id: technician.id,
-              },
-              data: {
-                activeJobCount: {
-                  decrement: 1,
-                },
-              },
-            }),
-          ]
-        : []),
-    ]);
+      });
+
+      if (technician.activeJobCount > 0) {
+        await tx.technician.update({
+          where: {
+            id: technician.id,
+          },
+          data: {
+            activeJobCount: {
+              decrement: 1,
+            },
+          },
+        });
+      }
+
+      await createPreventiveMaintenanceTimelineEntry({
+        tx,
+        eventId: event.id,
+        eventType: "completed",
+        eventDescription: "Technician completed preventive maintenance.",
+        actorUserId: technician.userId,
+        actorRole: "field_technician",
+        actorName: technician.name,
+        metadata: {
+          previousStatus: event.status,
+          nextStatus: "completed",
+          previousAssignedServiceCenterId: event.assignedServiceCenterId,
+          nextAssignedServiceCenterId:
+            event.assignedServiceCenterId ?? technician.serviceCenterId,
+          previousAssignedTechnicianId: event.assignedTechnicianId,
+          nextAssignedTechnicianId: technician.id,
+          startedAt: (event.startedAt ?? completedAt).toISOString(),
+          completedAt: completedAt.toISOString(),
+          checklistCompletedCount: checklistCompleted.length,
+          photoCount: photoUrls.length,
+        },
+      });
+    });
 
     return NextResponse.json({
       success: true,

@@ -70,6 +70,17 @@ export type PreventiveMaintenancePlanView = {
   updatedAt: string;
 };
 
+export type PreventiveMaintenanceTimelineEntryView = {
+  id: string;
+  eventType: string;
+  eventTypeLabel: string;
+  eventDescription: string | null;
+  actorRole: string | null;
+  actorName: string | null;
+  metadata: unknown;
+  createdAt: string;
+};
+
 export type PreventiveMaintenanceEventView = {
   id: string;
   eventNumber: string;
@@ -118,6 +129,7 @@ export type PreventiveMaintenanceEventView = {
     phone: string;
     serviceCenterId: string;
   } | null;
+  timeline: PreventiveMaintenanceTimelineEntryView[];
   createdAt: string;
   updatedAt: string;
 };

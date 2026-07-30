@@ -571,6 +571,7 @@ model User {
   receivedInternalServiceOrders     InternalServiceOrder[]      @relation("ReceivedInternalServiceOrders")
   internalServiceTimelineEvents     InternalServiceTimeline[]   @relation("InternalServiceTimelineActor")
   createdPreventiveMaintenancePlans PreventiveMaintenancePlan[] @relation("PreventiveMaintenancePlanCreator")
+  preventiveMaintenanceTimelineEvents PreventiveMaintenanceEventTimeline[] @relation("PreventiveMaintenanceTimelineActor")
 
   @@map("users")
 }
@@ -1211,6 +1212,7 @@ model PreventiveMaintenanceEvent {
   asset                 AssetIdentity              @relation(fields: [assetId], references: [id])
   assignedServiceCenter ServiceCenter?             @relation(fields: [assignedServiceCenterId], references: [id])
   assignedTechnician    Technician?                @relation(fields: [assignedTechnicianId], references: [id])
+  timelineEntries       PreventiveMaintenanceEventTimeline[]
 
   @@unique([planId, assetId, dueDate], map: "pm_events_plan_asset_due_key")
   @@index([organizationId, status, dueDate], map: "idx_pm_events_org_status_due")
@@ -1219,6 +1221,25 @@ model PreventiveMaintenanceEvent {
   @@index([assignedTechnicianId, status, scheduledFor], map: "idx_pm_events_tech_status_scheduled")
   @@index([planId, dueDate], map: "idx_pm_events_plan_due")
   @@map("preventive_maintenance_events")
+}
+
+model PreventiveMaintenanceEventTimeline {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId          String   @map("event_id") @db.Uuid
+  eventType        String   @map("event_type") @db.VarChar(50)
+  eventDescription String?  @map("event_description")
+  actorUserId      String?  @map("actor_user_id") @db.Uuid
+  actorRole        String?  @map("actor_role") @db.VarChar(50)
+  actorName        String?  @map("actor_name") @db.VarChar(255)
+  metadata         Json     @default(dbgenerated("'{}'::jsonb"))
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  event     PreventiveMaintenanceEvent @relation(fields: [eventId], references: [id])
+  actorUser User?                      @relation("PreventiveMaintenanceTimelineActor", fields: [actorUserId], references: [id])
+
+  @@index([eventId, createdAt], map: "idx_pm_event_timeline_event")
+  @@index([actorUserId, createdAt], map: "idx_pm_event_timeline_actor")
+  @@map("preventive_maintenance_event_timeline")
 }
 
 model JobPartUsage {

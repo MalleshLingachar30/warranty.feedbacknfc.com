@@ -166,6 +166,17 @@ export interface BuildPreventiveMaintenanceAcknowledgementPayloadInput {
   preventiveMaintenanceEventId: string;
 }
 
+export interface CreatePreventiveMaintenanceTimelineEntryInput {
+  tx: Prisma.TransactionClient;
+  eventId: string;
+  eventType: string;
+  eventDescription?: string | null;
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  actorName?: string | null;
+  metadata?: Prisma.InputJsonValue;
+}
+
 export function formatPreventiveMaintenanceLabel(value: string) {
   return value
     .split("_")
@@ -179,6 +190,22 @@ export function formatPreventiveMaintenanceEventNumber(sequence: number) {
   }
 
   return `PM-${sequence.toString().padStart(6, "0")}`;
+}
+
+export async function createPreventiveMaintenanceTimelineEntry(
+  input: CreatePreventiveMaintenanceTimelineEntryInput,
+) {
+  return input.tx.preventiveMaintenanceEventTimeline.create({
+    data: {
+      eventId: input.eventId,
+      eventType: input.eventType,
+      eventDescription: input.eventDescription ?? null,
+      actorUserId: input.actorUserId ?? null,
+      actorRole: input.actorRole ?? null,
+      actorName: input.actorName ?? null,
+      metadata: input.metadata ?? {},
+    },
+  });
 }
 
 export async function generatePreventiveMaintenanceEventsForAsset(
@@ -691,6 +718,24 @@ async function createPreventiveMaintenanceEventWithNumber(input: {
         select: {
           id: true,
         },
+      });
+
+      await createPreventiveMaintenanceTimelineEntry({
+        tx: input.tx,
+        eventId: created.id,
+        eventType: "generated",
+        eventDescription: "Preventive maintenance event generated.",
+        actorRole: input.generationSource,
+        actorName: "Preventive Maintenance Generator",
+        metadata: {
+          planId: input.plan.id,
+          assetId: input.asset.id,
+          eventNumber,
+          dueDate: input.dueDate.toISOString(),
+          generationSource: input.generationSource,
+          generatedAt: input.generatedAt.toISOString(),
+          warrantyEndDate: input.warrantyEndDate?.toISOString() ?? null,
+        } satisfies Prisma.InputJsonValue,
       });
 
       return {

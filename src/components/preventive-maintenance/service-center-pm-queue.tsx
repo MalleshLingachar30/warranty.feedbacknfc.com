@@ -505,6 +505,37 @@ export function ServiceCenterPmQueue({
                   placeholder="Required only when cancelling"
                 />
               </label>
+
+              {selectedEvent?.timeline.length ? (
+                <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-sm font-semibold text-slate-900">
+                    Recent timeline
+                  </p>
+                  <div className="space-y-2">
+                    {selectedEvent.timeline.map((entry) => (
+                      <div key={entry.id} className="text-xs text-slate-700">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">
+                            {entry.eventTypeLabel}
+                          </span>
+                          <span className="shrink-0 text-slate-500">
+                            {formatDateTime(entry.createdAt)}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-slate-600">
+                          {entry.eventDescription ?? "PM event updated."}
+                        </p>
+                        {entry.actorName || entry.actorRole ? (
+                          <p className="mt-0.5 text-slate-500">
+                            {entry.actorName ?? "System"}
+                            {entry.actorRole ? ` / ${entry.actorRole}` : ""}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
