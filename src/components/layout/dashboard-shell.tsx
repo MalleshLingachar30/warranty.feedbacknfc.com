@@ -7,6 +7,7 @@ import { SignOutButton, UserButton } from "@clerk/nextjs";
 
 import { OfflineBanner } from "@/components/pwa/offline-banner";
 import { PwaInstallPrompt } from "@/components/pwa/pwa-install-prompt";
+import { PmNotificationInbox } from "@/components/notifications/pm-notification-inbox";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -144,6 +145,7 @@ export function DashboardShell({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <PmNotificationInbox role={role} />
                 <SignOutButton redirectUrl="/sign-in">
                   <Button variant="outline" size="sm">
                     Sign out
