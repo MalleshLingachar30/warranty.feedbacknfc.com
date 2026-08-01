@@ -3,7 +3,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
-import { createPreventiveMaintenanceTimelineEntry } from "@/lib/preventive-maintenance";
+import {
+  createPreventiveMaintenanceNotificationIntentsForEvent,
+  createPreventiveMaintenanceTimelineEntry,
+} from "@/lib/preventive-maintenance";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
@@ -266,6 +269,17 @@ export async function POST(
           completedAt: completedAt.toISOString(),
           checklistCompletedCount: checklistCompleted.length,
           photoCount: photoUrls.length,
+        },
+      });
+
+      await createPreventiveMaintenanceNotificationIntentsForEvent({
+        tx,
+        eventId: event.id,
+        triggerType: "completed",
+        metadata: {
+          actorRole: "field_technician",
+          actorUserId: technician.userId,
+          actorName: technician.name,
         },
       });
     });

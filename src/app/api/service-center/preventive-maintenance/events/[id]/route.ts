@@ -3,6 +3,7 @@ import { type Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import {
+  createPreventiveMaintenanceNotificationIntentsForEvent,
   createPreventiveMaintenanceTimelineEntry,
   formatPreventiveMaintenanceLabel,
 } from "@/lib/preventive-maintenance";
@@ -205,6 +206,16 @@ export async function PATCH(
           nextScheduledFor: nextScheduledFor?.toISOString() ?? null,
           cancellationReason: cancellationReason ?? null,
         } as Prisma.InputJsonValue,
+      });
+
+      await createPreventiveMaintenanceNotificationIntentsForEvent({
+        tx,
+        eventId: event.id,
+        triggerType: eventType,
+        metadata: {
+          actorRole: role,
+          actorUserId: dbUserId,
+        },
       });
 
       return tx.preventiveMaintenanceEvent.findUniqueOrThrow({

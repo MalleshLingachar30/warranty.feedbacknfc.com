@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
-import { createPreventiveMaintenanceTimelineEntry } from "@/lib/preventive-maintenance";
+import {
+  createPreventiveMaintenanceNotificationIntentsForEvent,
+  createPreventiveMaintenanceTimelineEntry,
+} from "@/lib/preventive-maintenance";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
@@ -173,6 +176,17 @@ export async function POST(
           previousAssignedTechnicianId: event.assignedTechnicianId,
           nextAssignedTechnicianId: technician.id,
           startedAt: startedAt.toISOString(),
+        },
+      });
+
+      await createPreventiveMaintenanceNotificationIntentsForEvent({
+        tx,
+        eventId: event.id,
+        triggerType: "started",
+        metadata: {
+          actorRole: "field_technician",
+          actorUserId: technician.userId,
+          actorName: technician.name,
         },
       });
     });

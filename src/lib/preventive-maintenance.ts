@@ -1,9 +1,12 @@
 import {
   Prisma,
+  type PreventiveMaintenanceNotificationRecipientRole,
+  type PreventiveMaintenanceNotificationTrigger,
   type PreventiveMaintenanceCadenceType,
   type PreventiveMaintenanceEventStatus,
   type PreventiveMaintenanceEventType,
 } from "@prisma/client";
+import { createHash } from "node:crypto";
 
 const MAX_PM_EVENT_NUMBER_ATTEMPTS = 5;
 
@@ -177,6 +180,23 @@ export interface CreatePreventiveMaintenanceTimelineEntryInput {
   metadata?: Prisma.InputJsonValue;
 }
 
+export interface CreatePreventiveMaintenanceNotificationIntentsInput {
+  tx: Prisma.TransactionClient;
+  eventId: string;
+  triggerType: PreventiveMaintenanceNotificationTrigger;
+  metadata?: Prisma.InputJsonValue;
+}
+
+type PreventiveMaintenanceNotificationTarget = {
+  recipientRole: PreventiveMaintenanceNotificationRecipientRole;
+  recipientUserId?: string | null;
+  recipientOrganizationId?: string | null;
+  recipientServiceCenterId?: string | null;
+  recipientTechnicianId?: string | null;
+  title: string;
+  message: string;
+};
+
 export function formatPreventiveMaintenanceLabel(value: string) {
   return value
     .split("_")
@@ -206,6 +226,132 @@ export async function createPreventiveMaintenanceTimelineEntry(
       metadata: input.metadata ?? {},
     },
   });
+}
+
+export async function createPreventiveMaintenanceNotificationIntentsForEvent(
+  input: CreatePreventiveMaintenanceNotificationIntentsInput,
+) {
+  const event = await input.tx.preventiveMaintenanceEvent.findUnique({
+    where: {
+      id: input.eventId,
+    },
+    select: {
+      id: true,
+      eventNumber: true,
+      organizationId: true,
+      eventType: true,
+      status: true,
+      dueDate: true,
+      scheduledFor: true,
+      assignedServiceCenterId: true,
+      assignedTechnicianId: true,
+      startedAt: true,
+      completedAt: true,
+      cancelledAt: true,
+      organization: {
+        select: {
+          name: true,
+        },
+      },
+      assignedServiceCenter: {
+        select: {
+          id: true,
+          name: true,
+          organizationId: true,
+        },
+      },
+      assignedTechnician: {
+        select: {
+          id: true,
+          name: true,
+          userId: true,
+        },
+      },
+      asset: {
+        select: {
+          publicCode: true,
+          serialNumber: true,
+          customerId: true,
+          productModel: {
+            select: {
+              name: true,
+              modelNumber: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!event) {
+    return {
+      createdCount: 0,
+    };
+  }
+
+  const targets = buildPreventiveMaintenanceNotificationTargets({
+    triggerType: input.triggerType,
+    event,
+  });
+
+  if (targets.length === 0) {
+    return {
+      createdCount: 0,
+    };
+  }
+
+  const metadata = asRecord(input.metadata);
+  const rows = targets.map((target) => ({
+    eventId: event.id,
+    organizationId: event.organizationId,
+    triggerType: input.triggerType,
+    recipientRole: target.recipientRole,
+    recipientUserId: target.recipientUserId ?? null,
+    recipientOrganizationId: target.recipientOrganizationId ?? null,
+    recipientServiceCenterId: target.recipientServiceCenterId ?? null,
+    recipientTechnicianId: target.recipientTechnicianId ?? null,
+    title: target.title,
+    message: target.message,
+    dedupeKey: buildPreventiveMaintenanceNotificationDedupeKey({
+      eventId: event.id,
+      triggerType: input.triggerType,
+      recipientRole: target.recipientRole,
+      recipientUserId: target.recipientUserId ?? null,
+      recipientOrganizationId: target.recipientOrganizationId ?? null,
+      recipientServiceCenterId: target.recipientServiceCenterId ?? null,
+      recipientTechnicianId: target.recipientTechnicianId ?? null,
+      status: event.status,
+      scheduledFor: event.scheduledFor,
+      assignedServiceCenterId: event.assignedServiceCenterId,
+      assignedTechnicianId: event.assignedTechnicianId,
+      startedAt: event.startedAt,
+      completedAt: event.completedAt,
+      cancelledAt: event.cancelledAt,
+    }),
+    metadata: {
+      ...metadata,
+      eventNumber: event.eventNumber,
+      eventType: event.eventType,
+      status: event.status,
+      dueDate: event.dueDate.toISOString(),
+      scheduledFor: event.scheduledFor?.toISOString() ?? null,
+      assignedServiceCenterId: event.assignedServiceCenterId,
+      assignedTechnicianId: event.assignedTechnicianId,
+      assetPublicCode: event.asset.publicCode,
+      assetSerialNumber: event.asset.serialNumber,
+      productModelName: event.asset.productModel.name,
+      productModelNumber: event.asset.productModel.modelNumber,
+    } satisfies Prisma.InputJsonValue,
+  }));
+
+  const result = await input.tx.preventiveMaintenanceNotificationIntent.createMany({
+    data: rows,
+    skipDuplicates: true,
+  });
+
+  return {
+    createdCount: result.count,
+  };
 }
 
 export async function generatePreventiveMaintenanceEventsForAsset(
@@ -633,6 +779,254 @@ function expandMonthOffsetDueDates(input: {
       includeWarrantyEndDate: input.includeWarrantyEndDate,
     }),
   );
+}
+
+function buildPreventiveMaintenanceNotificationTargets(input: {
+  triggerType: PreventiveMaintenanceNotificationTrigger;
+  event: {
+    eventNumber: string;
+    organization: {
+      name: string;
+    };
+    assignedServiceCenter: {
+      id: string;
+      name: string;
+      organizationId: string;
+    } | null;
+    assignedTechnician: {
+      id: string;
+      name: string;
+      userId: string;
+    } | null;
+    asset: {
+      publicCode: string | null;
+      serialNumber: string | null;
+      customerId: string | null;
+      productModel: {
+        name: string;
+        modelNumber: string | null;
+      };
+    };
+    scheduledFor: Date | null;
+    completedAt: Date | null;
+    cancelledAt: Date | null;
+  };
+}) {
+  const targets: PreventiveMaintenanceNotificationTarget[] = [];
+  const serviceCenter = input.event.assignedServiceCenter;
+  const technician = input.event.assignedTechnician;
+  const customerId = input.event.asset.customerId;
+  const assetLabel = formatPreventiveMaintenanceAssetLabel(input.event.asset);
+  const productLabel = formatPreventiveMaintenanceProductLabel(
+    input.event.asset.productModel,
+  );
+  const scheduledLabel = input.event.scheduledFor
+    ? formatNotificationDateTime(input.event.scheduledFor)
+    : "the planned service window";
+
+  if (
+    serviceCenter &&
+    (input.triggerType === "scheduled" ||
+      input.triggerType === "reassigned" ||
+      input.triggerType === "cancelled")
+  ) {
+    targets.push({
+      recipientRole: "service_center",
+      recipientOrganizationId: serviceCenter.organizationId,
+      recipientServiceCenterId: serviceCenter.id,
+      title:
+        input.triggerType === "cancelled"
+          ? `PM ${input.event.eventNumber} cancelled`
+          : `PM ${input.event.eventNumber} assigned`,
+      message:
+        input.triggerType === "cancelled"
+          ? `${productLabel} ${assetLabel} preventive maintenance was cancelled.`
+          : `${productLabel} ${assetLabel} preventive maintenance is scheduled for ${scheduledLabel}.`,
+    });
+  }
+
+  if (
+    technician &&
+    (input.triggerType === "scheduled" ||
+      input.triggerType === "reassigned" ||
+      input.triggerType === "cancelled")
+  ) {
+    targets.push({
+      recipientRole: "technician",
+      recipientUserId: technician.userId,
+      recipientTechnicianId: technician.id,
+      recipientServiceCenterId: serviceCenter?.id ?? null,
+      title:
+        input.triggerType === "cancelled"
+          ? `PM ${input.event.eventNumber} cancelled`
+          : `PM ${input.event.eventNumber} assigned`,
+      message:
+        input.triggerType === "cancelled"
+          ? `${productLabel} ${assetLabel} preventive maintenance was cancelled.`
+          : `${productLabel} ${assetLabel} preventive maintenance is assigned to you for ${scheduledLabel}.`,
+    });
+  }
+
+  if (
+    customerId &&
+    (input.triggerType === "scheduled" ||
+      input.triggerType === "reassigned" ||
+      input.triggerType === "started" ||
+      input.triggerType === "completed" ||
+      input.triggerType === "cancelled")
+  ) {
+    targets.push({
+      recipientRole: "customer",
+      recipientUserId: customerId,
+      title: customerNotificationTitle(input.triggerType),
+      message: customerNotificationMessage({
+        triggerType: input.triggerType,
+        manufacturerName: input.event.organization.name,
+        serviceCenterName: serviceCenter?.name ?? null,
+        productLabel,
+        assetLabel,
+        scheduledLabel,
+        completedAt: input.event.completedAt,
+      }),
+    });
+  }
+
+  if (
+    serviceCenter &&
+    (input.triggerType === "started" || input.triggerType === "completed")
+  ) {
+    targets.push({
+      recipientRole: "service_center",
+      recipientOrganizationId: serviceCenter.organizationId,
+      recipientServiceCenterId: serviceCenter.id,
+      title:
+        input.triggerType === "started"
+          ? `PM ${input.event.eventNumber} started`
+          : `PM ${input.event.eventNumber} completed`,
+      message:
+        input.triggerType === "started"
+          ? `${technician?.name ?? "Technician"} started ${productLabel} ${assetLabel} preventive maintenance.`
+          : `${technician?.name ?? "Technician"} completed ${productLabel} ${assetLabel} preventive maintenance.`,
+    });
+  }
+
+  return targets;
+}
+
+function customerNotificationTitle(
+  triggerType: PreventiveMaintenanceNotificationTrigger,
+) {
+  switch (triggerType) {
+    case "scheduled":
+    case "reassigned":
+      return "Preventive maintenance scheduled";
+    case "started":
+      return "Preventive maintenance started";
+    case "completed":
+      return "Preventive maintenance completed";
+    case "cancelled":
+      return "Preventive maintenance cancelled";
+    default:
+      assertNever(triggerType);
+  }
+}
+
+function customerNotificationMessage(input: {
+  triggerType: PreventiveMaintenanceNotificationTrigger;
+  manufacturerName: string;
+  serviceCenterName: string | null;
+  productLabel: string;
+  assetLabel: string;
+  scheduledLabel: string;
+  completedAt: Date | null;
+}) {
+  const providerName = input.serviceCenterName ?? input.manufacturerName;
+
+  switch (input.triggerType) {
+    case "scheduled":
+    case "reassigned":
+      return `${providerName} scheduled ${input.productLabel} ${input.assetLabel} preventive maintenance for ${input.scheduledLabel}.`;
+    case "started":
+      return `${providerName} started ${input.productLabel} ${input.assetLabel} preventive maintenance.`;
+    case "completed":
+      return `${providerName} completed ${input.productLabel} ${input.assetLabel} preventive maintenance${
+        input.completedAt ? ` on ${formatNotificationDateTime(input.completedAt)}` : ""
+      }.`;
+    case "cancelled":
+      return `${providerName} cancelled ${input.productLabel} ${input.assetLabel} preventive maintenance.`;
+    default:
+      assertNever(input.triggerType);
+  }
+}
+
+function formatPreventiveMaintenanceAssetLabel(input: {
+  publicCode: string | null;
+  serialNumber: string | null;
+}) {
+  const identifier = input.publicCode ?? input.serialNumber;
+  return identifier ? `asset ${identifier}` : "asset";
+}
+
+function formatPreventiveMaintenanceProductLabel(input: {
+  name: string;
+  modelNumber: string | null;
+}) {
+  return input.modelNumber ? `${input.name} (${input.modelNumber})` : input.name;
+}
+
+function formatNotificationDateTime(value: Date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(value);
+}
+
+function buildPreventiveMaintenanceNotificationDedupeKey(input: {
+  eventId: string;
+  triggerType: PreventiveMaintenanceNotificationTrigger;
+  recipientRole: PreventiveMaintenanceNotificationRecipientRole;
+  recipientUserId: string | null;
+  recipientOrganizationId: string | null;
+  recipientServiceCenterId: string | null;
+  recipientTechnicianId: string | null;
+  status: PreventiveMaintenanceEventStatus;
+  scheduledFor: Date | null;
+  assignedServiceCenterId: string | null;
+  assignedTechnicianId: string | null;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+}) {
+  const recipientKey =
+    input.recipientUserId ??
+    input.recipientTechnicianId ??
+    input.recipientServiceCenterId ??
+    input.recipientOrganizationId ??
+    "unassigned";
+  const stateHash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        status: input.status,
+        scheduledFor: input.scheduledFor?.toISOString() ?? null,
+        assignedServiceCenterId: input.assignedServiceCenterId,
+        assignedTechnicianId: input.assignedTechnicianId,
+        startedAt: input.startedAt?.toISOString() ?? null,
+        completedAt: input.completedAt?.toISOString() ?? null,
+        cancelledAt: input.cancelledAt?.toISOString() ?? null,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 24);
+
+  return [
+    "pm",
+    input.eventId,
+    input.triggerType,
+    input.recipientRole,
+    recipientKey,
+    stateHash,
+  ].join(":");
 }
 
 function shouldIncludeDueDate(input: {
