@@ -132,64 +132,69 @@ export async function POST(
     const startedAt = event.startedAt ?? new Date();
     const shouldIncrementLoad = !event.startedAt;
 
-    await db.$transaction(async (tx) => {
-      await tx.preventiveMaintenanceEvent.update({
-        where: {
-          id: event.id,
-        },
-        data: {
-          status: "in_progress",
-          assignedTechnicianId: technician.id,
-          assignedServiceCenterId:
-            event.assignedServiceCenterId ?? technician.serviceCenterId,
-          startedAt,
-        },
-      });
-
-      if (shouldIncrementLoad) {
-        await tx.technician.update({
+    await db.$transaction(
+      async (tx) => {
+        await tx.preventiveMaintenanceEvent.update({
           where: {
-            id: technician.id,
+            id: event.id,
           },
           data: {
-            activeJobCount: {
-              increment: 1,
-            },
+            status: "in_progress",
+            assignedTechnicianId: technician.id,
+            assignedServiceCenterId:
+              event.assignedServiceCenterId ?? technician.serviceCenterId,
+            startedAt,
           },
         });
-      }
 
-      await createPreventiveMaintenanceTimelineEntry({
-        tx,
-        eventId: event.id,
-        eventType: "started",
-        eventDescription: "Technician started preventive maintenance.",
-        actorUserId: technician.userId,
-        actorRole: "field_technician",
-        actorName: technician.name,
-        metadata: {
-          previousStatus: event.status,
-          nextStatus: "in_progress",
-          previousAssignedServiceCenterId: event.assignedServiceCenterId,
-          nextAssignedServiceCenterId:
-            event.assignedServiceCenterId ?? technician.serviceCenterId,
-          previousAssignedTechnicianId: event.assignedTechnicianId,
-          nextAssignedTechnicianId: technician.id,
-          startedAt: startedAt.toISOString(),
-        },
-      });
+        if (shouldIncrementLoad) {
+          await tx.technician.update({
+            where: {
+              id: technician.id,
+            },
+            data: {
+              activeJobCount: {
+                increment: 1,
+              },
+            },
+          });
+        }
 
-      await createPreventiveMaintenanceNotificationIntentsForEvent({
-        tx,
-        eventId: event.id,
-        triggerType: "started",
-        metadata: {
-          actorRole: "field_technician",
+        await createPreventiveMaintenanceTimelineEntry({
+          tx,
+          eventId: event.id,
+          eventType: "started",
+          eventDescription: "Technician started preventive maintenance.",
           actorUserId: technician.userId,
+          actorRole: "field_technician",
           actorName: technician.name,
-        },
-      });
-    });
+          metadata: {
+            previousStatus: event.status,
+            nextStatus: "in_progress",
+            previousAssignedServiceCenterId: event.assignedServiceCenterId,
+            nextAssignedServiceCenterId:
+              event.assignedServiceCenterId ?? technician.serviceCenterId,
+            previousAssignedTechnicianId: event.assignedTechnicianId,
+            nextAssignedTechnicianId: technician.id,
+            startedAt: startedAt.toISOString(),
+          },
+        });
+
+        await createPreventiveMaintenanceNotificationIntentsForEvent({
+          tx,
+          eventId: event.id,
+          triggerType: "started",
+          metadata: {
+            actorRole: "field_technician",
+            actorUserId: technician.userId,
+            actorName: technician.name,
+          },
+        });
+      },
+      {
+        timeout: 15_000,
+      },
+    );
 
     return NextResponse.json({
       success: true,

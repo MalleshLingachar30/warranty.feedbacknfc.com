@@ -211,78 +211,83 @@ export async function POST(
         ? []
         : (body.calibrationReadings as Prisma.InputJsonValue);
 
-    await db.$transaction(async (tx) => {
-      await tx.preventiveMaintenanceEvent.update({
-        where: {
-          id: event.id,
-        },
-        data: {
-          status: "completed",
-          assignedTechnicianId: technician.id,
-          assignedServiceCenterId:
-            event.assignedServiceCenterId ?? technician.serviceCenterId,
-          startedAt: event.startedAt ?? completedAt,
-          completedAt,
-          remarks,
-          photoUrls,
-          checklistResponses: checklistCompleted,
-          calibrationReadings,
-          metadata: {
-            ...metadata,
-            completedByTechnicianId: technician.id,
-            completedByTechnicianName: technician.name,
-            completedVia: "technician_dashboard",
-          },
-        },
-      });
-
-      if (technician.activeJobCount > 0) {
-        await tx.technician.update({
+    await db.$transaction(
+      async (tx) => {
+        await tx.preventiveMaintenanceEvent.update({
           where: {
-            id: technician.id,
+            id: event.id,
           },
           data: {
-            activeJobCount: {
-              decrement: 1,
+            status: "completed",
+            assignedTechnicianId: technician.id,
+            assignedServiceCenterId:
+              event.assignedServiceCenterId ?? technician.serviceCenterId,
+            startedAt: event.startedAt ?? completedAt,
+            completedAt,
+            remarks,
+            photoUrls,
+            checklistResponses: checklistCompleted,
+            calibrationReadings,
+            metadata: {
+              ...metadata,
+              completedByTechnicianId: technician.id,
+              completedByTechnicianName: technician.name,
+              completedVia: "technician_dashboard",
             },
           },
         });
-      }
 
-      await createPreventiveMaintenanceTimelineEntry({
-        tx,
-        eventId: event.id,
-        eventType: "completed",
-        eventDescription: "Technician completed preventive maintenance.",
-        actorUserId: technician.userId,
-        actorRole: "field_technician",
-        actorName: technician.name,
-        metadata: {
-          previousStatus: event.status,
-          nextStatus: "completed",
-          previousAssignedServiceCenterId: event.assignedServiceCenterId,
-          nextAssignedServiceCenterId:
-            event.assignedServiceCenterId ?? technician.serviceCenterId,
-          previousAssignedTechnicianId: event.assignedTechnicianId,
-          nextAssignedTechnicianId: technician.id,
-          startedAt: (event.startedAt ?? completedAt).toISOString(),
-          completedAt: completedAt.toISOString(),
-          checklistCompletedCount: checklistCompleted.length,
-          photoCount: photoUrls.length,
-        },
-      });
+        if (technician.activeJobCount > 0) {
+          await tx.technician.update({
+            where: {
+              id: technician.id,
+            },
+            data: {
+              activeJobCount: {
+                decrement: 1,
+              },
+            },
+          });
+        }
 
-      await createPreventiveMaintenanceNotificationIntentsForEvent({
-        tx,
-        eventId: event.id,
-        triggerType: "completed",
-        metadata: {
-          actorRole: "field_technician",
+        await createPreventiveMaintenanceTimelineEntry({
+          tx,
+          eventId: event.id,
+          eventType: "completed",
+          eventDescription: "Technician completed preventive maintenance.",
           actorUserId: technician.userId,
+          actorRole: "field_technician",
           actorName: technician.name,
-        },
-      });
-    });
+          metadata: {
+            previousStatus: event.status,
+            nextStatus: "completed",
+            previousAssignedServiceCenterId: event.assignedServiceCenterId,
+            nextAssignedServiceCenterId:
+              event.assignedServiceCenterId ?? technician.serviceCenterId,
+            previousAssignedTechnicianId: event.assignedTechnicianId,
+            nextAssignedTechnicianId: technician.id,
+            startedAt: (event.startedAt ?? completedAt).toISOString(),
+            completedAt: completedAt.toISOString(),
+            checklistCompletedCount: checklistCompleted.length,
+            photoCount: photoUrls.length,
+          },
+        });
+
+        await createPreventiveMaintenanceNotificationIntentsForEvent({
+          tx,
+          eventId: event.id,
+          triggerType: "completed",
+          metadata: {
+            actorRole: "field_technician",
+            actorUserId: technician.userId,
+            actorName: technician.name,
+          },
+        });
+      },
+      {
+        timeout: 15_000,
+      },
+    );
 
     return NextResponse.json({
       success: true,

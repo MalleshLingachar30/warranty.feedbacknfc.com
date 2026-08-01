@@ -179,52 +179,57 @@ export async function PATCH(
             status: nextStatus,
           };
 
-    const updated = await db.$transaction(async (tx) => {
-      const updatedEvent = await tx.preventiveMaintenanceEvent.update({
-        where: {
-          id: event.id,
-        },
-        data: updateData,
-        select: preventiveMaintenanceEventSelect,
-      });
+    const updated = await db.$transaction(
+      async (tx) => {
+        const updatedEvent = await tx.preventiveMaintenanceEvent.update({
+          where: {
+            id: event.id,
+          },
+          data: updateData,
+          select: preventiveMaintenanceEventSelect,
+        });
 
-      await createPreventiveMaintenanceTimelineEntry({
-        tx,
-        eventId: event.id,
-        eventType,
-        eventDescription,
-        actorUserId: dbUserId,
-        actorRole: role,
-        actorName: "Service Center Admin",
-        metadata: {
-          previousStatus: event.status,
-          nextStatus,
-          assignedServiceCenterId: event.assignedServiceCenterId,
-          previousAssignedTechnicianId: event.assignedTechnicianId,
-          nextAssignedTechnicianId: assignedTechnicianId,
-          previousScheduledFor: event.scheduledFor?.toISOString() ?? null,
-          nextScheduledFor: nextScheduledFor?.toISOString() ?? null,
-          cancellationReason: cancellationReason ?? null,
-        } as Prisma.InputJsonValue,
-      });
-
-      await createPreventiveMaintenanceNotificationIntentsForEvent({
-        tx,
-        eventId: event.id,
-        triggerType: eventType,
-        metadata: {
-          actorRole: role,
+        await createPreventiveMaintenanceTimelineEntry({
+          tx,
+          eventId: event.id,
+          eventType,
+          eventDescription,
           actorUserId: dbUserId,
-        },
-      });
+          actorRole: role,
+          actorName: "Service Center Admin",
+          metadata: {
+            previousStatus: event.status,
+            nextStatus,
+            assignedServiceCenterId: event.assignedServiceCenterId,
+            previousAssignedTechnicianId: event.assignedTechnicianId,
+            nextAssignedTechnicianId: assignedTechnicianId,
+            previousScheduledFor: event.scheduledFor?.toISOString() ?? null,
+            nextScheduledFor: nextScheduledFor?.toISOString() ?? null,
+            cancellationReason: cancellationReason ?? null,
+          } as Prisma.InputJsonValue,
+        });
 
-      return tx.preventiveMaintenanceEvent.findUniqueOrThrow({
-        where: {
-          id: updatedEvent.id,
-        },
-        select: preventiveMaintenanceEventSelect,
-      });
-    });
+        await createPreventiveMaintenanceNotificationIntentsForEvent({
+          tx,
+          eventId: event.id,
+          triggerType: eventType,
+          metadata: {
+            actorRole: role,
+            actorUserId: dbUserId,
+          },
+        });
+
+        return tx.preventiveMaintenanceEvent.findUniqueOrThrow({
+          where: {
+            id: updatedEvent.id,
+          },
+          select: preventiveMaintenanceEventSelect,
+        });
+      },
+      {
+        timeout: 15_000,
+      },
+    );
 
     return NextResponse.json({
       event: serializePreventiveMaintenanceEvent(updated),
