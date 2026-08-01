@@ -41,6 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { PmEventTimeline } from "@/components/preventive-maintenance/pm-event-timeline";
 import type {
   PreventiveMaintenanceCadenceType,
   PreventiveMaintenanceEventStatus,
@@ -969,6 +970,10 @@ export function ManufacturerPmWorkbench({
                   placeholder="Required only when cancelling"
                 />
               </label>
+
+              {plannerEvent ? (
+                <PmEventTimeline entries={plannerEvent.timeline} />
+              ) : null}
             </div>
           ) : null}
           {error ? (

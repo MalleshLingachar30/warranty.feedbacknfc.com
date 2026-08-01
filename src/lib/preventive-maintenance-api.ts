@@ -123,6 +123,21 @@ export const preventiveMaintenanceEventSelect =
         serviceCenterId: true,
       },
     },
+    timelineEntries: {
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 6,
+      select: {
+        id: true,
+        eventType: true,
+        eventDescription: true,
+        actorRole: true,
+        actorName: true,
+        metadata: true,
+        createdAt: true,
+      },
+    },
   });
 
 export type PreventiveMaintenancePlanRow =
@@ -245,6 +260,16 @@ export function serializePreventiveMaintenanceEvent(
           serviceCenterId: event.assignedTechnician.serviceCenterId,
         }
       : null,
+    timeline: event.timelineEntries.map((entry) => ({
+      id: entry.id,
+      eventType: entry.eventType,
+      eventTypeLabel: formatPreventiveMaintenanceLabel(entry.eventType),
+      eventDescription: entry.eventDescription,
+      actorRole: entry.actorRole,
+      actorName: entry.actorName,
+      metadata: entry.metadata,
+      createdAt: entry.createdAt.toISOString(),
+    })),
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
   };

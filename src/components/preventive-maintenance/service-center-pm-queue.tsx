@@ -32,6 +32,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { PmEventTimeline } from "@/components/preventive-maintenance/pm-event-timeline";
 import type {
   PreventiveMaintenanceEventStatus,
   PreventiveMaintenanceEventView,
@@ -505,6 +506,10 @@ export function ServiceCenterPmQueue({
                   placeholder="Required only when cancelling"
                 />
               </label>
+
+              {selectedEvent ? (
+                <PmEventTimeline entries={selectedEvent.timeline} />
+              ) : null}
             </div>
           ) : null}
 

@@ -3,6 +3,10 @@ import { type Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import {
+  createPreventiveMaintenanceTimelineEntry,
+  formatPreventiveMaintenanceLabel,
+} from "@/lib/preventive-maintenance";
+import {
   asOptionalDate,
   asOptionalString,
   parsePreventiveMaintenanceEventStatus,
@@ -49,7 +53,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { organizationId } = await requireManufacturerContext();
+    const { organizationId, dbUserId } = await requireManufacturerContext();
     const { id } = await params;
     const body = parseJsonBody<PreventiveMaintenanceEventActionPayload>(
       await request.json(),
@@ -69,6 +73,7 @@ export async function PATCH(
         status: true,
         assignedServiceCenterId: true,
         assignedTechnicianId: true,
+        scheduledFor: true,
       },
     });
 
@@ -185,6 +190,26 @@ export async function PATCH(
         assignedServiceCenterId ?? technician.serviceCenterId;
     }
 
+    const nextScheduledFor = scheduledFor === undefined
+      ? event.scheduledFor
+      : scheduledFor;
+    const nextStatus =
+      isCancellation
+        ? "cancelled"
+        : resolvedServiceCenterId || assignedTechnicianId || nextScheduledFor
+          ? "scheduled"
+          : "due";
+    const eventType = isCancellation
+      ? "cancelled"
+      : event.assignedTechnicianId &&
+          assignedTechnicianId &&
+          event.assignedTechnicianId !== assignedTechnicianId
+        ? "reassigned"
+        : "scheduled";
+    const eventDescription = isCancellation
+      ? `Preventive maintenance cancelled: ${cancellationReason}.`
+      : `${formatPreventiveMaintenanceLabel(eventType)} preventive maintenance event.`;
+
     const updateData: Prisma.PreventiveMaintenanceEventUncheckedUpdateInput =
       isCancellation
         ? {
@@ -196,18 +221,45 @@ export async function PATCH(
             assignedServiceCenterId: resolvedServiceCenterId,
             assignedTechnicianId,
             scheduledFor,
-            status:
-              resolvedServiceCenterId || assignedTechnicianId || scheduledFor
-                ? "scheduled"
-                : "due",
+            status: nextStatus,
           };
 
-    const updated = await db.preventiveMaintenanceEvent.update({
-      where: {
-        id: event.id,
-      },
-      data: updateData,
-      select: preventiveMaintenanceEventSelect,
+    const updated = await db.$transaction(async (tx) => {
+      const updatedEvent = await tx.preventiveMaintenanceEvent.update({
+        where: {
+          id: event.id,
+        },
+        data: updateData,
+        select: preventiveMaintenanceEventSelect,
+      });
+
+      await createPreventiveMaintenanceTimelineEntry({
+        tx,
+        eventId: event.id,
+        eventType,
+        eventDescription,
+        actorUserId: dbUserId,
+        actorRole: "manufacturer_admin",
+        actorName: "Manufacturer Admin",
+        metadata: {
+          previousStatus: event.status,
+          nextStatus,
+          previousAssignedServiceCenterId: event.assignedServiceCenterId,
+          nextAssignedServiceCenterId: resolvedServiceCenterId,
+          previousAssignedTechnicianId: event.assignedTechnicianId,
+          nextAssignedTechnicianId: assignedTechnicianId,
+          previousScheduledFor: event.scheduledFor?.toISOString() ?? null,
+          nextScheduledFor: nextScheduledFor?.toISOString() ?? null,
+          cancellationReason: cancellationReason ?? null,
+        } as Prisma.InputJsonValue,
+      });
+
+      return tx.preventiveMaintenanceEvent.findUniqueOrThrow({
+        where: {
+          id: updatedEvent.id,
+        },
+        select: preventiveMaintenanceEventSelect,
+      });
     });
 
     return NextResponse.json({

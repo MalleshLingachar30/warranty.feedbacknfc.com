@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
+import { createPreventiveMaintenanceTimelineEntry } from "@/lib/preventive-maintenance";
 import { clerkOrDbHasRole } from "@/lib/rbac";
 
 export const runtime = "nodejs";
@@ -50,6 +51,7 @@ export async function POST(
       },
       select: {
         id: true,
+        userId: true,
         name: true,
         serviceCenterId: true,
       },
@@ -127,8 +129,8 @@ export async function POST(
     const startedAt = event.startedAt ?? new Date();
     const shouldIncrementLoad = !event.startedAt;
 
-    await db.$transaction([
-      db.preventiveMaintenanceEvent.update({
+    await db.$transaction(async (tx) => {
+      await tx.preventiveMaintenanceEvent.update({
         where: {
           id: event.id,
         },
@@ -139,22 +141,41 @@ export async function POST(
             event.assignedServiceCenterId ?? technician.serviceCenterId,
           startedAt,
         },
-      }),
-      ...(shouldIncrementLoad
-        ? [
-            db.technician.update({
-              where: {
-                id: technician.id,
-              },
-              data: {
-                activeJobCount: {
-                  increment: 1,
-                },
-              },
-            }),
-          ]
-        : []),
-    ]);
+      });
+
+      if (shouldIncrementLoad) {
+        await tx.technician.update({
+          where: {
+            id: technician.id,
+          },
+          data: {
+            activeJobCount: {
+              increment: 1,
+            },
+          },
+        });
+      }
+
+      await createPreventiveMaintenanceTimelineEntry({
+        tx,
+        eventId: event.id,
+        eventType: "started",
+        eventDescription: "Technician started preventive maintenance.",
+        actorUserId: technician.userId,
+        actorRole: "field_technician",
+        actorName: technician.name,
+        metadata: {
+          previousStatus: event.status,
+          nextStatus: "in_progress",
+          previousAssignedServiceCenterId: event.assignedServiceCenterId,
+          nextAssignedServiceCenterId:
+            event.assignedServiceCenterId ?? technician.serviceCenterId,
+          previousAssignedTechnicianId: event.assignedTechnicianId,
+          nextAssignedTechnicianId: technician.id,
+          startedAt: startedAt.toISOString(),
+        },
+      });
+    });
 
     return NextResponse.json({
       success: true,
