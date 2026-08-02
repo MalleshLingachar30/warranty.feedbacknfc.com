@@ -32,6 +32,8 @@ export type DispatchPreventiveMaintenanceNotificationsInput = {
   channels: PreventiveMaintenanceDispatchChannel[];
   limit: number;
   dryRun: boolean;
+  confirmLiveDelivery?: boolean;
+  retryFailed?: boolean;
   triggerType?: PreventiveMaintenanceNotificationTrigger | null;
 };
 
@@ -47,6 +49,8 @@ export type DispatchPreventiveMaintenanceNotificationsResult = {
   sentAttemptCount: number;
   failedAttemptCount: number;
   skippedAttemptCount: number;
+  retriedAttemptCount: number;
+  providerCallCount: number;
   attempts: SerializedPreventiveMaintenanceDeliveryAttempt[];
 };
 
@@ -69,6 +73,7 @@ type SerializedPreventiveMaintenanceDeliveryAttempt = {
   providerMessageId: string | null;
   errorMessage: string | null;
   skipReason: string | null;
+  attemptNumber: number;
   dedupeKey: string;
   createdAt: string;
   updatedAt: string;
@@ -102,6 +107,7 @@ const deliveryAttemptSelect =
     providerMessageId: true,
     errorMessage: true,
     skipReason: true,
+    attemptNumber: true,
     dedupeKey: true,
     createdAt: true,
     updatedAt: true,
@@ -202,9 +208,10 @@ export async function dispatchPreventiveMaintenanceNotifications(
     createInputs.length > 0
       ? await db.preventiveMaintenanceNotificationDeliveryAttempt.findMany({
           where: {
-            dedupeKey: {
-              in: createInputs.map((attempt) => attempt.dedupeKey),
-            },
+            OR: buildDeliveryAttemptLookupWhere({
+              createInputs,
+              retryFailed: input.retryFailed === true,
+            }),
           },
           orderBy: [
             {
@@ -218,10 +225,16 @@ export async function dispatchPreventiveMaintenanceNotifications(
         })
       : [];
 
+  let dispatchResult = {
+    providerCallCount: 0,
+    retriedAttemptCount: 0,
+  };
+
   if (!input.dryRun && attempts.length > 0) {
-    await dispatchQueuedEmailAttempts({
+    dispatchResult = await dispatchEligibleEmailAttempts({
       attempts,
       candidates,
+      retryFailed: input.retryFailed === true,
     });
   }
 
@@ -229,9 +242,10 @@ export async function dispatchPreventiveMaintenanceNotifications(
     createInputs.length > 0
       ? await db.preventiveMaintenanceNotificationDeliveryAttempt.findMany({
           where: {
-            dedupeKey: {
-              in: createInputs.map((attempt) => attempt.dedupeKey),
-            },
+            OR: buildDeliveryAttemptLookupWhere({
+              createInputs,
+              retryFailed: input.retryFailed === true,
+            }),
           },
           orderBy: [
             {
@@ -260,6 +274,8 @@ export async function dispatchPreventiveMaintenanceNotifications(
     sentAttemptCount: statusCounts.sent,
     failedAttemptCount: statusCounts.failed,
     skippedAttemptCount: statusCounts.skipped,
+    retriedAttemptCount: dispatchResult.retriedAttemptCount,
+    providerCallCount: dispatchResult.providerCallCount,
     attempts: finalAttempts.map(serializeDeliveryAttempt),
   };
 }
@@ -275,6 +291,13 @@ export async function dispatchPreventiveMaintenanceNotificationsDryRun(
 function validateDispatchMode(input: DispatchPreventiveMaintenanceNotificationsInput) {
   if (input.dryRun) {
     return;
+  }
+
+  if (input.confirmLiveDelivery !== true) {
+    throw new PreventiveMaintenanceNotificationApiError(
+      "Live delivery requires confirmLiveDelivery: true.",
+      400,
+    );
   }
 
   const unsupportedChannels = input.channels.filter(
@@ -319,6 +342,7 @@ function buildDeliveryAttemptCandidates(input: {
           dryRun: input.dryRun,
           recipientAddress,
           skipReason,
+          attemptNumber: 1,
           dedupeKey: buildDeliveryAttemptDedupeKey({
             notificationIntentId: intent.id,
             channel,
@@ -381,13 +405,42 @@ function buildDeliveryAttemptDedupeKey(input: {
   return `pm-delivery:${input.notificationIntentId}:${input.channel}:${mode}`;
 }
 
-async function dispatchQueuedEmailAttempts(input: {
+function buildDeliveryAttemptLookupWhere(input: {
+  createInputs: DeliveryAttemptCreateInput[];
+  retryFailed: boolean;
+}): Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput[] {
+  const dedupeKeys = input.createInputs.map((attempt) => attempt.dedupeKey);
+  const where: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput[] =
+    [
+      {
+        dedupeKey: {
+          in: dedupeKeys,
+        },
+      },
+    ];
+
+  if (input.retryFailed) {
+    where.push({
+      status: "failed",
+      dryRun: false,
+      channel: "email",
+      dedupeKey: {
+        in: dedupeKeys,
+      },
+    });
+  }
+
+  return where;
+}
+
+async function dispatchEligibleEmailAttempts(input: {
   attempts: Array<
     Prisma.PreventiveMaintenanceNotificationDeliveryAttemptGetPayload<{
       select: typeof deliveryAttemptSelect;
     }>
   >;
   candidates: DeliveryAttemptCandidate[];
+  retryFailed: boolean;
 }) {
   const candidatesByDedupeKey = new Map(
     input.candidates.map((candidate) => [
@@ -395,12 +448,15 @@ async function dispatchQueuedEmailAttempts(input: {
       candidate,
     ]),
   );
+  let providerCallCount = 0;
+  let retriedAttemptCount = 0;
 
   for (const attempt of input.attempts) {
     if (
       attempt.dryRun ||
       attempt.channel !== "email" ||
-      attempt.status !== "queued" ||
+      (attempt.status !== "queued" &&
+        !(input.retryFailed && attempt.status === "failed")) ||
       !attempt.recipientAddress
     ) {
       continue;
@@ -411,27 +467,33 @@ async function dispatchQueuedEmailAttempts(input: {
       continue;
     }
 
-    const claim = await db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
-      where: {
-        id: attempt.id,
-        status: "queued",
-      },
-      data: {
-        status: "sending",
-        errorMessage: null,
-        skipReason: null,
-      },
+    const retrying = attempt.status === "failed";
+    const nextAttemptNumber = retrying
+      ? Math.min(attempt.attemptNumber + 1, 99)
+      : attempt.attemptNumber;
+    const claim = await claimEmailAttemptForDispatch({
+      attemptId: attempt.id,
+      currentStatus: attempt.status,
+      nextAttemptNumber,
     });
 
     if (claim.count !== 1) {
       continue;
     }
 
+    if (retrying) {
+      retriedAttemptCount += 1;
+    }
+    providerCallCount += 1;
+
     const deliveryResult = await sendPreventiveMaintenanceEmailWithResend({
       to: attempt.recipientAddress,
       subject: candidate.title,
       text: candidate.message,
-      idempotencyKey: attempt.dedupeKey,
+      idempotencyKey: buildProviderIdempotencyKey({
+        dedupeKey: attempt.dedupeKey,
+        attemptNumber: nextAttemptNumber,
+      }),
     });
 
     await db.preventiveMaintenanceNotificationDeliveryAttempt.update({
@@ -445,6 +507,12 @@ async function dispatchQueuedEmailAttempts(input: {
             providerResponse: deliveryResult.providerResponse,
             errorMessage: null,
             skipReason: null,
+            metadata: {
+              deliveryMode: "live",
+              provider: "resend",
+              retried: retrying,
+              attemptNumber: nextAttemptNumber,
+            },
           }
         : {
             status: "failed",
@@ -452,9 +520,70 @@ async function dispatchQueuedEmailAttempts(input: {
               deliveryResult.providerResponse ?? Prisma.JsonNull,
             errorMessage: deliveryResult.errorMessage,
             skipReason: null,
+            metadata: {
+              deliveryMode: "live",
+              provider: "resend",
+              retried: retrying,
+              attemptNumber: nextAttemptNumber,
+              failureCategory: classifyDeliveryFailure(
+                deliveryResult.errorMessage,
+              ),
+            },
           },
     });
   }
+
+  return {
+    providerCallCount,
+    retriedAttemptCount,
+  };
+}
+
+function claimEmailAttemptForDispatch(input: {
+  attemptId: string;
+  currentStatus: "queued" | "sending" | "sent" | "failed" | "skipped";
+  nextAttemptNumber: number;
+}) {
+  return db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+    where: {
+      id: input.attemptId,
+      status: input.currentStatus,
+      dryRun: false,
+      channel: "email",
+    },
+    data: {
+      status: "sending",
+      attemptNumber: input.nextAttemptNumber,
+      errorMessage: null,
+      skipReason: null,
+      providerResponse: Prisma.JsonNull,
+    },
+  });
+}
+
+function buildProviderIdempotencyKey(input: {
+  dedupeKey: string;
+  attemptNumber: number;
+}) {
+  return `${input.dedupeKey}:attempt:${input.attemptNumber}`;
+}
+
+function classifyDeliveryFailure(errorMessage: string) {
+  const normalized = errorMessage.toLowerCase();
+
+  if (normalized.includes("disabled")) {
+    return "provider_disabled";
+  }
+
+  if (normalized.includes("missing")) {
+    return "provider_configuration_missing";
+  }
+
+  if (normalized.includes("status")) {
+    return "provider_rejected";
+  }
+
+  return "provider_request_failed";
 }
 
 function countAttemptStatuses(
@@ -495,6 +624,7 @@ function serializeDeliveryAttempt(
     providerMessageId: attempt.providerMessageId,
     errorMessage: attempt.errorMessage,
     skipReason: attempt.skipReason,
+    attemptNumber: attempt.attemptNumber,
     dedupeKey: attempt.dedupeKey,
     createdAt: attempt.createdAt.toISOString(),
     updatedAt: attempt.updatedAt.toISOString(),

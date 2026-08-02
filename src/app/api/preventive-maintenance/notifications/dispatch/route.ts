@@ -15,6 +15,8 @@ export const runtime = "nodejs";
 
 type DispatchPayload = {
   dryRun?: unknown;
+  confirmLiveDelivery?: unknown;
+  retryFailed?: unknown;
   channels?: unknown;
   limit?: unknown;
   triggerType?: unknown;
@@ -64,6 +66,8 @@ export async function POST(request: Request) {
       triggerType,
       limit,
       dryRun,
+      confirmLiveDelivery: body.confirmLiveDelivery === true,
+      retryFailed: body.retryFailed === true,
     });
 
     return NextResponse.json(result);
