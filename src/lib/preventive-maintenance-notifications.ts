@@ -10,6 +10,7 @@ import { resolveAppRoleForSession } from "@/lib/app-user";
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { withDatabaseRetry } from "@/lib/db-retry";
+import { serializePreventiveMaintenanceDeliveryAttemptForView } from "@/lib/preventive-maintenance-delivery-attempts";
 import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
 import {
   getWorkspaceSurface,
@@ -34,6 +35,25 @@ export const preventiveMaintenanceNotificationSelect =
     metadata: true,
     createdAt: true,
     updatedAt: true,
+    deliveryAttempts: {
+      orderBy: {
+        updatedAt: "desc",
+      },
+      take: 3,
+      select: {
+        id: true,
+        channel: true,
+        status: true,
+        dryRun: true,
+        recipientAddress: true,
+        providerMessageId: true,
+        errorMessage: true,
+        skipReason: true,
+        attemptNumber: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    },
     event: {
       select: {
         id: true,
@@ -259,6 +279,9 @@ export function serializePreventiveMaintenanceNotification(
     title: notification.title,
     message: notification.message,
     metadata: notification.metadata,
+    deliveryAttempts: notification.deliveryAttempts.map((attempt) =>
+      serializePreventiveMaintenanceDeliveryAttemptForView(attempt),
+    ),
     createdAt: notification.createdAt.toISOString(),
     updatedAt: notification.updatedAt.toISOString(),
     event: {

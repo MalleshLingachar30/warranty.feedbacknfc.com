@@ -20,6 +20,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  PmDeliveryAttemptSummary,
+  type PmDeliveryAttempt,
+} from "@/components/notifications/pm-delivery-attempt-summary";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/roles";
 
@@ -44,6 +48,7 @@ type PmNotification = {
   title: string;
   message: string;
   createdAt: string;
+  deliveryAttempts: PmDeliveryAttempt[];
   event: {
     eventNumber: string;
     eventType: "preventive_maintenance" | "calibration";
@@ -361,6 +366,10 @@ export function PmNotificationInbox({ role }: PmNotificationInboxProps) {
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">
                           {notification.message}
                         </p>
+                        <PmDeliveryAttemptSummary
+                          attempts={notification.deliveryAttempts}
+                          compact
+                        />
                         <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
                           <span>{notification.event.eventNumber}</span>
                           <span>|</span>

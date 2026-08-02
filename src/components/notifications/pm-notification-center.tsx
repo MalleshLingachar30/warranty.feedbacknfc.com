@@ -16,6 +16,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  PmDeliveryAttemptSummary,
+  type PmDeliveryAttempt,
+} from "@/components/notifications/pm-delivery-attempt-summary";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/roles";
 
@@ -43,6 +47,7 @@ type PmNotification = {
   title: string;
   message: string;
   createdAt: string;
+  deliveryAttempts: PmDeliveryAttempt[];
   event: {
     eventNumber: string;
     eventType: "preventive_maintenance" | "calibration";
@@ -553,6 +558,9 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       <p className="mt-3 text-sm leading-6 text-slate-700">
                         {notification.message}
                       </p>
+                      <PmDeliveryAttemptSummary
+                        attempts={notification.deliveryAttempts}
+                      />
                       <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-3">
                         <div>
                           <span className="font-medium text-slate-700">Asset:</span>{" "}
