@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   Prisma,
+  type PreventiveMaintenanceNotificationTrigger,
   type PreventiveMaintenanceNotificationStatus,
 } from "@prisma/client";
 
@@ -102,6 +103,14 @@ export const PREVENTIVE_MAINTENANCE_NOTIFICATION_STATUSES = [
   "cancelled",
 ] as const satisfies readonly PreventiveMaintenanceNotificationStatus[];
 
+export const PREVENTIVE_MAINTENANCE_NOTIFICATION_TRIGGERS = [
+  "scheduled",
+  "reassigned",
+  "started",
+  "completed",
+  "cancelled",
+] as const satisfies readonly PreventiveMaintenanceNotificationTrigger[];
+
 export function parsePreventiveMaintenanceNotificationStatus(value: unknown) {
   if (typeof value !== "string") {
     return null;
@@ -110,6 +119,18 @@ export function parsePreventiveMaintenanceNotificationStatus(value: unknown) {
   return (
     PREVENTIVE_MAINTENANCE_NOTIFICATION_STATUSES.find(
       (status) => status === value,
+    ) ?? null
+  );
+}
+
+export function parsePreventiveMaintenanceNotificationTrigger(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return (
+    PREVENTIVE_MAINTENANCE_NOTIFICATION_TRIGGERS.find(
+      (trigger) => trigger === value,
     ) ?? null
   );
 }

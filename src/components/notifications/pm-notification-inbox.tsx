@@ -413,11 +413,11 @@ export function PmNotificationInbox({ role }: PmNotificationInboxProps) {
         <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs text-slate-500">
           <span>{pendingCount} pending</span>
           <Link
-            href={workspaceHref}
+            href="/dashboard/notifications"
             className="font-medium text-indigo-600 hover:text-indigo-700"
             onClick={() => setIsOpen(false)}
           >
-            View maintenance
+            View inbox
           </Link>
         </div>
       </DropdownMenuContent>

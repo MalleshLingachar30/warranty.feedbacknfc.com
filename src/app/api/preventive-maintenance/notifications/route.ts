@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import {
   parsePreventiveMaintenanceNotificationLimit,
   parsePreventiveMaintenanceNotificationStatus,
+  parsePreventiveMaintenanceNotificationTrigger,
   PreventiveMaintenanceNotificationApiError,
   preventiveMaintenanceNotificationSelect,
   resolvePreventiveMaintenanceNotificationAudience,
@@ -11,6 +12,12 @@ import {
 } from "@/lib/preventive-maintenance-notifications";
 
 export const runtime = "nodejs";
+
+type BulkNotificationActionPayload = {
+  action?: unknown;
+  status?: unknown;
+  triggerType?: unknown;
+};
 
 function jsonError(error: unknown) {
   if (error instanceof PreventiveMaintenanceNotificationApiError) {
@@ -27,6 +34,17 @@ function jsonError(error: unknown) {
   );
 }
 
+function parseBody(value: unknown): BulkNotificationActionPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new PreventiveMaintenanceNotificationApiError(
+      "Invalid JSON body.",
+      400,
+    );
+  }
+
+  return value as BulkNotificationActionPayload;
+}
+
 export async function GET(request: Request) {
   try {
     const audience = await resolvePreventiveMaintenanceNotificationAudience();
@@ -37,6 +55,9 @@ export async function GET(request: Request) {
         ? null
         : parsePreventiveMaintenanceNotificationStatus(requestedStatus) ??
           "pending";
+    const triggerType = parsePreventiveMaintenanceNotificationTrigger(
+      url.searchParams.get("triggerType"),
+    );
     const limit = parsePreventiveMaintenanceNotificationLimit(
       url.searchParams.get("limit"),
     );
@@ -44,9 +65,18 @@ export async function GET(request: Request) {
     const where = {
       ...audience.where,
       ...(status ? { status } : {}),
+      ...(triggerType ? { triggerType } : {}),
     };
 
-    const [notifications, pendingCount] = await Promise.all([
+    const [
+      notifications,
+      pendingCount,
+      filteredCount,
+      filteredPendingCount,
+      dismissedCount,
+      deliveredCount,
+      cancelledCount,
+    ] = await Promise.all([
       db.preventiveMaintenanceNotificationIntent.findMany({
         where,
         orderBy: {
@@ -61,6 +91,37 @@ export async function GET(request: Request) {
           status: "pending",
         },
       }),
+      db.preventiveMaintenanceNotificationIntent.count({
+        where,
+      }),
+      db.preventiveMaintenanceNotificationIntent.count({
+        where: {
+          ...audience.where,
+          status: "pending",
+          ...(triggerType ? { triggerType } : {}),
+        },
+      }),
+      db.preventiveMaintenanceNotificationIntent.count({
+        where: {
+          ...audience.where,
+          status: "dismissed",
+          ...(triggerType ? { triggerType } : {}),
+        },
+      }),
+      db.preventiveMaintenanceNotificationIntent.count({
+        where: {
+          ...audience.where,
+          status: "delivered",
+          ...(triggerType ? { triggerType } : {}),
+        },
+      }),
+      db.preventiveMaintenanceNotificationIntent.count({
+        where: {
+          ...audience.where,
+          status: "cancelled",
+          ...(triggerType ? { triggerType } : {}),
+        },
+      }),
     ]);
 
     return NextResponse.json({
@@ -68,6 +129,63 @@ export async function GET(request: Request) {
         serializePreventiveMaintenanceNotification(notification),
       ),
       pendingCount,
+      filteredCount,
+      statusCounts: {
+        pending: filteredPendingCount,
+        delivered: deliveredCount,
+        dismissed: dismissedCount,
+        cancelled: cancelledCount,
+      },
+    });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const audience = await resolvePreventiveMaintenanceNotificationAudience();
+    const body = parseBody(await request.json().catch(() => null));
+
+    if (body.action !== "dismiss_all") {
+      throw new PreventiveMaintenanceNotificationApiError(
+        "Only action=dismiss_all is supported.",
+        400,
+      );
+    }
+
+    const requestedStatus =
+      typeof body.status === "string" ? body.status : "pending";
+    const status =
+      requestedStatus === "all"
+        ? null
+        : parsePreventiveMaintenanceNotificationStatus(requestedStatus);
+    const triggerType = parsePreventiveMaintenanceNotificationTrigger(
+      body.triggerType,
+    );
+
+    if (requestedStatus !== "all" && !status) {
+      throw new PreventiveMaintenanceNotificationApiError(
+        "Invalid notification status filter.",
+        400,
+      );
+    }
+
+    const where = {
+      ...audience.where,
+      status: status ?? "pending",
+      ...(triggerType ? { triggerType } : {}),
+    };
+
+    const result = await db.preventiveMaintenanceNotificationIntent.updateMany({
+      where,
+      data: {
+        status: "dismissed",
+      },
+    });
+
+    return NextResponse.json({
+      dismissedCount: result.count,
     });
   } catch (error) {
     return jsonError(error);
