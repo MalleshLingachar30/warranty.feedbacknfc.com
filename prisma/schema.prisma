@@ -354,6 +354,19 @@ enum PreventiveMaintenanceNotificationStatus {
   cancelled
 }
 
+enum PreventiveMaintenanceNotificationDeliveryChannel {
+  email
+  sms
+}
+
+enum PreventiveMaintenanceNotificationDeliveryStatus {
+  queued
+  sending
+  sent
+  failed
+  skipped
+}
+
 enum PartUsageType {
   installed
   consumed
@@ -1290,9 +1303,10 @@ model PreventiveMaintenanceNotificationIntent {
   createdAt                DateTime                                       @default(now()) @map("created_at")
   updatedAt                DateTime                                       @updatedAt @map("updated_at")
 
-  event         PreventiveMaintenanceEvent @relation(fields: [eventId], references: [id])
-  organization  Organization               @relation("PreventiveMaintenanceNotificationOrganization", fields: [organizationId], references: [id])
-  recipientUser User?                      @relation("PreventiveMaintenanceNotificationRecipient", fields: [recipientUserId], references: [id])
+  event            PreventiveMaintenanceEvent                         @relation(fields: [eventId], references: [id])
+  organization     Organization                                       @relation("PreventiveMaintenanceNotificationOrganization", fields: [organizationId], references: [id])
+  recipientUser    User?                                              @relation("PreventiveMaintenanceNotificationRecipient", fields: [recipientUserId], references: [id])
+  deliveryAttempts PreventiveMaintenanceNotificationDeliveryAttempt[]
 
   @@index([eventId, createdAt], map: "idx_pm_notifications_event")
   @@index([organizationId, status, createdAt], map: "idx_pm_notifications_org_status")
@@ -1301,6 +1315,32 @@ model PreventiveMaintenanceNotificationIntent {
   @@index([recipientServiceCenterId, status, createdAt], map: "idx_pm_notifications_service_center_status")
   @@index([recipientTechnicianId, status, createdAt], map: "idx_pm_notifications_technician_status")
   @@map("preventive_maintenance_notification_intents")
+}
+
+model PreventiveMaintenanceNotificationDeliveryAttempt {
+  id                   String                                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  notificationIntentId String                                           @map("notification_intent_id") @db.Uuid
+  organizationId       String                                           @map("organization_id") @db.Uuid
+  channel              PreventiveMaintenanceNotificationDeliveryChannel
+  status               PreventiveMaintenanceNotificationDeliveryStatus  @default(queued)
+  dryRun               Boolean                                          @default(true) @map("dry_run")
+  recipientAddress     String?                                          @map("recipient_address") @db.VarChar(255)
+  providerMessageId    String?                                          @map("provider_message_id") @db.VarChar(255)
+  providerResponse     Json?                                            @map("provider_response")
+  errorMessage         String?                                          @map("error_message")
+  skipReason           String?                                          @map("skip_reason") @db.VarChar(120)
+  attemptNumber        Int                                              @default(1) @map("attempt_number")
+  dedupeKey            String                                           @unique @map("dedupe_key") @db.VarChar(260)
+  metadata             Json                                             @default(dbgenerated("'{}'::jsonb"))
+  createdAt            DateTime                                         @default(now()) @map("created_at")
+  updatedAt            DateTime                                         @updatedAt @map("updated_at")
+
+  notificationIntent PreventiveMaintenanceNotificationIntent @relation(fields: [notificationIntentId], references: [id], onDelete: Cascade)
+
+  @@index([notificationIntentId, createdAt], map: "idx_pm_delivery_attempts_intent")
+  @@index([organizationId, status, createdAt], map: "idx_pm_delivery_attempts_org_status")
+  @@index([channel, status, createdAt], map: "idx_pm_delivery_attempts_channel_status")
+  @@map("preventive_maintenance_notification_delivery_attempts")
 }
 
 model JobPartUsage {
