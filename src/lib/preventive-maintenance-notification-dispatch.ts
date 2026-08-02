@@ -8,9 +8,11 @@ import {
 
 import { db } from "@/lib/db";
 import {
-  PreventiveMaintenanceNotificationApiError,
-  type PreventiveMaintenanceNotificationAudience,
-} from "@/lib/preventive-maintenance-notifications";
+  getPreventiveMaintenanceEmailDeliveryConfiguration,
+  sendPreventiveMaintenanceEmailWithResend,
+} from "@/lib/preventive-maintenance-email-delivery";
+import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
+import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 import type { AppRole } from "@/lib/roles";
 
 export const PREVENTIVE_MAINTENANCE_DELIVERY_CHANNELS = [
@@ -29,22 +31,32 @@ export type DispatchPreventiveMaintenanceNotificationsInput = {
   audience: PreventiveMaintenanceNotificationAudience;
   channels: PreventiveMaintenanceDispatchChannel[];
   limit: number;
-  dryRun: true;
+  dryRun: boolean;
   triggerType?: PreventiveMaintenanceNotificationTrigger | null;
 };
 
 export type DispatchPreventiveMaintenanceNotificationsResult = {
-  dryRun: true;
+  dryRun: boolean;
   channels: PreventiveMaintenanceDispatchChannel[];
   scannedIntentCount: number;
   candidateAttemptCount: number;
   createdAttemptCount: number;
   existingAttemptCount: number;
   missingRecipientCount: number;
+  queuedAttemptCount: number;
+  sentAttemptCount: number;
+  failedAttemptCount: number;
+  skippedAttemptCount: number;
   attempts: SerializedPreventiveMaintenanceDeliveryAttempt[];
 };
 
 type DeliveryAttemptCreateInput = Prisma.PreventiveMaintenanceNotificationDeliveryAttemptCreateManyInput;
+
+type DeliveryAttemptCandidate = {
+  createInput: DeliveryAttemptCreateInput;
+  title: string;
+  message: string;
+};
 
 type SerializedPreventiveMaintenanceDeliveryAttempt = {
   id: string;
@@ -54,9 +66,12 @@ type SerializedPreventiveMaintenanceDeliveryAttempt = {
   status: "queued" | "sending" | "sent" | "failed" | "skipped";
   dryRun: boolean;
   recipientAddress: string | null;
+  providerMessageId: string | null;
+  errorMessage: string | null;
   skipReason: string | null;
   dedupeKey: string;
   createdAt: string;
+  updatedAt: string;
 };
 
 const dispatchableNotificationIntentSelect =
@@ -84,9 +99,12 @@ const deliveryAttemptSelect =
     status: true,
     dryRun: true,
     recipientAddress: true,
+    providerMessageId: true,
+    errorMessage: true,
     skipReason: true,
     dedupeKey: true,
     createdAt: true,
+    updatedAt: true,
   });
 
 export function canDispatchPreventiveMaintenanceNotifications(role: AppRole) {
@@ -130,7 +148,7 @@ export function parsePreventiveMaintenanceDispatchLimit(value: unknown) {
   return Math.min(parsed, 50);
 }
 
-export async function dispatchPreventiveMaintenanceNotificationsDryRun(
+export async function dispatchPreventiveMaintenanceNotifications(
   input: DispatchPreventiveMaintenanceNotificationsInput,
 ): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
   if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {
@@ -146,6 +164,8 @@ export async function dispatchPreventiveMaintenanceNotificationsDryRun(
       400,
     );
   }
+
+  validateDispatchMode(input);
 
   const where: Prisma.PreventiveMaintenanceNotificationIntentWhereInput = {
     ...input.audience.where,
@@ -163,10 +183,12 @@ export async function dispatchPreventiveMaintenanceNotificationsDryRun(
     select: dispatchableNotificationIntentSelect,
   });
 
-  const createInputs = buildDeliveryAttemptCreateInputs({
+  const candidates = buildDeliveryAttemptCandidates({
     channels: input.channels,
+    dryRun: input.dryRun,
     intents,
   });
+  const createInputs = candidates.map((candidate) => candidate.createInput);
 
   const createResult =
     createInputs.length > 0
@@ -196,52 +218,144 @@ export async function dispatchPreventiveMaintenanceNotificationsDryRun(
         })
       : [];
 
+  if (!input.dryRun && attempts.length > 0) {
+    await dispatchQueuedEmailAttempts({
+      attempts,
+      candidates,
+    });
+  }
+
+  const finalAttempts =
+    createInputs.length > 0
+      ? await db.preventiveMaintenanceNotificationDeliveryAttempt.findMany({
+          where: {
+            dedupeKey: {
+              in: createInputs.map((attempt) => attempt.dedupeKey),
+            },
+          },
+          orderBy: [
+            {
+              createdAt: "asc",
+            },
+            {
+              channel: "asc",
+            },
+          ],
+          select: deliveryAttemptSelect,
+        })
+      : [];
+  const statusCounts = countAttemptStatuses(finalAttempts);
+
   return {
-    dryRun: true,
+    dryRun: input.dryRun,
     channels: input.channels,
     scannedIntentCount: intents.length,
     candidateAttemptCount: createInputs.length,
     createdAttemptCount: createResult.count,
     existingAttemptCount: Math.max(0, createInputs.length - createResult.count),
-    missingRecipientCount: attempts.filter((attempt) =>
+    missingRecipientCount: finalAttempts.filter((attempt) =>
       attempt.skipReason?.startsWith("missing_recipient_"),
     ).length,
-    attempts: attempts.map(serializeDeliveryAttempt),
+    queuedAttemptCount: statusCounts.queued,
+    sentAttemptCount: statusCounts.sent,
+    failedAttemptCount: statusCounts.failed,
+    skippedAttemptCount: statusCounts.skipped,
+    attempts: finalAttempts.map(serializeDeliveryAttempt),
   };
 }
 
-function buildDeliveryAttemptCreateInputs(input: {
+export async function dispatchPreventiveMaintenanceNotificationsDryRun(
+  input: Omit<DispatchPreventiveMaintenanceNotificationsInput, "dryRun"> & {
+    dryRun: true;
+  },
+) {
+  return dispatchPreventiveMaintenanceNotifications(input);
+}
+
+function validateDispatchMode(input: DispatchPreventiveMaintenanceNotificationsInput) {
+  if (input.dryRun) {
+    return;
+  }
+
+  const unsupportedChannels = input.channels.filter(
+    (channel) => channel !== "email",
+  );
+  if (unsupportedChannels.length > 0) {
+    throw new PreventiveMaintenanceNotificationApiError(
+      "Phase 4D1 supports live delivery for email only.",
+      400,
+    );
+  }
+
+  const emailConfig = getPreventiveMaintenanceEmailDeliveryConfiguration();
+  if (!emailConfig.enabled) {
+    throw new PreventiveMaintenanceNotificationApiError(
+      `Email delivery is not enabled: ${emailConfig.skipReason}.`,
+      400,
+    );
+  }
+}
+
+function buildDeliveryAttemptCandidates(input: {
   intents: DispatchableNotificationIntent[];
   channels: PreventiveMaintenanceDispatchChannel[];
-}): DeliveryAttemptCreateInput[] {
+  dryRun: boolean;
+}): DeliveryAttemptCandidate[] {
   return input.intents.flatMap((intent) =>
     input.channels.map((channel) => {
       const recipientAddress = resolveRecipientAddress(intent, channel);
-      const skipReason = recipientAddress
-        ? "dry_run"
-        : `missing_recipient_${channel}`;
+      const skipReason = resolveInitialSkipReason({
+        channel,
+        dryRun: input.dryRun,
+        recipientAddress,
+      });
 
       return {
-        notificationIntentId: intent.id,
-        organizationId: intent.organizationId,
-        channel,
-        status: "skipped",
-        dryRun: true,
-        recipientAddress,
-        skipReason,
-        dedupeKey: buildDeliveryAttemptDedupeKey({
+        createInput: {
           notificationIntentId: intent.id,
+          organizationId: intent.organizationId,
           channel,
-        }),
-        metadata: {
-          dryRun: true,
-          triggerType: intent.triggerType,
-          recipientRole: intent.recipientRole,
-          title: intent.title,
+          status: skipReason ? "skipped" : "queued",
+          dryRun: input.dryRun,
+          recipientAddress,
+          skipReason,
+          dedupeKey: buildDeliveryAttemptDedupeKey({
+            notificationIntentId: intent.id,
+            channel,
+            dryRun: input.dryRun,
+          }),
+          metadata: {
+            dryRun: input.dryRun,
+            triggerType: intent.triggerType,
+            recipientRole: intent.recipientRole,
+            title: intent.title,
+          },
         },
+        title: intent.title,
+        message: intent.message,
       };
     }),
   );
+}
+
+function resolveInitialSkipReason(input: {
+  channel: PreventiveMaintenanceDispatchChannel;
+  dryRun: boolean;
+  recipientAddress: string | null;
+}) {
+  if (!input.recipientAddress) {
+    return `missing_recipient_${input.channel}`;
+  }
+
+  if (input.dryRun) {
+    return "dry_run";
+  }
+
+  if (input.channel !== "email") {
+    return "delivery_channel_not_supported";
+  }
+
+  return null;
 }
 
 function resolveRecipientAddress(
@@ -261,8 +375,108 @@ function resolveRecipientAddress(
 function buildDeliveryAttemptDedupeKey(input: {
   notificationIntentId: string;
   channel: PreventiveMaintenanceDispatchChannel;
+  dryRun: boolean;
 }) {
-  return `pm-delivery:${input.notificationIntentId}:${input.channel}:dry-run`;
+  const mode = input.dryRun ? "dry-run" : "send:v1";
+  return `pm-delivery:${input.notificationIntentId}:${input.channel}:${mode}`;
+}
+
+async function dispatchQueuedEmailAttempts(input: {
+  attempts: Array<
+    Prisma.PreventiveMaintenanceNotificationDeliveryAttemptGetPayload<{
+      select: typeof deliveryAttemptSelect;
+    }>
+  >;
+  candidates: DeliveryAttemptCandidate[];
+}) {
+  const candidatesByDedupeKey = new Map(
+    input.candidates.map((candidate) => [
+      candidate.createInput.dedupeKey,
+      candidate,
+    ]),
+  );
+
+  for (const attempt of input.attempts) {
+    if (
+      attempt.dryRun ||
+      attempt.channel !== "email" ||
+      attempt.status !== "queued" ||
+      !attempt.recipientAddress
+    ) {
+      continue;
+    }
+
+    const candidate = candidatesByDedupeKey.get(attempt.dedupeKey);
+    if (!candidate) {
+      continue;
+    }
+
+    const claim = await db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+      where: {
+        id: attempt.id,
+        status: "queued",
+      },
+      data: {
+        status: "sending",
+        errorMessage: null,
+        skipReason: null,
+      },
+    });
+
+    if (claim.count !== 1) {
+      continue;
+    }
+
+    const deliveryResult = await sendPreventiveMaintenanceEmailWithResend({
+      to: attempt.recipientAddress,
+      subject: candidate.title,
+      text: candidate.message,
+      idempotencyKey: attempt.dedupeKey,
+    });
+
+    await db.preventiveMaintenanceNotificationDeliveryAttempt.update({
+      where: {
+        id: attempt.id,
+      },
+      data: deliveryResult.ok
+        ? {
+            status: "sent",
+            providerMessageId: deliveryResult.providerMessageId,
+            providerResponse: deliveryResult.providerResponse,
+            errorMessage: null,
+            skipReason: null,
+          }
+        : {
+            status: "failed",
+            providerResponse:
+              deliveryResult.providerResponse ?? Prisma.JsonNull,
+            errorMessage: deliveryResult.errorMessage,
+            skipReason: null,
+          },
+    });
+  }
+}
+
+function countAttemptStatuses(
+  attempts: Array<
+    Prisma.PreventiveMaintenanceNotificationDeliveryAttemptGetPayload<{
+      select: typeof deliveryAttemptSelect;
+    }>
+  >,
+) {
+  return attempts.reduce(
+    (counts, attempt) => {
+      counts[attempt.status] += 1;
+      return counts;
+    },
+    {
+      queued: 0,
+      sending: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+    },
+  );
 }
 
 function serializeDeliveryAttempt(
@@ -278,8 +492,11 @@ function serializeDeliveryAttempt(
     status: attempt.status,
     dryRun: attempt.dryRun,
     recipientAddress: attempt.recipientAddress,
+    providerMessageId: attempt.providerMessageId,
+    errorMessage: attempt.errorMessage,
     skipReason: attempt.skipReason,
     dedupeKey: attempt.dedupeKey,
     createdAt: attempt.createdAt.toISOString(),
+    updatedAt: attempt.updatedAt.toISOString(),
   };
 }

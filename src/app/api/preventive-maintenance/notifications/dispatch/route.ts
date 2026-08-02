@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
-  dispatchPreventiveMaintenanceNotificationsDryRun,
+  dispatchPreventiveMaintenanceNotifications,
   parsePreventiveMaintenanceDispatchChannels,
   parsePreventiveMaintenanceDispatchLimit,
 } from "@/lib/preventive-maintenance-notification-dispatch";
@@ -51,25 +51,19 @@ export async function POST(request: Request) {
     const audience = await resolvePreventiveMaintenanceNotificationAudience();
     const body = parseBody(await request.json().catch(() => null));
 
-    if (body.dryRun === false) {
-      throw new PreventiveMaintenanceNotificationApiError(
-        "Phase 4C supports dry-run dispatch only.",
-        400,
-      );
-    }
-
+    const dryRun = body.dryRun !== false;
     const channels = parsePreventiveMaintenanceDispatchChannels(body.channels);
     const triggerType = parsePreventiveMaintenanceNotificationTrigger(
       body.triggerType,
     );
     const limit = parsePreventiveMaintenanceDispatchLimit(body.limit);
 
-    const result = await dispatchPreventiveMaintenanceNotificationsDryRun({
+    const result = await dispatchPreventiveMaintenanceNotifications({
       audience,
       channels,
       triggerType,
       limit,
-      dryRun: true,
+      dryRun,
     });
 
     return NextResponse.json(result);

@@ -10,6 +10,7 @@ import { resolveAppRoleForSession } from "@/lib/app-user";
 import { getOptionalAuth } from "@/lib/clerk-session";
 import { db } from "@/lib/db";
 import { withDatabaseRetry } from "@/lib/db-retry";
+import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
 import {
   getWorkspaceSurface,
   isFieldAdminRole,
@@ -17,14 +18,7 @@ import {
   type AppRole,
 } from "@/lib/roles";
 
-export class PreventiveMaintenanceNotificationApiError extends Error {
-  status: number;
-
-  constructor(message: string, status = 400) {
-    super(message);
-    this.status = status;
-  }
-}
+export { PreventiveMaintenanceNotificationApiError };
 
 export const preventiveMaintenanceNotificationSelect =
   Prisma.validator<Prisma.PreventiveMaintenanceNotificationIntentSelect>()({
