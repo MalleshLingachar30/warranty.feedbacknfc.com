@@ -11,6 +11,7 @@ import {
   Inbox,
   Loader2,
   RefreshCw,
+  Send,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -78,6 +79,17 @@ type PmNotificationResponse = {
   pendingCount: number;
   filteredCount: number;
   statusCounts: Record<PmNotificationStatus, number>;
+};
+
+type PmNotificationDispatchResponse = {
+  dryRun: boolean;
+  scannedIntentCount: number;
+  candidateAttemptCount: number;
+  createdAttemptCount: number;
+  existingAttemptCount: number;
+  missingRecipientCount: number;
+  queuedAttemptCount: number;
+  skippedAttemptCount: number;
 };
 
 interface PmNotificationCenterProps {
@@ -212,6 +224,17 @@ function recipientLabel(notification: PmNotification) {
   }
 }
 
+function canRunPmDeliveryDryRun(role: AppRole) {
+  return (
+    role === "platform_owner" ||
+    role === "field_super_admin" ||
+    role === "field_service_admin" ||
+    role === "manufacturer_admin" ||
+    role === "service_center_admin" ||
+    role === "field_dispatcher"
+  );
+}
+
 export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>("all");
@@ -229,11 +252,15 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBulkDismissing, setIsBulkDismissing] = useState(false);
+  const [isDispatchingDryRun, setIsDispatchingDryRun] = useState(false);
+  const [dispatchResult, setDispatchResult] =
+    useState<PmNotificationDispatchResponse | null>(null);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [error, setError] = useState<string | null>(null);
   const workspaceHref = useMemo(() => pmWorkspaceHref(role), [role]);
+  const canDispatchDryRun = useMemo(() => canRunPmDeliveryDryRun(role), [role]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams({
@@ -378,6 +405,52 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     }
   }, [fetchNotifications, statusFilter, triggerFilter]);
 
+  const runDeliveryDryRun = useCallback(async () => {
+    setIsDispatchingDryRun(true);
+    setError(null);
+    setDispatchResult(null);
+
+    try {
+      const response = await fetch(
+        "/api/preventive-maintenance/notifications/dispatch",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            dryRun: true,
+            channels: ["email", "sms"],
+            limit: 50,
+            triggerType: triggerFilter === "all" ? undefined : triggerFilter,
+          }),
+        },
+      );
+      const body = (await response.json()) as
+        | PmNotificationDispatchResponse
+        | { error?: string };
+
+      if (!response.ok || !("createdAttemptCount" in body)) {
+        throw new Error(
+          "error" in body
+            ? (body.error ?? "Unable to run delivery dry run.")
+            : "Unable to run delivery dry run.",
+        );
+      }
+
+      setDispatchResult(body);
+      await fetchNotifications({ silent: true });
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to run delivery dry run.",
+      );
+    } finally {
+      setIsDispatchingDryRun(false);
+    }
+  }, [fetchNotifications, triggerFilter]);
+
   const canDismissAll =
     !isLoading &&
     !isBulkDismissing &&
@@ -482,6 +555,78 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           </div>
         </div>
       </div>
+
+      {canDispatchDryRun ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                <Send className="h-3.5 w-3.5" />
+                Delivery dry run
+              </div>
+              <p className="mt-1 text-sm text-slate-600">
+                {triggerFilter === "all"
+                  ? "Scan pending notifications for email and SMS attempts."
+                  : `Scan pending ${labelFromSnakeCase(triggerFilter).toLowerCase()} notifications for email and SMS attempts.`}
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {dispatchResult ? (
+                <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[310px]">
+                  <div className="rounded-md border border-slate-200 px-2 py-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                      New
+                    </p>
+                    <p className="text-sm font-semibold text-slate-950">
+                      {dispatchResult.createdAttemptCount}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 px-2 py-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                      Existing
+                    </p>
+                    <p className="text-sm font-semibold text-slate-950">
+                      {dispatchResult.existingAttemptCount}
+                    </p>
+                  </div>
+                  <div className="rounded-md border border-slate-200 px-2 py-1.5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                      Skipped
+                    </p>
+                    <p className="text-sm font-semibold text-slate-950">
+                      {dispatchResult.skippedAttemptCount}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void runDeliveryDryRun()}
+                disabled={isDispatchingDryRun || isLoading}
+              >
+                {isDispatchingDryRun ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Run dry run
+              </Button>
+            </div>
+          </div>
+          {dispatchResult ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Scanned {dispatchResult.scannedIntentCount} pending notification
+              {dispatchResult.scannedIntentCount === 1 ? "" : "s"} and prepared{" "}
+              {dispatchResult.candidateAttemptCount} channel attempt
+              {dispatchResult.candidateAttemptCount === 1 ? "" : "s"}.
+              {dispatchResult.missingRecipientCount > 0
+                ? ` ${dispatchResult.missingRecipientCount} missing recipient ${dispatchResult.missingRecipientCount === 1 ? "address was" : "addresses were"} skipped.`
+                : ""}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
