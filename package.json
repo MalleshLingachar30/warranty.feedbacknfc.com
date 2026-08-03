@@ -18,7 +18,8 @@
     "bootstrap:clerk-users": "node scripts/bootstrap-clerk-db-users.js",
     "test:api:e2e": "node scripts/run-e2e-api-tests.js",
     "test:pm-phase2": "node --experimental-strip-types scripts/run-pm-phase2-smoke.mjs",
-    "test:pm-notification-operator": "node scripts/run-pm-notification-operator-smoke.js"
+    "test:pm-notification-operator": "node scripts/run-pm-notification-operator-smoke.js",
+    "maintenance:pm-notification-smoke": "node scripts/run-pm-notification-operator-smoke.js --cleanup=archive"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.1",

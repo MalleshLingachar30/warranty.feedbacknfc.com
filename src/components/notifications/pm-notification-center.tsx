@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Check,
   CheckCheck,
+  Clock3,
   ClipboardList,
   Inbox,
   Loader2,
@@ -31,11 +32,7 @@ type PmNotificationTrigger =
   | "completed"
   | "cancelled";
 
-type PmNotificationStatus =
-  | "pending"
-  | "delivered"
-  | "dismissed"
-  | "cancelled";
+type PmNotificationStatus = "pending" | "delivered" | "dismissed" | "cancelled";
 
 type StatusFilter = PmNotificationStatus | "all";
 type TriggerFilter = PmNotificationTrigger | "all";
@@ -79,10 +76,23 @@ type PmNotificationResponse = {
   pendingCount: number;
   filteredCount: number;
   statusCounts: Record<PmNotificationStatus, number>;
+  lastDryRun: PmNotificationLastDryRun | null;
+};
+
+type PmNotificationLastDryRun = {
+  preparedAt: string;
+  attemptCount: number;
+  statusCounts: Record<
+    "queued" | "sending" | "sent" | "failed" | "skipped",
+    number
+  >;
+  missingRecipientCount: number;
+  dryRunSkipCount: number;
 };
 
 type PmNotificationDispatchResponse = {
   dryRun: boolean;
+  preparedAt: string | null;
   scannedIntentCount: number;
   candidateAttemptCount: number;
   createdAttemptCount: number;
@@ -201,7 +211,8 @@ function statusTone(status: PmNotificationStatus) {
 
 function assetLabel(notification: PmNotification) {
   const identifier =
-    notification.event.asset.publicCode ?? notification.event.asset.serialNumber;
+    notification.event.asset.publicCode ??
+    notification.event.asset.serialNumber;
   const model = notification.event.asset.productModel.modelNumber
     ? `${notification.event.asset.productModel.name} (${notification.event.asset.productModel.modelNumber})`
     : notification.event.asset.productModel.name;
@@ -222,6 +233,22 @@ function recipientLabel(notification: PmNotification) {
     default:
       return labelFromSnakeCase(notification.recipientRole);
   }
+}
+
+function lastDryRunResultLabel(summary: PmNotificationLastDryRun) {
+  const readyCount = summary.statusCounts.queued + summary.dryRunSkipCount;
+  const issueCount =
+    summary.missingRecipientCount + summary.statusCounts.failed;
+
+  if (summary.attemptCount === 0) {
+    return "No attempts prepared";
+  }
+
+  if (issueCount > 0) {
+    return `${readyCount} prepared, ${issueCount} need operator review`;
+  }
+
+  return `${readyCount} prepared with no recipient gaps`;
 }
 
 function canRunPmDeliveryDryRun(role: AppRole) {
@@ -249,6 +276,9 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     dismissed: 0,
     cancelled: 0,
   });
+  const [lastDryRun, setLastDryRun] = useState<PmNotificationLastDryRun | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBulkDismissing, setIsBulkDismissing] = useState(false);
@@ -307,6 +337,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setPendingCount(body.pendingCount);
         setFilteredCount(body.filteredCount);
         setStatusCounts(body.statusCounts);
+        setLastDryRun(body.lastDryRun);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -370,17 +401,20 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     setError(null);
 
     try {
-      const response = await fetch("/api/preventive-maintenance/notifications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        "/api/preventive-maintenance/notifications",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "dismiss_all",
+            status: statusFilter,
+            triggerType: triggerFilter === "all" ? undefined : triggerFilter,
+          }),
         },
-        body: JSON.stringify({
-          action: "dismiss_all",
-          status: statusFilter,
-          triggerType: triggerFilter === "all" ? undefined : triggerFilter,
-        }),
-      });
+      );
       const body = (await response.json()) as
         | { dismissedCount: number }
         | { error?: string };
@@ -497,7 +531,9 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   key={filter.value}
                   type="button"
                   size="sm"
-                  variant={statusFilter === filter.value ? "default" : "outline"}
+                  variant={
+                    statusFilter === filter.value ? "default" : "outline"
+                  }
                   onClick={() => setStatusFilter(filter.value)}
                 >
                   {filter.label}
@@ -515,7 +551,9 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   key={filter.value}
                   type="button"
                   size="sm"
-                  variant={triggerFilter === filter.value ? "default" : "outline"}
+                  variant={
+                    triggerFilter === filter.value ? "default" : "outline"
+                  }
                   onClick={() => setTriggerFilter(filter.value)}
                 >
                   {filter.label}
@@ -569,6 +607,35 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   ? "Scan pending notifications for email and SMS attempts."
                   : `Scan pending ${labelFromSnakeCase(triggerFilter).toLowerCase()} notifications for email and SMS attempts.`}
               </p>
+              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="font-semibold text-slate-700">
+                    Last dry run
+                  </span>
+                  {lastDryRun ? (
+                    <>
+                      <span>{formatDateTime(lastDryRun.preparedAt)}</span>
+                      <span>|</span>
+                      <span>{lastDryRunResultLabel(lastDryRun)}</span>
+                    </>
+                  ) : (
+                    <span>
+                      No dry-run state has been prepared for this filter.
+                    </span>
+                  )}
+                </div>
+                {lastDryRun ? (
+                  <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-4">
+                    <span>{lastDryRun.attemptCount} total attempts</span>
+                    <span>{lastDryRun.statusCounts.queued} queued</span>
+                    <span>{lastDryRun.statusCounts.skipped} skipped</span>
+                    <span>
+                      {lastDryRun.missingRecipientCount} missing recipients
+                    </span>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               {dispatchResult ? (
@@ -705,14 +772,19 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       </p>
                       <PmDeliveryAttemptSummary
                         attempts={notification.deliveryAttempts}
+                        diagnostics
                       />
                       <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-3">
                         <div>
-                          <span className="font-medium text-slate-700">Asset:</span>{" "}
+                          <span className="font-medium text-slate-700">
+                            Asset:
+                          </span>{" "}
                           {assetLabel(notification)}
                         </div>
                         <div>
-                          <span className="font-medium text-slate-700">Window:</span>{" "}
+                          <span className="font-medium text-slate-700">
+                            Window:
+                          </span>{" "}
                           {scheduledLabel ?? "Not scheduled"}
                         </div>
                         <div>

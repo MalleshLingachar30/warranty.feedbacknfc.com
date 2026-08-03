@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import {
+  getPreventiveMaintenanceNotificationLastDryRunSummary,
   parsePreventiveMaintenanceNotificationLimit,
   parsePreventiveMaintenanceNotificationStatus,
   parsePreventiveMaintenanceNotificationTrigger,
@@ -53,8 +54,8 @@ export async function GET(request: Request) {
     const status =
       requestedStatus === "all"
         ? null
-        : parsePreventiveMaintenanceNotificationStatus(requestedStatus) ??
-          "pending";
+        : (parsePreventiveMaintenanceNotificationStatus(requestedStatus) ??
+          "pending");
     const triggerType = parsePreventiveMaintenanceNotificationTrigger(
       url.searchParams.get("triggerType"),
     );
@@ -76,6 +77,7 @@ export async function GET(request: Request) {
       dismissedCount,
       deliveredCount,
       cancelledCount,
+      lastDryRun,
     ] = await Promise.all([
       db.preventiveMaintenanceNotificationIntent.findMany({
         where,
@@ -122,6 +124,7 @@ export async function GET(request: Request) {
           ...(triggerType ? { triggerType } : {}),
         },
       }),
+      getPreventiveMaintenanceNotificationLastDryRunSummary(where),
     ]);
 
     return NextResponse.json({
@@ -136,6 +139,7 @@ export async function GET(request: Request) {
         dismissed: dismissedCount,
         cancelled: cancelledCount,
       },
+      lastDryRun,
     });
   } catch (error) {
     return jsonError(error);

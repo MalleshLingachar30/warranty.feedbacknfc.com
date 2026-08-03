@@ -9,6 +9,8 @@ const SMOKE_TRIGGER =
   process.env.PM_NOTIFICATION_OPERATOR_TRIGGER || "scheduled";
 const SMOKE_TITLE = "PM operator delivery smoke";
 const DEFAULT_CHANNELS = ["email", "sms"];
+const SCHEDULED_FILTER_TRIGGER = "scheduled";
+const CONTROL_FILTER_TRIGGER = "started";
 const prisma = new PrismaClient();
 
 function assert(condition, message) {
@@ -41,6 +43,31 @@ function parseDatabaseTarget() {
     schema,
     isProductionLike,
   };
+}
+
+function parseCleanupMode() {
+  const cleanupArg = process.argv
+    .slice(2)
+    .find((arg) => arg.startsWith("--cleanup="));
+  const requestedMode =
+    cleanupArg?.slice("--cleanup=".length) ||
+    process.env.PM_NOTIFICATION_OPERATOR_SMOKE_CLEANUP ||
+    "none";
+
+  if (["none", "archive", "delete"].includes(requestedMode)) {
+    return requestedMode;
+  }
+
+  throw new Error(
+    "Invalid cleanup mode. Use --cleanup=archive for non-destructive archive or --cleanup=delete --confirm-delete for deletion.",
+  );
+}
+
+function shouldConfirmDelete() {
+  return (
+    process.argv.includes("--confirm-delete") ||
+    process.env.PM_NOTIFICATION_OPERATOR_SMOKE_CONFIRM_DELETE === "1"
+  );
 }
 
 function buildOperatorVisibilityWhere(operator) {
@@ -154,6 +181,21 @@ async function createDryRunAttempts(createInputs) {
           },
         )
       : { count: 0 };
+  const preparedAt = createInputs.length > 0 ? new Date() : null;
+
+  if (preparedAt) {
+    await prisma.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+      where: {
+        dryRun: true,
+        dedupeKey: {
+          in: createInputs.map((input) => input.dedupeKey),
+        },
+      },
+      data: {
+        updatedAt: preparedAt,
+      },
+    });
+  }
 
   const attempts =
     createInputs.length > 0
@@ -180,19 +222,136 @@ async function createDryRunAttempts(createInputs) {
             recipientAddress: true,
             skipReason: true,
             dedupeKey: true,
+            updatedAt: true,
           },
         })
       : [];
 
   return {
+    preparedAt: preparedAt ? preparedAt.toISOString() : null,
     createdAttemptCount: result.count,
     existingAttemptCount: Math.max(0, createInputs.length - result.count),
     attempts,
   };
 }
 
+async function upsertSmokeNotification({
+  event,
+  operator,
+  dedupeKey,
+  title,
+  triggerType,
+}) {
+  return prisma.preventiveMaintenanceNotificationIntent.upsert({
+    where: {
+      dedupeKey,
+    },
+    create: {
+      eventId: event.id,
+      organizationId: event.organizationId,
+      triggerType,
+      recipientRole:
+        operator.role === "manufacturer_admin" ||
+        operator.role === "internal_label_admin"
+          ? "manufacturer"
+          : "service_center",
+      channel: "in_app",
+      status: "pending",
+      recipientUserId: operator.id,
+      recipientOrganizationId: operator.organizationId,
+      title,
+      message: `Dry-run delivery smoke for ${event.eventNumber}.`,
+      dedupeKey,
+      metadata: {
+        smoke: "operator_delivery",
+      },
+    },
+    update: {
+      eventId: event.id,
+      organizationId: event.organizationId,
+      triggerType,
+      status: "pending",
+      recipientUserId: operator.id,
+      recipientOrganizationId: operator.organizationId,
+      title,
+      message: `Dry-run delivery smoke for ${event.eventNumber}.`,
+      metadata: {
+        smoke: "operator_delivery",
+        refreshedAt: new Date().toISOString(),
+      },
+    },
+    select: {
+      id: true,
+      eventId: true,
+      organizationId: true,
+      triggerType: true,
+      recipientRole: true,
+      title: true,
+      status: true,
+    },
+  });
+}
+
+async function applySmokeCleanup({
+  cleanupMode,
+  confirmDelete,
+  notifications,
+}) {
+  if (cleanupMode === "none") {
+    return {
+      mode: cleanupMode,
+      archivedCount: 0,
+      deletedCount: 0,
+    };
+  }
+
+  const notificationIds = notifications.map((notification) => notification.id);
+
+  if (cleanupMode === "archive") {
+    const result =
+      await prisma.preventiveMaintenanceNotificationIntent.updateMany({
+        where: {
+          id: {
+            in: notificationIds,
+          },
+        },
+        data: {
+          status: "dismissed",
+        },
+      });
+
+    return {
+      mode: cleanupMode,
+      archivedCount: result.count,
+      deletedCount: 0,
+    };
+  }
+
+  if (!confirmDelete) {
+    throw new Error(
+      "Deleting smoke notifications requires --cleanup=delete --confirm-delete.",
+    );
+  }
+
+  const result =
+    await prisma.preventiveMaintenanceNotificationIntent.deleteMany({
+      where: {
+        id: {
+          in: notificationIds,
+        },
+      },
+    });
+
+  return {
+    mode: cleanupMode,
+    archivedCount: 0,
+    deletedCount: result.count,
+  };
+}
+
 async function main() {
   const target = parseDatabaseTarget();
+  const cleanupMode = parseCleanupMode();
   const operator = await prisma.user.findFirst({
     where: {
       email: OPERATOR_EMAIL,
@@ -242,60 +401,38 @@ async function main() {
     `No PM event found for operator organization ${operator.organization?.name || operator.organizationId}.`,
   );
 
-  const smokeDedupeKey = `pm-operator-delivery-smoke:${operator.id}`;
-  const notification =
-    await prisma.preventiveMaintenanceNotificationIntent.upsert({
-      where: {
-        dedupeKey: smokeDedupeKey,
-      },
-      create: {
-        eventId: event.id,
-        organizationId: event.organizationId,
-        triggerType: SMOKE_TRIGGER,
-        recipientRole:
-          operator.role === "manufacturer_admin" ||
-          operator.role === "internal_label_admin"
-            ? "manufacturer"
-            : "service_center",
-        channel: "in_app",
-        status: "pending",
-        recipientUserId: operator.id,
-        recipientOrganizationId: operator.organizationId,
-        title: SMOKE_TITLE,
-        message: `Dry-run delivery smoke for ${event.eventNumber}.`,
-        dedupeKey: smokeDedupeKey,
-        metadata: {
-          smoke: "operator_delivery",
-        },
-      },
-      update: {
-        eventId: event.id,
-        organizationId: event.organizationId,
-        triggerType: SMOKE_TRIGGER,
-        status: "pending",
-        recipientUserId: operator.id,
-        recipientOrganizationId: operator.organizationId,
-        title: SMOKE_TITLE,
-        message: `Dry-run delivery smoke for ${event.eventNumber}.`,
-        metadata: {
-          smoke: "operator_delivery",
-          refreshedAt: new Date().toISOString(),
-        },
-      },
-      select: {
-        id: true,
-        eventId: true,
-        organizationId: true,
-        triggerType: true,
-        recipientRole: true,
-        title: true,
-        status: true,
-      },
-    });
+  const notification = await upsertSmokeNotification({
+    event,
+    operator,
+    dedupeKey: `pm-operator-delivery-smoke:${operator.id}`,
+    title: SMOKE_TITLE,
+    triggerType: SMOKE_TRIGGER,
+  });
+  const scheduledFilterNotification = await upsertSmokeNotification({
+    event,
+    operator,
+    dedupeKey: `pm-operator-delivery-smoke:${operator.id}:scheduled-filter`,
+    title: `${SMOKE_TITLE} scheduled filter`,
+    triggerType: SCHEDULED_FILTER_TRIGGER,
+  });
+  const controlFilterNotification = await upsertSmokeNotification({
+    event,
+    operator,
+    dedupeKey: `pm-operator-delivery-smoke:${operator.id}:filter-control`,
+    title: `${SMOKE_TITLE} filter control`,
+    triggerType: CONTROL_FILTER_TRIGGER,
+  });
+  const smokeNotifications = [
+    notification,
+    scheduledFilterNotification,
+    controlFilterNotification,
+  ];
 
   await prisma.preventiveMaintenanceNotificationDeliveryAttempt.deleteMany({
     where: {
-      notificationIntentId: notification.id,
+      notificationIntentId: {
+        in: smokeNotifications.map((smokeNotification) => smokeNotification.id),
+      },
     },
   });
 
@@ -317,6 +454,44 @@ async function main() {
   );
   const firstDispatch = await createDryRunAttempts(createInputs);
   const secondDispatch = await createDryRunAttempts(createInputs);
+  const scheduledFilterNotifications =
+    await prisma.preventiveMaintenanceNotificationIntent.findMany({
+      where: {
+        ...visibilityWhere,
+        id: {
+          in: [scheduledFilterNotification.id, controlFilterNotification.id],
+        },
+        status: "pending",
+        triggerType: SCHEDULED_FILTER_TRIGGER,
+      },
+      select: {
+        id: true,
+        organizationId: true,
+        triggerType: true,
+        recipientRole: true,
+        title: true,
+        status: true,
+      },
+    });
+  const scheduledFilterInputs = scheduledFilterNotifications.flatMap(
+    (filteredNotification) =>
+      DEFAULT_CHANNELS.map((channel) =>
+        buildDeliveryAttemptInput({
+          notification: filteredNotification,
+          operator,
+          channel,
+        }),
+      ),
+  );
+  const scheduledFilterDispatch = await createDryRunAttempts(
+    scheduledFilterInputs,
+  );
+  const controlAttemptCount =
+    await prisma.preventiveMaintenanceNotificationDeliveryAttempt.count({
+      where: {
+        notificationIntentId: controlFilterNotification.id,
+      },
+    });
 
   assert(
     firstDispatch.createdAttemptCount === createInputs.length,
@@ -329,6 +504,19 @@ async function main() {
   assert(
     secondDispatch.existingAttemptCount === createInputs.length,
     `Expected second dry run to report ${createInputs.length} existing attempts, got ${secondDispatch.existingAttemptCount}.`,
+  );
+  assert(
+    scheduledFilterNotifications.length === 1 &&
+      scheduledFilterNotifications[0].id === scheduledFilterNotification.id,
+    "Scheduled trigger filter did not isolate the scheduled smoke notification.",
+  );
+  assert(
+    scheduledFilterDispatch.createdAttemptCount === DEFAULT_CHANNELS.length,
+    `Expected scheduled trigger dry run to create ${DEFAULT_CHANNELS.length} attempts, created ${scheduledFilterDispatch.createdAttemptCount}.`,
+  );
+  assert(
+    controlAttemptCount === 0,
+    `Scheduled trigger dry run created ${controlAttemptCount} attempts for the non-scheduled control notification.`,
   );
 
   const visibleWithAttempts =
@@ -365,13 +553,11 @@ async function main() {
     "Every smoke delivery attempt must remain dry-run only.",
   );
 
-  if (process.env.PM_NOTIFICATION_OPERATOR_SMOKE_CLEANUP === "1") {
-    await prisma.preventiveMaintenanceNotificationIntent.delete({
-      where: {
-        id: notification.id,
-      },
-    });
-  }
+  const cleanup = await applySmokeCleanup({
+    cleanupMode,
+    confirmDelete: shouldConfirmDelete(),
+    notifications: smokeNotifications,
+  });
 
   process.stdout.write(
     `${JSON.stringify(
@@ -389,16 +575,24 @@ async function main() {
           status: notification.status,
           triggerType: notification.triggerType,
         },
+        scheduledFilter: {
+          notificationId: scheduledFilterNotification.id,
+          controlNotificationId: controlFilterNotification.id,
+          createdAttemptCount: scheduledFilterDispatch.createdAttemptCount,
+          controlAttemptCount,
+        },
         firstDispatch: {
+          preparedAt: firstDispatch.preparedAt,
           createdAttemptCount: firstDispatch.createdAttemptCount,
           existingAttemptCount: firstDispatch.existingAttemptCount,
         },
         secondDispatch: {
+          preparedAt: secondDispatch.preparedAt,
           createdAttemptCount: secondDispatch.createdAttemptCount,
           existingAttemptCount: secondDispatch.existingAttemptCount,
         },
         attempts: visibleWithAttempts.deliveryAttempts,
-        cleanedUp: process.env.PM_NOTIFICATION_OPERATOR_SMOKE_CLEANUP === "1",
+        cleanup,
       },
       null,
       2,

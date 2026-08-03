@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, MessageSquare } from "lucide-react";
+import { Clock3, Mail, MessageSquare } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -10,12 +10,12 @@ import type {
   SerializedPreventiveMaintenanceDeliveryAttemptForView,
 } from "@/lib/preventive-maintenance-delivery-attempts";
 
-type PmDeliveryAttempt =
-  SerializedPreventiveMaintenanceDeliveryAttemptForView;
+type PmDeliveryAttempt = SerializedPreventiveMaintenanceDeliveryAttemptForView;
 
 interface PmDeliveryAttemptSummaryProps {
   attempts: PmDeliveryAttempt[];
   compact?: boolean;
+  diagnostics?: boolean;
 }
 
 function statusTone(status: PreventiveMaintenanceDeliveryAttemptStatus) {
@@ -49,6 +49,14 @@ function labelFromSnakeCase(value: string) {
     .join(" ");
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(value));
+}
+
 function deliveryDetail(attempt: PmDeliveryAttempt) {
   if (attempt.status === "failed" && attempt.errorMessage) {
     return attempt.errorMessage;
@@ -74,10 +82,7 @@ function DeliveryAttemptBadge({ attempt }: { attempt: PmDeliveryAttempt }) {
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <Badge
         variant="outline"
-        className={cn(
-          "gap-1 capitalize",
-          statusTone(attempt.status),
-        )}
+        className={cn("gap-1 capitalize", statusTone(attempt.status))}
       >
         {channelIcon(attempt.channel)}
         {labelFromSnakeCase(attempt.status)}
@@ -105,6 +110,7 @@ function DeliveryAttemptBadge({ attempt }: { attempt: PmDeliveryAttempt }) {
 export function PmDeliveryAttemptSummary({
   attempts,
   compact = false,
+  diagnostics = false,
 }: PmDeliveryAttemptSummaryProps) {
   const latestAttempt = attempts[0] ?? null;
 
@@ -140,7 +146,8 @@ export function PmDeliveryAttemptSummary({
           Delivery
         </p>
         <p className="text-[11px] text-slate-500">
-          {attempts.length} recent {attempts.length === 1 ? "attempt" : "attempts"}
+          {attempts.length} recent{" "}
+          {attempts.length === 1 ? "attempt" : "attempts"}
         </p>
       </div>
       <div className="mt-2 space-y-2">
@@ -157,6 +164,48 @@ export function PmDeliveryAttemptSummary({
                 <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">
                   {detail}
                 </p>
+              ) : null}
+              {diagnostics ? (
+                <div className="mt-2 grid gap-1.5 rounded-md bg-white px-2 py-2 text-[11px] text-slate-500 md:grid-cols-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Clock3 className="h-3 w-3 shrink-0 text-slate-400" />
+                    <span className="font-medium text-slate-600">Created</span>
+                    <span className="truncate">
+                      {formatDateTime(attempt.createdAt)}
+                    </span>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Clock3 className="h-3 w-3 shrink-0 text-slate-400" />
+                    <span className="font-medium text-slate-600">Updated</span>
+                    <span className="truncate">
+                      {formatDateTime(attempt.updatedAt)}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-medium text-slate-600">
+                      Recipient:
+                    </span>{" "}
+                    <span className="truncate">
+                      {attempt.recipientAddressMasked ?? "Missing"}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-medium text-slate-600">
+                      Provider:
+                    </span>{" "}
+                    <span className="truncate">
+                      {attempt.providerMessageId ?? "Not assigned"}
+                    </span>
+                  </div>
+                  <div className="min-w-0 md:col-span-2">
+                    <span className="font-medium text-slate-600">
+                      Diagnostic:
+                    </span>{" "}
+                    <span className="break-words">
+                      {detail ?? "No provider error or skip reason recorded"}
+                    </span>
+                  </div>
+                </div>
               ) : null}
             </div>
           );

@@ -39,7 +39,7 @@ export const preventiveMaintenanceNotificationSelect =
       orderBy: {
         updatedAt: "desc",
       },
-      take: 3,
+      take: 6,
       select: {
         id: true,
         channel: true,
@@ -110,6 +110,20 @@ export type PreventiveMaintenanceNotificationAudience = {
   where: Prisma.PreventiveMaintenanceNotificationIntentWhereInput;
 };
 
+export type SerializedPreventiveMaintenanceLastDryRunSummary = {
+  preparedAt: string;
+  attemptCount: number;
+  statusCounts: {
+    queued: number;
+    sending: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+  };
+  missingRecipientCount: number;
+  dryRunSkipCount: number;
+};
+
 export const PREVENTIVE_MAINTENANCE_NOTIFICATION_STATUSES = [
   "pending",
   "delivered",
@@ -162,6 +176,84 @@ export function parsePreventiveMaintenanceNotificationLimit(value: unknown) {
   return Math.min(parsed, 50);
 }
 
+export async function getPreventiveMaintenanceNotificationLastDryRunSummary(
+  notificationWhere: Prisma.PreventiveMaintenanceNotificationIntentWhereInput,
+): Promise<SerializedPreventiveMaintenanceLastDryRunSummary | null> {
+  const attemptWhere: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput =
+    {
+      dryRun: true,
+      notificationIntent: {
+        is: notificationWhere,
+      },
+    };
+
+  const [
+    latestAttempt,
+    statusGroups,
+    missingRecipientCount,
+    dryRunSkipCount,
+    attemptCount,
+  ] = await Promise.all([
+    db.preventiveMaintenanceNotificationDeliveryAttempt.findFirst({
+      where: attemptWhere,
+      orderBy: {
+        updatedAt: "desc",
+      },
+      select: {
+        updatedAt: true,
+      },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.groupBy({
+      by: ["status"],
+      where: attemptWhere,
+      _count: {
+        _all: true,
+      },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.count({
+      where: {
+        ...attemptWhere,
+        skipReason: {
+          startsWith: "missing_recipient_",
+        },
+      },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.count({
+      where: {
+        ...attemptWhere,
+        skipReason: "dry_run",
+      },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.count({
+      where: attemptWhere,
+    }),
+  ]);
+
+  if (!latestAttempt) {
+    return null;
+  }
+
+  const statusCounts = {
+    queued: 0,
+    sending: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+  };
+
+  for (const group of statusGroups) {
+    statusCounts[group.status] = group._count._all;
+  }
+
+  return {
+    preparedAt: latestAttempt.updatedAt.toISOString(),
+    attemptCount,
+    statusCounts,
+    missingRecipientCount,
+    dryRunSkipCount,
+  };
+}
+
 export async function resolvePreventiveMaintenanceNotificationAudience(): Promise<PreventiveMaintenanceNotificationAudience> {
   const auth = await getOptionalAuth();
 
@@ -178,21 +270,20 @@ export async function resolvePreventiveMaintenanceNotificationAudience(): Promis
     isFieldAdminRole(role) && dbUser.organizationId
       ? dbUser.organizationId
       : null;
-  const serviceCenterIds =
-    serviceCenterOrganizationId
-      ? await withDatabaseRetry(() =>
-          db.serviceCenter
-            .findMany({
-              where: {
-                organizationId: serviceCenterOrganizationId,
-              },
-              select: {
-                id: true,
-              },
-            })
-            .then((rows) => rows.map((row) => row.id)),
-        )
-      : [];
+  const serviceCenterIds = serviceCenterOrganizationId
+    ? await withDatabaseRetry(() =>
+        db.serviceCenter
+          .findMany({
+            where: {
+              organizationId: serviceCenterOrganizationId,
+            },
+            select: {
+              id: true,
+            },
+          })
+          .then((rows) => rows.map((row) => row.id)),
+      )
+    : [];
 
   return {
     clerkUserId: auth.userId,
@@ -226,10 +317,7 @@ export function buildPreventiveMaintenanceNotificationVisibilityWhere(input: {
 
   const surface = getWorkspaceSurface(input.role);
 
-  if (
-    surface === "manufacturer" &&
-    input.organizationId
-  ) {
+  if (surface === "manufacturer" && input.organizationId) {
     or.push({
       recipientRole: "manufacturer",
       recipientOrganizationId: input.organizationId,

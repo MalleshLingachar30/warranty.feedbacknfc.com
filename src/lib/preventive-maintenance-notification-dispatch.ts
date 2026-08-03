@@ -45,6 +45,7 @@ export type DispatchPreventiveMaintenanceNotificationsInput = {
 export type DispatchPreventiveMaintenanceNotificationsResult = {
   dryRun: boolean;
   channels: PreventiveMaintenanceDispatchChannel[];
+  preparedAt: string | null;
   scannedIntentCount: number;
   candidateAttemptCount: number;
   createdAttemptCount: number;
@@ -200,6 +201,22 @@ export async function dispatchPreventiveMaintenanceNotifications(
           skipDuplicates: true,
         })
       : { count: 0 };
+  const preparedAt =
+    input.dryRun && createInputs.length > 0 ? new Date() : null;
+
+  if (preparedAt) {
+    await db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+      where: {
+        dryRun: true,
+        dedupeKey: {
+          in: createInputs.map((attempt) => attempt.dedupeKey),
+        },
+      },
+      data: {
+        updatedAt: preparedAt,
+      },
+    });
+  }
 
   const attempts =
     createInputs.length > 0
@@ -260,6 +277,7 @@ export async function dispatchPreventiveMaintenanceNotifications(
   return {
     dryRun: input.dryRun,
     channels: input.channels,
+    preparedAt: preparedAt?.toISOString() ?? null,
     scannedIntentCount: intents.length,
     candidateAttemptCount: createInputs.length,
     createdAttemptCount: createResult.count,
