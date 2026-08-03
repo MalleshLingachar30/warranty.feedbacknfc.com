@@ -8,6 +8,10 @@ import {
 
 import { db } from "@/lib/db";
 import {
+  serializePreventiveMaintenanceDeliveryAttemptForView,
+  type SerializedPreventiveMaintenanceDeliveryAttemptForView,
+} from "@/lib/preventive-maintenance-delivery-attempts";
+import {
   getPreventiveMaintenanceEmailDeliveryConfiguration,
   sendPreventiveMaintenanceEmailWithResend,
 } from "@/lib/preventive-maintenance-email-delivery";
@@ -23,9 +27,10 @@ export const PREVENTIVE_MAINTENANCE_DELIVERY_CHANNELS = [
 export type PreventiveMaintenanceDispatchChannel =
   (typeof PREVENTIVE_MAINTENANCE_DELIVERY_CHANNELS)[number];
 
-type DispatchableNotificationIntent = Prisma.PreventiveMaintenanceNotificationIntentGetPayload<{
-  select: typeof dispatchableNotificationIntentSelect;
-}>;
+type DispatchableNotificationIntent =
+  Prisma.PreventiveMaintenanceNotificationIntentGetPayload<{
+    select: typeof dispatchableNotificationIntentSelect;
+  }>;
 
 export type DispatchPreventiveMaintenanceNotificationsInput = {
   audience: PreventiveMaintenanceNotificationAudience;
@@ -54,7 +59,8 @@ export type DispatchPreventiveMaintenanceNotificationsResult = {
   attempts: SerializedPreventiveMaintenanceDeliveryAttempt[];
 };
 
-type DeliveryAttemptCreateInput = Prisma.PreventiveMaintenanceNotificationDeliveryAttemptCreateManyInput;
+type DeliveryAttemptCreateInput =
+  Prisma.PreventiveMaintenanceNotificationDeliveryAttemptCreateManyInput;
 
 type DeliveryAttemptCandidate = {
   createInput: DeliveryAttemptCreateInput;
@@ -62,22 +68,14 @@ type DeliveryAttemptCandidate = {
   message: string;
 };
 
-type SerializedPreventiveMaintenanceDeliveryAttempt = {
-  id: string;
-  notificationIntentId: string;
-  organizationId: string;
-  channel: PreventiveMaintenanceDispatchChannel;
-  status: "queued" | "sending" | "sent" | "failed" | "skipped";
-  dryRun: boolean;
-  recipientAddress: string | null;
-  providerMessageId: string | null;
-  errorMessage: string | null;
-  skipReason: string | null;
-  attemptNumber: number;
-  dedupeKey: string;
-  createdAt: string;
-  updatedAt: string;
-};
+type SerializedPreventiveMaintenanceDeliveryAttempt =
+  SerializedPreventiveMaintenanceDeliveryAttemptForView & {
+    id: string;
+    notificationIntentId: string;
+    organizationId: string;
+    channel: PreventiveMaintenanceDispatchChannel;
+    dedupeKey: string;
+  };
 
 const dispatchableNotificationIntentSelect =
   Prisma.validator<Prisma.PreventiveMaintenanceNotificationIntentSelect>()({
@@ -96,22 +94,24 @@ const dispatchableNotificationIntentSelect =
   });
 
 const deliveryAttemptSelect =
-  Prisma.validator<Prisma.PreventiveMaintenanceNotificationDeliveryAttemptSelect>()({
-    id: true,
-    notificationIntentId: true,
-    organizationId: true,
-    channel: true,
-    status: true,
-    dryRun: true,
-    recipientAddress: true,
-    providerMessageId: true,
-    errorMessage: true,
-    skipReason: true,
-    attemptNumber: true,
-    dedupeKey: true,
-    createdAt: true,
-    updatedAt: true,
-  });
+  Prisma.validator<Prisma.PreventiveMaintenanceNotificationDeliveryAttemptSelect>()(
+    {
+      id: true,
+      notificationIntentId: true,
+      organizationId: true,
+      channel: true,
+      status: true,
+      dryRun: true,
+      recipientAddress: true,
+      providerMessageId: true,
+      errorMessage: true,
+      skipReason: true,
+      attemptNumber: true,
+      dedupeKey: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  );
 
 export function canDispatchPreventiveMaintenanceNotifications(role: AppRole) {
   return (
@@ -158,10 +158,7 @@ export async function dispatchPreventiveMaintenanceNotifications(
   input: DispatchPreventiveMaintenanceNotificationsInput,
 ): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
   if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {
-    throw new PreventiveMaintenanceNotificationApiError(
-      "Forbidden",
-      403,
-    );
+    throw new PreventiveMaintenanceNotificationApiError("Forbidden", 403);
   }
 
   if (input.channels.length === 0) {
@@ -288,7 +285,9 @@ export async function dispatchPreventiveMaintenanceNotificationsDryRun(
   return dispatchPreventiveMaintenanceNotifications(input);
 }
 
-function validateDispatchMode(input: DispatchPreventiveMaintenanceNotificationsInput) {
+function validateDispatchMode(
+  input: DispatchPreventiveMaintenanceNotificationsInput,
+) {
   if (input.dryRun) {
     return;
   }
@@ -613,20 +612,13 @@ function serializeDeliveryAttempt(
     select: typeof deliveryAttemptSelect;
   }>,
 ): SerializedPreventiveMaintenanceDeliveryAttempt {
+  const serializedForView =
+    serializePreventiveMaintenanceDeliveryAttemptForView(attempt);
+
   return {
-    id: attempt.id,
+    ...serializedForView,
     notificationIntentId: attempt.notificationIntentId,
     organizationId: attempt.organizationId,
-    channel: attempt.channel,
-    status: attempt.status,
-    dryRun: attempt.dryRun,
-    recipientAddress: attempt.recipientAddress,
-    providerMessageId: attempt.providerMessageId,
-    errorMessage: attempt.errorMessage,
-    skipReason: attempt.skipReason,
-    attemptNumber: attempt.attemptNumber,
     dedupeKey: attempt.dedupeKey,
-    createdAt: attempt.createdAt.toISOString(),
-    updatedAt: attempt.updatedAt.toISOString(),
   };
 }
