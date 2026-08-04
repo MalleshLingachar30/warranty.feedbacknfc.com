@@ -2,6 +2,15 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 
+import { maskPreventiveMaintenanceDeliveryRecipientAddress } from "@/lib/preventive-maintenance-delivery-attempts";
+import {
+  isValidEmailSender,
+  resolvePreventiveMaintenanceEmailDeliveryReadiness,
+  type PreventiveMaintenanceEmailDeliveryReadiness,
+} from "@/lib/preventive-maintenance-email-readiness";
+
+export type { PreventiveMaintenanceEmailDeliveryReadiness } from "@/lib/preventive-maintenance-email-readiness";
+
 type ResendEmailDeliveryInput = {
   to: string;
   subject: string;
@@ -32,7 +41,27 @@ type EmailDeliveryConfiguration =
       skipReason:
         | "email_delivery_disabled"
         | "missing_resend_api_key"
-        | "missing_resend_from_email";
+        | "missing_resend_from_email"
+        | "invalid_resend_from_email";
+    };
+
+type EmailCanaryConfiguration =
+  | {
+      enabled: true;
+      recipient: string;
+      recipientAddressMasked: string;
+    }
+  | {
+      enabled: false;
+      recipientAddressMasked: string | null;
+      skipReason:
+        | "email_canary_disabled"
+        | "missing_email_canary_recipient"
+        | "invalid_email_canary_recipient"
+        | "email_delivery_disabled"
+        | "missing_resend_api_key"
+        | "missing_resend_from_email"
+        | "invalid_resend_from_email";
     };
 
 const RESEND_EMAILS_ENDPOINT = "https://api.resend.com/emails";
@@ -61,10 +90,73 @@ export function getPreventiveMaintenanceEmailDeliveryConfiguration(): EmailDeliv
     };
   }
 
+  if (!isValidEmailSender(from)) {
+    return {
+      enabled: false,
+      skipReason: "invalid_resend_from_email",
+    };
+  }
+
   return {
     enabled: true,
     apiKey,
     from,
+  };
+}
+
+export function getPreventiveMaintenanceEmailDeliveryReadiness(): PreventiveMaintenanceEmailDeliveryReadiness {
+  return resolvePreventiveMaintenanceEmailDeliveryReadiness(
+    process.env,
+    (recipient) =>
+      maskPreventiveMaintenanceDeliveryRecipientAddress(recipient, "email") ??
+      "***",
+  );
+}
+
+export function getPreventiveMaintenanceEmailCanaryConfiguration(): EmailCanaryConfiguration {
+  const readiness = getPreventiveMaintenanceEmailDeliveryReadiness();
+
+  if (!readiness.canary.enabled) {
+    return {
+      enabled: false,
+      recipientAddressMasked: readiness.canary.recipientAddressMasked,
+      skipReason: "email_canary_disabled",
+    };
+  }
+
+  const emailConfiguration =
+    getPreventiveMaintenanceEmailDeliveryConfiguration();
+  if (!emailConfiguration.enabled) {
+    return {
+      enabled: false,
+      recipientAddressMasked: readiness.canary.recipientAddressMasked,
+      skipReason: emailConfiguration.skipReason,
+    };
+  }
+
+  const recipient = process.env.PM_NOTIFICATION_EMAIL_CANARY_RECIPIENT?.trim();
+  if (!recipient) {
+    return {
+      enabled: false,
+      recipientAddressMasked: null,
+      skipReason: "missing_email_canary_recipient",
+    };
+  }
+
+  if (!readiness.canary.recipientConfigured) {
+    return {
+      enabled: false,
+      recipientAddressMasked: null,
+      skipReason: "invalid_email_canary_recipient",
+    };
+  }
+
+  return {
+    enabled: true,
+    recipient,
+    recipientAddressMasked:
+      maskPreventiveMaintenanceDeliveryRecipientAddress(recipient, "email") ??
+      "***",
   };
 }
 

@@ -15,6 +15,11 @@ import {
   getPreventiveMaintenanceEmailDeliveryConfiguration,
   sendPreventiveMaintenanceEmailWithResend,
 } from "@/lib/preventive-maintenance-email-delivery";
+import {
+  finishPreventiveMaintenanceNotificationAuditSafely,
+  preventiveMaintenanceAuditErrorMessage,
+  startPreventiveMaintenanceNotificationAudit,
+} from "@/lib/preventive-maintenance-notification-audit";
 import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 import type { AppRole } from "@/lib/roles";
@@ -156,6 +161,56 @@ export function parsePreventiveMaintenanceDispatchLimit(value: unknown) {
 }
 
 export async function dispatchPreventiveMaintenanceNotifications(
+  input: DispatchPreventiveMaintenanceNotificationsInput,
+): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
+  if (input.dryRun) {
+    return executePreventiveMaintenanceNotificationDispatch(input);
+  }
+
+  if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {
+    throw new PreventiveMaintenanceNotificationApiError("Forbidden", 403);
+  }
+
+  const audit = await startPreventiveMaintenanceNotificationAudit({
+    audience: input.audience,
+    operation: "live_dispatch",
+    channel: "email",
+    metadata: {
+      channels: input.channels,
+      limit: input.limit,
+      triggerType: input.triggerType ?? null,
+      retryFailed: input.retryFailed === true,
+      confirmationProvided: input.confirmLiveDelivery === true,
+    },
+  });
+
+  try {
+    const result =
+      await executePreventiveMaintenanceNotificationDispatch(input);
+    await finishPreventiveMaintenanceNotificationAuditSafely({
+      auditId: audit.id,
+      outcome:
+        result.failedAttemptCount > 0 ? "completed_with_failures" : "succeeded",
+      notificationIntentCount: result.scannedIntentCount,
+      deliveryAttemptCount: result.candidateAttemptCount,
+      providerCallCount: result.providerCallCount,
+    });
+    return result;
+  } catch (error) {
+    await finishPreventiveMaintenanceNotificationAuditSafely({
+      auditId: audit.id,
+      outcome:
+        error instanceof PreventiveMaintenanceNotificationApiError &&
+        error.status < 500
+          ? "rejected"
+          : "failed",
+      errorMessage: preventiveMaintenanceAuditErrorMessage(error),
+    });
+    throw error;
+  }
+}
+
+async function executePreventiveMaintenanceNotificationDispatch(
   input: DispatchPreventiveMaintenanceNotificationsInput,
 ): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
   if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {

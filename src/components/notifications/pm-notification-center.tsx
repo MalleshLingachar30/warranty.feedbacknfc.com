@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Bell,
   CalendarClock,
   Check,
@@ -11,8 +12,10 @@ import {
   ClipboardList,
   Inbox,
   Loader2,
+  MailCheck,
   RefreshCw,
   Send,
+  ShieldCheck,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +80,28 @@ type PmNotificationResponse = {
   filteredCount: number;
   statusCounts: Record<PmNotificationStatus, number>;
   lastDryRun: PmNotificationLastDryRun | null;
+  deliveryReadiness: PmNotificationDeliveryReadiness | null;
+};
+
+type PmNotificationDeliveryReadiness = {
+  provider: "resend";
+  liveEmail: {
+    status: "disabled" | "incomplete" | "ready";
+    enabled: boolean;
+    apiKeyConfigured: boolean;
+    fromEmailConfigured: boolean;
+    missingConfiguration: string[];
+  };
+  canary: {
+    status: "disabled" | "incomplete" | "ready";
+    enabled: boolean;
+    recipientConfigured: boolean;
+    recipientAddressMasked: string | null;
+    missingConfiguration: string[];
+  };
+  sms: {
+    status: "unsupported";
+  };
 };
 
 type PmNotificationLastDryRun = {
@@ -100,6 +125,14 @@ type PmNotificationDispatchResponse = {
   missingRecipientCount: number;
   queuedAttemptCount: number;
   skippedAttemptCount: number;
+};
+
+type PmNotificationCanaryResponse = {
+  ok: true;
+  auditId: string;
+  recipientAddressMasked: string;
+  providerMessageId: string | null;
+  sentAt: string;
 };
 
 interface PmNotificationCenterProps {
@@ -279,10 +312,16 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   const [lastDryRun, setLastDryRun] = useState<PmNotificationLastDryRun | null>(
     null,
   );
+  const [deliveryReadiness, setDeliveryReadiness] =
+    useState<PmNotificationDeliveryReadiness | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBulkDismissing, setIsBulkDismissing] = useState(false);
   const [isDispatchingDryRun, setIsDispatchingDryRun] = useState(false);
+  const [isSendingCanary, setIsSendingCanary] = useState(false);
+  const [canaryConfirmed, setCanaryConfirmed] = useState(false);
+  const [canaryResult, setCanaryResult] =
+    useState<PmNotificationCanaryResponse | null>(null);
   const [dispatchResult, setDispatchResult] =
     useState<PmNotificationDispatchResponse | null>(null);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(
@@ -338,6 +377,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setFilteredCount(body.filteredCount);
         setStatusCounts(body.statusCounts);
         setLastDryRun(body.lastDryRun);
+        setDeliveryReadiness(body.deliveryReadiness);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -485,6 +525,49 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     }
   }, [fetchNotifications, triggerFilter]);
 
+  const sendLiveCanary = useCallback(async () => {
+    setIsSendingCanary(true);
+    setError(null);
+    setCanaryResult(null);
+
+    try {
+      const response = await fetch(
+        "/api/preventive-maintenance/notifications/canary",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            confirmLiveCanary: canaryConfirmed,
+          }),
+        },
+      );
+      const body = (await response.json()) as
+        | PmNotificationCanaryResponse
+        | { error?: string };
+
+      if (!response.ok || !("ok" in body)) {
+        throw new Error(
+          "error" in body
+            ? (body.error ?? "Unable to send the live email canary.")
+            : "Unable to send the live email canary.",
+        );
+      }
+
+      setCanaryResult(body);
+      setCanaryConfirmed(false);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to send the live email canary.",
+      );
+    } finally {
+      setIsSendingCanary(false);
+    }
+  }, [canaryConfirmed]);
+
   const canDismissAll =
     !isLoading &&
     !isBulkDismissing &&
@@ -593,6 +676,181 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           </div>
         </div>
       </div>
+
+      {canDispatchDryRun && deliveryReadiness ? (
+        <div
+          className={cn(
+            "rounded-lg border p-3",
+            deliveryReadiness.liveEmail.status === "ready"
+              ? "border-rose-300 bg-rose-50"
+              : deliveryReadiness.liveEmail.status === "incomplete"
+                ? "border-amber-300 bg-amber-50"
+                : "border-emerald-200 bg-emerald-50/60",
+          )}
+        >
+          <div className="flex items-start gap-3">
+            {deliveryReadiness.liveEmail.status === "disabled" ? (
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+            ) : (
+              <AlertTriangle
+                className={cn(
+                  "mt-0.5 h-4 w-4 shrink-0",
+                  deliveryReadiness.liveEmail.status === "ready"
+                    ? "text-rose-700"
+                    : "text-amber-700",
+                )}
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+                  Live delivery readiness
+                </p>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "uppercase",
+                    deliveryReadiness.liveEmail.status === "ready"
+                      ? "border-rose-300 bg-rose-100 text-rose-800"
+                      : deliveryReadiness.liveEmail.status === "incomplete"
+                        ? "border-amber-300 bg-amber-100 text-amber-800"
+                        : "border-emerald-300 bg-emerald-100 text-emerald-800",
+                  )}
+                >
+                  {deliveryReadiness.liveEmail.status === "ready"
+                    ? "Live email enabled"
+                    : deliveryReadiness.liveEmail.status}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-slate-700">
+                {deliveryReadiness.liveEmail.status === "ready"
+                  ? "Warning: confirmed live email dispatches can call Resend. Normal notification sends are not initiated from this panel."
+                  : deliveryReadiness.liveEmail.status === "incomplete"
+                    ? `Live email is enabled but blocked by incomplete configuration: ${deliveryReadiness.liveEmail.missingConfiguration.join(", ")}.`
+                    : "The PM_NOTIFICATION_EMAIL_DELIVERY_ENABLED hard gate is off. Live PM email dispatch is blocked by default."}
+              </p>
+
+              <div className="mt-3 grid gap-2 lg:grid-cols-3">
+                <div className="rounded-md border border-slate-200 bg-white/80 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800">
+                      Email via Resend
+                    </span>
+                    <span className="text-[11px] font-medium uppercase text-slate-500">
+                      {deliveryReadiness.liveEmail.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    API key:{" "}
+                    {deliveryReadiness.liveEmail.apiKeyConfigured
+                      ? "configured"
+                      : "missing"}
+                    {" | "}
+                    Sender:{" "}
+                    {deliveryReadiness.liveEmail.fromEmailConfigured
+                      ? "configured"
+                      : "missing"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-white/80 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800">
+                      Internal email canary
+                    </span>
+                    <span className="text-[11px] font-medium uppercase text-slate-500">
+                      {deliveryReadiness.canary.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    Fixed recipient:{" "}
+                    {deliveryReadiness.canary.recipientAddressMasked ??
+                      "not configured"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-white/80 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-800">
+                      SMS delivery
+                    </span>
+                    <span className="text-[11px] font-medium uppercase text-slate-500">
+                      Unsupported
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    Live PM SMS sends remain blocked in this dispatcher.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-2 rounded-md border border-slate-200 bg-white/90 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <label
+                    htmlFor="confirm-pm-email-canary"
+                    className="flex items-start gap-2 text-xs font-medium text-slate-800"
+                  >
+                    <input
+                      id="confirm-pm-email-canary"
+                      type="checkbox"
+                      checked={canaryConfirmed}
+                      onChange={(event) =>
+                        setCanaryConfirmed(event.currentTarget.checked)
+                      }
+                      disabled={
+                        deliveryReadiness.canary.status !== "ready" ||
+                        isSendingCanary
+                      }
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-rose-700"
+                    />
+                    <span>
+                      I confirm this sends one real email only to{" "}
+                      {deliveryReadiness.canary.recipientAddressMasked ??
+                        "the configured internal mailbox"}
+                      .
+                    </span>
+                  </label>
+                  {deliveryReadiness.canary.status === "incomplete" ? (
+                    <p className="mt-1 pl-6 text-[11px] text-amber-800">
+                      Canary blocked by:{" "}
+                      {deliveryReadiness.canary.missingConfiguration.join(", ")}
+                      .
+                    </p>
+                  ) : deliveryReadiness.canary.status === "disabled" ? (
+                    <p className="mt-1 pl-6 text-[11px] text-slate-500">
+                      Canary sending requires
+                      PM_NOTIFICATION_EMAIL_CANARY_ENABLED=true.
+                    </p>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => void sendLiveCanary()}
+                  disabled={
+                    deliveryReadiness.canary.status !== "ready" ||
+                    !canaryConfirmed ||
+                    isSendingCanary
+                  }
+                >
+                  {isSendingCanary ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MailCheck className="h-4 w-4" />
+                  )}
+                  Send live canary
+                </Button>
+              </div>
+              {canaryResult ? (
+                <p className="mt-2 text-xs text-emerald-800">
+                  Canary sent to {canaryResult.recipientAddressMasked} at{" "}
+                  {formatDateTime(canaryResult.sentAt)}. Audit ID:{" "}
+                  {canaryResult.auditId}.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {canDispatchDryRun ? (
         <div className="rounded-lg border border-slate-200 bg-white p-3">
