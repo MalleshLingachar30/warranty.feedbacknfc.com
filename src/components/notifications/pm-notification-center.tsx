@@ -611,7 +611,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         ))}
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div
+        className="rounded-lg border border-slate-200 bg-white p-3"
+        data-testid="pm-notification-filter-panel"
+      >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-col gap-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -685,6 +688,64 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           </div>
         </div>
       </div>
+
+      {canDispatchDryRun ? (
+        <div
+          className="rounded-lg border border-slate-200 bg-white p-3"
+          data-testid="pm-delivery-dry-run-panel"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                <Send className="h-3.5 w-3.5" />
+                Delivery dry run
+              </div>
+              <p className="mt-1 text-sm text-slate-600">
+                {triggerFilter === "all"
+                  ? "Scan pending notifications for email and SMS attempts."
+                  : `Scan pending ${labelFromSnakeCase(triggerFilter).toLowerCase()} notifications for email and SMS attempts.`}
+              </p>
+              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                  <span className="font-semibold text-slate-700">
+                    Last dry run
+                  </span>
+                  {lastDryRun ? (
+                    <>
+                      <span>{formatDateTime(lastDryRun.preparedAt)}</span>
+                      <span>|</span>
+                      <span>{lastDryRunResultLabel(lastDryRun)}</span>
+                    </>
+                  ) : (
+                    <span>
+                      No dry-run state has been prepared for this filter.
+                    </span>
+                  )}
+                </div>
+                {lastDryRun ? (
+                  <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-5">
+                    <span>{lastDryRun.attemptCount} total attempts</span>
+                    <span>{lastDryRun.statusCounts.queued} queued</span>
+                    <span>{lastDryRun.statusCounts.skipped} skipped</span>
+                    <span>
+                      {lastDryRun.missingRecipientCount} missing recipients
+                    </span>
+                    <span>
+                      {lastDryRun.preferenceSuppressedCount} preference
+                      suppressed
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <PmNotificationDryRunAction
+              key={triggerFilter}
+              runDryRun={runDeliveryDryRun}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {canDispatchDryRun && deliveryReadiness ? (
         <div
@@ -992,61 +1053,6 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           key={deliveryReadiness.preferences.organizationId}
           preferences={deliveryReadiness.preferences}
         />
-      ) : null}
-
-      {canDispatchDryRun ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-                <Send className="h-3.5 w-3.5" />
-                Delivery dry run
-              </div>
-              <p className="mt-1 text-sm text-slate-600">
-                {triggerFilter === "all"
-                  ? "Scan pending notifications for email and SMS attempts."
-                  : `Scan pending ${labelFromSnakeCase(triggerFilter).toLowerCase()} notifications for email and SMS attempts.`}
-              </p>
-              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <Clock3 className="h-3.5 w-3.5 text-slate-500" />
-                  <span className="font-semibold text-slate-700">
-                    Last dry run
-                  </span>
-                  {lastDryRun ? (
-                    <>
-                      <span>{formatDateTime(lastDryRun.preparedAt)}</span>
-                      <span>|</span>
-                      <span>{lastDryRunResultLabel(lastDryRun)}</span>
-                    </>
-                  ) : (
-                    <span>
-                      No dry-run state has been prepared for this filter.
-                    </span>
-                  )}
-                </div>
-                {lastDryRun ? (
-                  <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-5">
-                    <span>{lastDryRun.attemptCount} total attempts</span>
-                    <span>{lastDryRun.statusCounts.queued} queued</span>
-                    <span>{lastDryRun.statusCounts.skipped} skipped</span>
-                    <span>
-                      {lastDryRun.missingRecipientCount} missing recipients
-                    </span>
-                    <span>
-                      {lastDryRun.preferenceSuppressedCount} preference
-                      suppressed
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <PmNotificationDryRunAction
-              key={triggerFilter}
-              runDryRun={runDeliveryDryRun}
-            />
-          </div>
-        </div>
       ) : null}
 
       {error ? (
