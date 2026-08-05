@@ -102,7 +102,7 @@ export function DashboardShell({
           <SidebarNav role={role} />
         </aside>
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <OfflineBanner />
           <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-6">
             <div className="flex items-center justify-between gap-3">
@@ -156,7 +156,9 @@ export function DashboardShell({
             </div>
           </header>
 
-          <main className="flex-1 p-4 md:p-6">{children}</main>
+          <main className="min-w-0 max-w-full flex-1 p-4 md:p-6">
+            {children}
+          </main>
         </div>
       </div>
     </div>

@@ -197,7 +197,7 @@ export function PmNotificationReportingDashboard({
   const schedulerCounters = reporting.scheduler.counters;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 max-w-full flex-col gap-6 break-words">
       <PageHeader
         title="PM notification reporting"
         description="Validate delivery, suppression, scheduler health, and response outcomes from canonical Phase 4 records."
@@ -377,7 +377,7 @@ export function PmNotificationReportingDashboard({
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity />
@@ -454,7 +454,7 @@ export function PmNotificationReportingDashboard({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Channel outcome matrix</CardTitle>
             <CardDescription>
@@ -533,7 +533,7 @@ export function PmNotificationReportingDashboard({
         </div>
       </section>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck2 />

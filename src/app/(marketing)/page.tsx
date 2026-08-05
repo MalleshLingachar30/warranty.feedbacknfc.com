@@ -23,7 +23,6 @@ export default async function MarketingPage({
 
   return (
     <>
-      <Script src="https://cdn.tailwindcss.com" strategy="beforeInteractive" />
       <Script
         src="https://unpkg.com/lucide@latest"
         strategy="afterInteractive"
