@@ -1,10 +1,19 @@
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { BarChart3 } from "lucide-react";
 
 import { ClientPageLoading } from "@/components/dashboard/client-page-loading";
 import { PageHeader } from "@/components/dashboard/page-header";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { resolveAppRoleForSession } from "@/lib/app-user";
 import { getCachedAuth } from "@/lib/clerk-session";
+import { canDispatchPreventiveMaintenanceNotifications } from "@/lib/preventive-maintenance-notification-dispatch";
 
 const PmNotificationCenter = dynamic(
   () =>
@@ -42,6 +51,16 @@ export default async function NotificationsPage() {
       <PageHeader
         title="Inbox"
         description="Review preventive maintenance schedule, assignment, start, completion, and cancellation updates."
+        actions={
+          canDispatchPreventiveMaintenanceNotifications(role) ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/notifications/reporting">
+                <BarChart3 data-icon="inline-start" />
+                Reporting
+              </Link>
+            </Button>
+          ) : null
+        }
       />
       <PmNotificationCenter role={role} />
     </div>
