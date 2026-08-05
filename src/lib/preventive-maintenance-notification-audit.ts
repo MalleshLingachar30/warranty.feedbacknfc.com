@@ -18,6 +18,14 @@ type StartAuditInput = {
   metadata?: Prisma.InputJsonValue;
 };
 
+type StartSystemAuditInput = {
+  organizationId?: string | null;
+  operation: PreventiveMaintenanceNotificationAuditOperation;
+  channel?: PreventiveMaintenanceNotificationDeliveryChannel | null;
+  recipientAddressMasked?: string | null;
+  metadata?: Prisma.InputJsonValue;
+};
+
 type FinishAuditInput = {
   auditId: string;
   outcome: Exclude<PreventiveMaintenanceNotificationAuditOutcome, "attempted">;
@@ -37,6 +45,27 @@ export async function startPreventiveMaintenanceNotificationAudit(
       organizationId: input.audience.organizationId,
       actorUserId: input.audience.dbUserId,
       actorRole: input.audience.role,
+      operation: input.operation,
+      outcome: "attempted",
+      channel: input.channel ?? null,
+      recipientAddressMasked: input.recipientAddressMasked ?? null,
+      metadata: input.metadata ?? {},
+    },
+    select: {
+      id: true,
+      createdAt: true,
+    },
+  });
+}
+
+export async function startPreventiveMaintenanceNotificationSystemAudit(
+  input: StartSystemAuditInput,
+) {
+  return db.preventiveMaintenanceNotificationAuditLog.create({
+    data: {
+      organizationId: input.organizationId ?? null,
+      actorUserId: null,
+      actorRole: "system_scheduler",
       operation: input.operation,
       outcome: "attempted",
       channel: input.channel ?? null,

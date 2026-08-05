@@ -16,6 +16,10 @@
     {
       "path": "/api/warranty/expiry/sweep",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/preventive-maintenance/notifications/scheduled-dispatch",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

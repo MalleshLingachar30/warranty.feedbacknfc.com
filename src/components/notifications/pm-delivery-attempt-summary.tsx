@@ -26,6 +26,7 @@ function statusTone(status: PreventiveMaintenanceDeliveryAttemptStatus) {
     case "sent":
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
     case "failed":
+    case "dead_letter":
       return "border-rose-200 bg-rose-50 text-rose-700";
     case "skipped":
       return "border-zinc-200 bg-zinc-50 text-zinc-700";
@@ -58,8 +59,13 @@ function formatDateTime(value: string) {
 }
 
 function deliveryDetail(attempt: PmDeliveryAttempt) {
-  if (attempt.status === "failed" && attempt.errorMessage) {
-    return attempt.errorMessage;
+  if (
+    (attempt.status === "failed" || attempt.status === "dead_letter") &&
+    attempt.errorMessage
+  ) {
+    return attempt.status === "dead_letter"
+      ? `Dead letter: ${attempt.errorMessage}`
+      : attempt.errorMessage;
   }
 
   if (attempt.status === "skipped" && attempt.skipReason) {
@@ -205,6 +211,14 @@ export function PmDeliveryAttemptSummary({
                       {detail ?? "No provider error or skip reason recorded"}
                     </span>
                   </div>
+                  {attempt.nextRetryAt ? (
+                    <div className="min-w-0 md:col-span-2">
+                      <span className="font-medium text-slate-600">
+                        Next retry:
+                      </span>{" "}
+                      <span>{formatDateTime(attempt.nextRetryAt)}</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>

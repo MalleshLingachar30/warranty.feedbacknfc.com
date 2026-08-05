@@ -5,6 +5,7 @@ export type PreventiveMaintenanceDeliveryAttemptStatus =
   | "sending"
   | "sent"
   | "failed"
+  | "dead_letter"
   | "skipped";
 
 export type PreventiveMaintenanceDeliveryAttemptForView = {
@@ -17,6 +18,8 @@ export type PreventiveMaintenanceDeliveryAttemptForView = {
   errorMessage: string | null;
   skipReason: string | null;
   attemptNumber: number;
+  nextRetryAt?: Date | null;
+  deadLetteredAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -32,6 +35,8 @@ export type SerializedPreventiveMaintenanceDeliveryAttemptForView = {
   errorMessage: string | null;
   skipReason: string | null;
   attemptNumber: number;
+  nextRetryAt: string | null;
+  deadLetteredAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -80,22 +85,45 @@ export function maskPreventiveMaintenanceDeliveryRecipientAddress(
 export function serializePreventiveMaintenanceDeliveryAttemptForView(
   attempt: PreventiveMaintenanceDeliveryAttemptForView,
 ): SerializedPreventiveMaintenanceDeliveryAttemptForView {
+  const recipientAddressMasked =
+    maskPreventiveMaintenanceDeliveryRecipientAddress(
+      attempt.recipientAddress,
+      attempt.channel,
+    );
+
   return {
     id: attempt.id,
     channel: attempt.channel,
     status: attempt.status,
     dryRun: attempt.dryRun,
-    recipientAddressMasked:
-      maskPreventiveMaintenanceDeliveryRecipientAddress(
-        attempt.recipientAddress,
-        attempt.channel,
-      ),
+    recipientAddressMasked,
     hasRecipientAddress: Boolean(attempt.recipientAddress),
     providerMessageId: attempt.providerMessageId,
-    errorMessage: attempt.errorMessage,
+    errorMessage: redactRecipientFromDiagnostic({
+      value: attempt.errorMessage,
+      recipientAddress: attempt.recipientAddress,
+      recipientAddressMasked,
+    }),
     skipReason: attempt.skipReason,
     attemptNumber: attempt.attemptNumber,
+    nextRetryAt: attempt.nextRetryAt?.toISOString() ?? null,
+    deadLetteredAt: attempt.deadLetteredAt?.toISOString() ?? null,
     createdAt: attempt.createdAt.toISOString(),
     updatedAt: attempt.updatedAt.toISOString(),
   };
+}
+
+function redactRecipientFromDiagnostic(input: {
+  value: string | null;
+  recipientAddress: string | null;
+  recipientAddressMasked: string | null;
+}) {
+  if (!input.value || !input.recipientAddress) {
+    return input.value;
+  }
+
+  return input.value.replaceAll(
+    input.recipientAddress,
+    input.recipientAddressMasked ?? "***",
+  );
 }

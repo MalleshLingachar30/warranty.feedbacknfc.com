@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getPreventiveMaintenanceEmailDeliveryReadiness } from "@/lib/preventive-maintenance-email-delivery";
 import { canDispatchPreventiveMaintenanceNotifications } from "@/lib/preventive-maintenance-notification-dispatch";
 import { getPreventiveMaintenanceNotificationPreferences } from "@/lib/preventive-maintenance-notification-preferences";
+import { getPreventiveMaintenanceScheduledDispatcherStatus } from "@/lib/preventive-maintenance-scheduled-dispatcher";
 import {
   getPreventiveMaintenanceNotificationLastDryRunSummary,
   parsePreventiveMaintenanceNotificationLimit,
@@ -83,6 +84,9 @@ export async function GET(request: Request) {
             audience.role,
           )
         : Promise.resolve(null);
+    const schedulerStatusPromise = deliveryReadiness
+      ? getPreventiveMaintenanceScheduledDispatcherStatus(audience.where)
+      : Promise.resolve(null);
 
     const [
       notifications,
@@ -94,6 +98,7 @@ export async function GET(request: Request) {
       cancelledCount,
       lastDryRun,
       preferences,
+      schedulerStatus,
     ] = await Promise.all([
       db.preventiveMaintenanceNotificationIntent.findMany({
         where,
@@ -142,6 +147,7 @@ export async function GET(request: Request) {
       }),
       getPreventiveMaintenanceNotificationLastDryRunSummary(where),
       preferencesPromise,
+      schedulerStatusPromise,
     ]);
 
     return NextResponse.json({
@@ -157,6 +163,7 @@ export async function GET(request: Request) {
         cancelled: cancelledCount,
       },
       lastDryRun,
+      schedulerStatus,
       deliveryReadiness: deliveryReadiness
         ? {
             ...deliveryReadiness,

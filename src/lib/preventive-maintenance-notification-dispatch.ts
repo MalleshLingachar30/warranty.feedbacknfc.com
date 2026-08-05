@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import {
   Prisma,
   type PreventiveMaintenanceNotificationDeliveryChannel,
@@ -8,6 +10,7 @@ import {
 
 import { db } from "@/lib/db";
 import {
+  maskPreventiveMaintenanceDeliveryRecipientAddress,
   serializePreventiveMaintenanceDeliveryAttemptForView,
   type SerializedPreventiveMaintenanceDeliveryAttemptForView,
 } from "@/lib/preventive-maintenance-delivery-attempts";
@@ -19,6 +22,7 @@ import {
   finishPreventiveMaintenanceNotificationAuditSafely,
   preventiveMaintenanceAuditErrorMessage,
   startPreventiveMaintenanceNotificationAudit,
+  startPreventiveMaintenanceNotificationSystemAudit,
 } from "@/lib/preventive-maintenance-notification-audit";
 import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
 import {
@@ -31,6 +35,12 @@ import {
 import { getPreventiveMaintenanceNotificationPreferencesForOrganizations } from "@/lib/preventive-maintenance-notification-preferences";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 import type { AppRole } from "@/lib/roles";
+import {
+  getPreventiveMaintenanceNextRetryAt,
+  PREVENTIVE_MAINTENANCE_DELIVERY_CLAIM_LEASE_MS,
+  PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MAX_ATTEMPTS,
+  resolvePreventiveMaintenanceScheduledAttemptAction,
+} from "@/lib/preventive-maintenance-scheduled-dispatch-policy";
 
 export const PREVENTIVE_MAINTENANCE_DELIVERY_CHANNELS = [
   "email",
@@ -67,8 +77,12 @@ export type DispatchPreventiveMaintenanceNotificationsResult = {
   queuedAttemptCount: number;
   sentAttemptCount: number;
   failedAttemptCount: number;
+  deadLetteredAttemptCount: number;
+  newlyDeadLetteredAttemptCount: number;
   skippedAttemptCount: number;
   retriedAttemptCount: number;
+  deferredRetryCount: number;
+  reclaimedAttemptCount: number;
   providerCallCount: number;
   preferenceSuppressedCount: number;
   suppressionReasonCounts: Record<string, number>;
@@ -82,6 +96,23 @@ type DeliveryAttemptCandidate = {
   createInput: DeliveryAttemptCreateInput;
   title: string;
   message: string;
+};
+
+type DispatchExecutionContext =
+  | {
+      source: "manual";
+    }
+  | {
+      source: "scheduled";
+      scheduledRunId: string;
+    };
+
+type ExecutePreventiveMaintenanceNotificationDispatchInput = Omit<
+  DispatchPreventiveMaintenanceNotificationsInput,
+  "audience"
+> & {
+  scopeWhere: Prisma.PreventiveMaintenanceNotificationIntentWhereInput;
+  executionContext: DispatchExecutionContext;
 };
 
 type RecipientOrganization = {
@@ -152,6 +183,12 @@ const deliveryAttemptSelect =
       skipReason: true,
       attemptNumber: true,
       dedupeKey: true,
+      claimToken: true,
+      claimedAt: true,
+      claimExpiresAt: true,
+      nextRetryAt: true,
+      deadLetteredAt: true,
+      scheduledRunId: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -219,12 +256,17 @@ export async function dispatchPreventiveMaintenanceNotifications(
   });
 
   try {
-    const result =
-      await executePreventiveMaintenanceNotificationDispatch(input);
+    const result = await executePreventiveMaintenanceNotificationDispatch({
+      ...input,
+      scopeWhere: input.audience.where,
+      executionContext: { source: "manual" },
+    });
     await finishPreventiveMaintenanceNotificationAuditSafely({
       auditId: audit.id,
       outcome:
-        result.failedAttemptCount > 0 ? "completed_with_failures" : "succeeded",
+        result.failedAttemptCount > 0 || result.deadLetteredAttemptCount > 0
+          ? "completed_with_failures"
+          : "succeeded",
       notificationIntentCount: result.scannedIntentCount,
       deliveryAttemptCount: result.candidateAttemptCount,
       providerCallCount: result.providerCallCount,
@@ -233,6 +275,9 @@ export async function dispatchPreventiveMaintenanceNotifications(
         dryRun: input.dryRun,
         preferenceSuppressedCount: result.preferenceSuppressedCount,
         suppressionReasonCounts: result.suppressionReasonCounts,
+        retriedAttemptCount: result.retriedAttemptCount,
+        deferredRetryCount: result.deferredRetryCount,
+        newlyDeadLetteredAttemptCount: result.newlyDeadLetteredAttemptCount,
       },
     });
     return result;
@@ -250,13 +295,107 @@ export async function dispatchPreventiveMaintenanceNotifications(
   }
 }
 
-async function executePreventiveMaintenanceNotificationDispatch(
-  input: DispatchPreventiveMaintenanceNotificationsInput,
-): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
-  if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {
-    throw new PreventiveMaintenanceNotificationApiError("Forbidden", 403);
+export async function dispatchPreventiveMaintenanceNotificationsForScheduledRun(
+  input: Omit<DispatchPreventiveMaintenanceNotificationsInput, "audience"> & {
+    scheduledRunId: string;
+  },
+) {
+  const now = new Date();
+  return executePreventiveMaintenanceNotificationDispatch({
+    channels: input.channels,
+    limit: input.limit,
+    dryRun: input.dryRun,
+    confirmLiveDelivery: input.confirmLiveDelivery,
+    retryFailed: input.retryFailed,
+    triggerType: input.triggerType,
+    scopeWhere: buildScheduledDispatchScopeWhere({
+      dryRun: input.dryRun,
+      now,
+    }),
+    executionContext: {
+      source: "scheduled",
+      scheduledRunId: input.scheduledRunId,
+    },
+  });
+}
+
+function buildScheduledDispatchScopeWhere(input: {
+  dryRun: boolean;
+  now: Date;
+}): Prisma.PreventiveMaintenanceNotificationIntentWhereInput {
+  const modeAttemptWhere: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput =
+    {
+      channel: "email",
+      dryRun: input.dryRun,
+    };
+
+  if (input.dryRun) {
+    return {
+      deliveryAttempts: {
+        none: modeAttemptWhere,
+      },
+    };
   }
 
+  return {
+    OR: [
+      {
+        deliveryAttempts: {
+          none: modeAttemptWhere,
+        },
+      },
+      {
+        deliveryAttempts: {
+          some: {
+            ...modeAttemptWhere,
+            status: "queued",
+          },
+        },
+      },
+      {
+        deliveryAttempts: {
+          some: {
+            ...modeAttemptWhere,
+            status: "failed",
+            OR: [{ nextRetryAt: null }, { nextRetryAt: { lte: input.now } }],
+          },
+        },
+      },
+      {
+        deliveryAttempts: {
+          some: {
+            ...modeAttemptWhere,
+            status: "sending",
+            OR: [
+              { claimExpiresAt: null },
+              { claimExpiresAt: { lte: input.now } },
+            ],
+          },
+        },
+      },
+      {
+        deliveryAttempts: {
+          some: {
+            ...modeAttemptWhere,
+            status: "skipped",
+            skipReason: {
+              in: [
+                "email_delivery_disabled",
+                "missing_resend_api_key",
+                "missing_resend_from_email",
+                "invalid_resend_from_email",
+              ],
+            },
+          },
+        },
+      },
+    ],
+  };
+}
+
+async function executePreventiveMaintenanceNotificationDispatch(
+  input: ExecutePreventiveMaintenanceNotificationDispatchInput,
+): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
   if (input.channels.length === 0) {
     throw new PreventiveMaintenanceNotificationApiError(
       "At least one delivery channel is required.",
@@ -267,7 +406,7 @@ async function executePreventiveMaintenanceNotificationDispatch(
   validateDispatchMode(input);
 
   const where: Prisma.PreventiveMaintenanceNotificationIntentWhereInput = {
-    ...input.audience.where,
+    ...input.scopeWhere,
     channel: "in_app",
     status: "pending",
     ...(input.triggerType ? { triggerType: input.triggerType } : {}),
@@ -293,6 +432,10 @@ async function executePreventiveMaintenanceNotificationDispatch(
     emailDeliverySkipReason: emailConfiguration.enabled
       ? null
       : emailConfiguration.skipReason,
+    scheduledRunId:
+      input.executionContext.source === "scheduled"
+        ? input.executionContext.scheduledRunId
+        : null,
   });
   const createInputs = candidates.map((candidate) => candidate.createInput);
 
@@ -335,6 +478,9 @@ async function executePreventiveMaintenanceNotificationDispatch(
   let dispatchResult = {
     providerCallCount: 0,
     retriedAttemptCount: 0,
+    deferredRetryCount: 0,
+    reclaimedAttemptCount: 0,
+    newlyDeadLetteredAttemptCount: 0,
   };
 
   if (!input.dryRun && attempts.length > 0) {
@@ -342,6 +488,7 @@ async function executePreventiveMaintenanceNotificationDispatch(
       attempts,
       candidates,
       retryFailed: input.retryFailed === true,
+      executionContext: input.executionContext,
     });
   }
 
@@ -382,8 +529,12 @@ async function executePreventiveMaintenanceNotificationDispatch(
     queuedAttemptCount: statusCounts.queued,
     sentAttemptCount: statusCounts.sent,
     failedAttemptCount: statusCounts.failed,
+    deadLetteredAttemptCount: statusCounts.dead_letter,
+    newlyDeadLetteredAttemptCount: dispatchResult.newlyDeadLetteredAttemptCount,
     skippedAttemptCount: statusCounts.skipped,
     retriedAttemptCount: dispatchResult.retriedAttemptCount,
+    deferredRetryCount: dispatchResult.deferredRetryCount,
+    reclaimedAttemptCount: dispatchResult.reclaimedAttemptCount,
     providerCallCount: dispatchResult.providerCallCount,
     preferenceSuppressedCount: finalAttempts.filter((attempt) =>
       isPreventiveMaintenancePreferenceSuppressionReason(attempt.skipReason),
@@ -402,7 +553,10 @@ export async function dispatchPreventiveMaintenanceNotificationsDryRun(
 }
 
 function validateDispatchMode(
-  input: DispatchPreventiveMaintenanceNotificationsInput,
+  input: Pick<
+    ExecutePreventiveMaintenanceNotificationDispatchInput,
+    "dryRun" | "confirmLiveDelivery" | "channels"
+  >,
 ) {
   if (input.dryRun) {
     return;
@@ -432,6 +586,7 @@ function buildDeliveryAttemptCandidates(input: {
   dryRun: boolean;
   recipientDirectory: DeliveryRecipientDirectory;
   emailDeliverySkipReason: string | null;
+  scheduledRunId: string | null;
 }): DeliveryAttemptCandidate[] {
   return input.intents.flatMap((intent) =>
     input.channels.map((channel) => {
@@ -468,6 +623,7 @@ function buildDeliveryAttemptCandidates(input: {
           recipientAddress: recipient.address,
           skipReason,
           attemptNumber: 1,
+          scheduledRunId: input.scheduledRunId,
           dedupeKey: buildDeliveryAttemptDedupeKey({
             notificationIntentId: intent.id,
             channel,
@@ -664,7 +820,7 @@ async function reconcilePreflightDeliveryAttempts(input: {
   }
 
   await db.$transaction(
-    input.candidates.map((candidate) =>
+    input.candidates.flatMap((candidate) => [
       db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
         where: {
           dedupeKey: candidate.createInput.dedupeKey,
@@ -675,11 +831,35 @@ async function reconcilePreflightDeliveryAttempts(input: {
           status: candidate.createInput.status ?? "queued",
           recipientAddress: candidate.createInput.recipientAddress ?? null,
           skipReason: candidate.createInput.skipReason ?? null,
+          scheduledRunId: candidate.createInput.scheduledRunId ?? null,
           metadata: candidate.createInput.metadata ?? {},
           ...(input.preparedAt ? { updatedAt: input.preparedAt } : {}),
         },
       }),
-    ),
+      ...(candidate.createInput.status === "skipped"
+        ? [
+            db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+              where: {
+                dedupeKey: candidate.createInput.dedupeKey,
+                status: "failed",
+                providerMessageId: null,
+              },
+              data: {
+                status: "skipped",
+                recipientAddress:
+                  candidate.createInput.recipientAddress ?? null,
+                skipReason: candidate.createInput.skipReason ?? null,
+                nextRetryAt: null,
+                claimToken: null,
+                claimedAt: null,
+                claimExpiresAt: null,
+                scheduledRunId: candidate.createInput.scheduledRunId ?? null,
+                metadata: candidate.createInput.metadata ?? {},
+              },
+            }),
+          ]
+        : []),
+    ]),
   );
 }
 
@@ -728,6 +908,7 @@ async function dispatchEligibleEmailAttempts(input: {
   >;
   candidates: DeliveryAttemptCandidate[];
   retryFailed: boolean;
+  executionContext: DispatchExecutionContext;
 }) {
   const candidatesByDedupeKey = new Map(
     input.candidates.map((candidate) => [
@@ -737,13 +918,16 @@ async function dispatchEligibleEmailAttempts(input: {
   );
   let providerCallCount = 0;
   let retriedAttemptCount = 0;
+  let deferredRetryCount = 0;
+  let reclaimedAttemptCount = 0;
+  let newlyDeadLetteredAttemptCount = 0;
 
   for (const attempt of input.attempts) {
     if (
       attempt.dryRun ||
       attempt.channel !== "email" ||
-      (attempt.status !== "queued" &&
-        !(input.retryFailed && attempt.status === "failed"))
+      ((attempt.status === "failed" || attempt.status === "sending") &&
+        !input.retryFailed)
     ) {
       continue;
     }
@@ -759,25 +943,106 @@ async function dispatchEligibleEmailAttempts(input: {
       continue;
     }
 
-    const retrying = attempt.status === "failed";
-    const nextAttemptNumber = retrying
-      ? Math.min(attempt.attemptNumber + 1, 99)
-      : attempt.attemptNumber;
+    const now = new Date();
+    const action = resolvePreventiveMaintenanceScheduledAttemptAction({
+      status: attempt.status,
+      attemptNumber: attempt.attemptNumber,
+      nextRetryAt: attempt.nextRetryAt,
+      claimExpiresAt: attempt.claimExpiresAt,
+      now,
+    });
+
+    if (action.action === "defer_retry") {
+      deferredRetryCount += 1;
+      continue;
+    }
+
+    if (action.action === "dead_letter") {
+      const deadLetter =
+        await db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+          where: {
+            id: attempt.id,
+            status: "failed",
+            attemptNumber: attempt.attemptNumber,
+          },
+          data: {
+            status: "dead_letter",
+            nextRetryAt: null,
+            deadLetteredAt: now,
+            scheduledRunId:
+              input.executionContext.source === "scheduled"
+                ? input.executionContext.scheduledRunId
+                : attempt.scheduledRunId,
+          },
+        });
+
+      if (deadLetter.count === 1) {
+        newlyDeadLetteredAttemptCount += 1;
+        await auditScheduledAttemptDecision({
+          executionContext: input.executionContext,
+          attempt,
+          recipientAddress: currentRecipientAddress,
+          outcome: "completed_with_failures",
+          errorMessage: attempt.errorMessage,
+          metadata: {
+            decision: "dead_letter",
+            attemptNumber: attempt.attemptNumber,
+            maxAttempts: PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MAX_ATTEMPTS,
+          },
+        });
+      }
+      continue;
+    }
+
+    if (action.action !== "claim") {
+      continue;
+    }
+
+    const claimToken = randomUUID();
     const claim = await claimEmailAttemptForDispatch({
-      attemptId: attempt.id,
-      currentStatus: attempt.status,
-      nextAttemptNumber,
+      attempt,
+      action,
+      claimToken,
+      now,
       recipientAddress: currentRecipientAddress,
+      executionContext: input.executionContext,
     });
 
     if (claim.count !== 1) {
       continue;
     }
 
-    if (retrying) {
+    if (action.retrying) {
       retriedAttemptCount += 1;
     }
+    if (action.reclaimingExpiredClaim) {
+      reclaimedAttemptCount += 1;
+    }
     providerCallCount += 1;
+
+    const scheduledRunId =
+      input.executionContext.source === "scheduled"
+        ? input.executionContext.scheduledRunId
+        : null;
+    const attemptAudit = scheduledRunId
+      ? await startPreventiveMaintenanceNotificationSystemAudit({
+          organizationId: attempt.organizationId,
+          operation: "scheduled_delivery_attempt",
+          channel: "email",
+          recipientAddressMasked:
+            maskPreventiveMaintenanceDeliveryRecipientAddress(
+              currentRecipientAddress,
+              "email",
+            ),
+          metadata: {
+            scheduledRunId,
+            deliveryAttemptId: attempt.id,
+            attemptNumber: action.nextAttemptNumber,
+            retried: action.retrying,
+            reclaimedExpiredClaim: action.reclaimingExpiredClaim,
+          },
+        })
+      : null;
 
     const deliveryResult = await sendPreventiveMaintenanceEmailWithResend({
       to: currentRecipientAddress,
@@ -785,73 +1050,223 @@ async function dispatchEligibleEmailAttempts(input: {
       text: candidate.message,
       idempotencyKey: buildProviderIdempotencyKey({
         dedupeKey: attempt.dedupeKey,
-        attemptNumber: nextAttemptNumber,
+        attemptNumber: action.nextAttemptNumber,
       }),
     });
 
-    await db.preventiveMaintenanceNotificationDeliveryAttempt.update({
-      where: {
-        id: attempt.id,
-      },
-      data: deliveryResult.ok
-        ? {
-            status: "sent",
-            providerMessageId: deliveryResult.providerMessageId,
-            providerResponse: deliveryResult.providerResponse,
-            errorMessage: null,
-            skipReason: null,
-            metadata: {
-              deliveryMode: "live",
-              provider: "resend",
-              retried: retrying,
-              attemptNumber: nextAttemptNumber,
+    const shouldDeadLetter =
+      !deliveryResult.ok &&
+      action.nextAttemptNumber >=
+        PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MAX_ATTEMPTS;
+    const nextRetryAt =
+      !deliveryResult.ok && !shouldDeadLetter
+        ? getPreventiveMaintenanceNextRetryAt({
+            now: new Date(),
+            failedAttemptNumber: action.nextAttemptNumber,
+          })
+        : null;
+
+    const completion =
+      await db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+        where: {
+          id: attempt.id,
+          status: "sending",
+          claimToken,
+        },
+        data: deliveryResult.ok
+          ? {
+              status: "sent",
+              providerMessageId: deliveryResult.providerMessageId,
+              providerResponse: deliveryResult.providerResponse,
+              errorMessage: null,
+              skipReason: null,
+              claimToken: null,
+              claimedAt: null,
+              claimExpiresAt: null,
+              nextRetryAt: null,
+              deadLetteredAt: null,
+              metadata: {
+                deliveryMode: "live",
+                provider: "resend",
+                dispatchSource: input.executionContext.source,
+                retried: action.retrying,
+                reclaimedExpiredClaim: action.reclaimingExpiredClaim,
+                attemptNumber: action.nextAttemptNumber,
+              },
+            }
+          : {
+              status: shouldDeadLetter ? "dead_letter" : "failed",
+              providerResponse:
+                deliveryResult.providerResponse ?? Prisma.JsonNull,
+              errorMessage: deliveryResult.errorMessage,
+              skipReason: null,
+              claimToken: null,
+              claimedAt: null,
+              claimExpiresAt: null,
+              nextRetryAt,
+              deadLetteredAt: shouldDeadLetter ? new Date() : null,
+              metadata: {
+                deliveryMode: "live",
+                provider: "resend",
+                dispatchSource: input.executionContext.source,
+                retried: action.retrying,
+                reclaimedExpiredClaim: action.reclaimingExpiredClaim,
+                attemptNumber: action.nextAttemptNumber,
+                retryScheduledFor: nextRetryAt?.toISOString() ?? null,
+                deadLettered: shouldDeadLetter,
+                failureCategory: classifyDeliveryFailure(
+                  deliveryResult.errorMessage,
+                ),
+              },
             },
-          }
-        : {
-            status: "failed",
-            providerResponse:
-              deliveryResult.providerResponse ?? Prisma.JsonNull,
-            errorMessage: deliveryResult.errorMessage,
-            skipReason: null,
-            metadata: {
-              deliveryMode: "live",
-              provider: "resend",
-              retried: retrying,
-              attemptNumber: nextAttemptNumber,
-              failureCategory: classifyDeliveryFailure(
-                deliveryResult.errorMessage,
-              ),
-            },
-          },
-    });
+      });
+
+    if (completion.count === 1 && shouldDeadLetter) {
+      newlyDeadLetteredAttemptCount += 1;
+    }
+
+    if (attemptAudit && scheduledRunId) {
+      await finishPreventiveMaintenanceNotificationAuditSafely({
+        auditId: attemptAudit.id,
+        outcome: deliveryResult.ok ? "succeeded" : "completed_with_failures",
+        deliveryAttemptCount: 1,
+        providerCallCount: 1,
+        providerMessageId: deliveryResult.ok
+          ? deliveryResult.providerMessageId
+          : null,
+        errorMessage: deliveryResult.ok ? null : deliveryResult.errorMessage,
+        metadata: {
+          scheduledRunId,
+          deliveryAttemptId: attempt.id,
+          attemptNumber: action.nextAttemptNumber,
+          retried: action.retrying,
+          reclaimedExpiredClaim: action.reclaimingExpiredClaim,
+          completionRecorded: completion.count === 1,
+          decision: deliveryResult.ok
+            ? "sent"
+            : shouldDeadLetter
+              ? "dead_letter"
+              : "retry_scheduled",
+          nextRetryAt: nextRetryAt?.toISOString() ?? null,
+        },
+      });
+    }
   }
 
   return {
     providerCallCount,
     retriedAttemptCount,
+    deferredRetryCount,
+    reclaimedAttemptCount,
+    newlyDeadLetteredAttemptCount,
   };
 }
 
 function claimEmailAttemptForDispatch(input: {
-  attemptId: string;
-  currentStatus: "queued" | "sending" | "sent" | "failed" | "skipped";
-  nextAttemptNumber: number;
+  attempt: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptGetPayload<{
+    select: typeof deliveryAttemptSelect;
+  }>;
+  action: Extract<
+    ReturnType<typeof resolvePreventiveMaintenanceScheduledAttemptAction>,
+    { action: "claim" }
+  >;
+  claimToken: string;
+  now: Date;
   recipientAddress: string;
+  executionContext: DispatchExecutionContext;
 }) {
   return db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
     where: {
-      id: input.attemptId,
-      status: input.currentStatus,
+      id: input.attempt.id,
+      status: input.attempt.status,
+      attemptNumber: input.attempt.attemptNumber,
       dryRun: false,
       channel: "email",
+      ...(input.attempt.status === "sending"
+        ? {
+            OR: [
+              { claimExpiresAt: null },
+              {
+                claimExpiresAt: {
+                  lte: input.now,
+                },
+              },
+            ],
+          }
+        : {}),
+      ...(input.attempt.status === "failed"
+        ? {
+            OR: [
+              { nextRetryAt: null },
+              {
+                nextRetryAt: {
+                  lte: input.now,
+                },
+              },
+            ],
+          }
+        : {}),
     },
     data: {
       status: "sending",
-      attemptNumber: input.nextAttemptNumber,
+      attemptNumber: input.action.nextAttemptNumber,
       recipientAddress: input.recipientAddress,
       errorMessage: null,
       skipReason: null,
       providerResponse: Prisma.JsonNull,
+      claimToken: input.claimToken,
+      claimedAt: input.now,
+      claimExpiresAt: new Date(
+        input.now.getTime() + PREVENTIVE_MAINTENANCE_DELIVERY_CLAIM_LEASE_MS,
+      ),
+      nextRetryAt: null,
+      deadLetteredAt: null,
+      scheduledRunId:
+        input.executionContext.source === "scheduled"
+          ? input.executionContext.scheduledRunId
+          : input.attempt.scheduledRunId,
+    },
+  });
+}
+
+async function auditScheduledAttemptDecision(input: {
+  executionContext: DispatchExecutionContext;
+  attempt: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptGetPayload<{
+    select: typeof deliveryAttemptSelect;
+  }>;
+  recipientAddress: string;
+  outcome: "succeeded" | "completed_with_failures";
+  errorMessage: string | null;
+  metadata: Prisma.InputJsonObject;
+}) {
+  if (input.executionContext.source !== "scheduled") {
+    return;
+  }
+
+  const audit = await startPreventiveMaintenanceNotificationSystemAudit({
+    organizationId: input.attempt.organizationId,
+    operation: "scheduled_delivery_attempt",
+    channel: "email",
+    recipientAddressMasked: maskPreventiveMaintenanceDeliveryRecipientAddress(
+      input.recipientAddress,
+      "email",
+    ),
+    metadata: {
+      scheduledRunId: input.executionContext.scheduledRunId,
+      deliveryAttemptId: input.attempt.id,
+    },
+  });
+
+  await finishPreventiveMaintenanceNotificationAuditSafely({
+    auditId: audit.id,
+    outcome: input.outcome,
+    deliveryAttemptCount: 1,
+    providerCallCount: 0,
+    errorMessage: input.errorMessage,
+    metadata: {
+      scheduledRunId: input.executionContext.scheduledRunId,
+      deliveryAttemptId: input.attempt.id,
+      ...input.metadata,
     },
   });
 }
@@ -898,6 +1313,7 @@ function countAttemptStatuses(
       sending: 0,
       sent: 0,
       failed: 0,
+      dead_letter: 0,
       skipped: 0,
     },
   );

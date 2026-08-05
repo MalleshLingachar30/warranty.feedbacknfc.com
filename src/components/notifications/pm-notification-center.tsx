@@ -14,6 +14,7 @@ import {
   Loader2,
   MailCheck,
   RefreshCw,
+  ServerCog,
   Send,
   ShieldCheck,
 } from "lucide-react";
@@ -85,6 +86,7 @@ type PmNotificationResponse = {
   statusCounts: Record<PmNotificationStatus, number>;
   lastDryRun: PmNotificationLastDryRun | null;
   deliveryReadiness: PmNotificationDeliveryReadiness | null;
+  schedulerStatus: PmNotificationSchedulerStatus | null;
 };
 
 type PmNotificationDeliveryReadiness = {
@@ -113,12 +115,43 @@ type PmNotificationLastDryRun = {
   preparedAt: string;
   attemptCount: number;
   statusCounts: Record<
-    "queued" | "sending" | "sent" | "failed" | "skipped",
+    "queued" | "sending" | "sent" | "failed" | "dead_letter" | "skipped",
     number
   >;
   missingRecipientCount: number;
   preferenceSuppressedCount: number;
   dryRunSkipCount: number;
+};
+
+type PmNotificationSchedulerStatus = {
+  configuration: {
+    enabled: boolean;
+    mode: "disabled" | "dry_run" | "live";
+    dryRun: boolean;
+    liveDeliveryRequested: boolean;
+    blockingReasons: string[];
+    authorizationConfigured: boolean;
+    schedule: string;
+    batchLimit: number;
+    maxAttempts: number;
+  };
+  deadLetterCount: number;
+  lastRun: {
+    id: string;
+    status: "running" | "succeeded" | "completed_with_failures" | "failed";
+    dryRun: boolean;
+    requestedLiveDelivery: boolean;
+    startedAt: string;
+    completedAt: string | null;
+    scannedIntentCount: number;
+    candidateAttemptCount: number;
+    providerCallCount: number;
+    retriedAttemptCount: number;
+    deferredRetryCount: number;
+    deadLetteredAttemptCount: number;
+    preferenceSuppressedCount: number;
+    errorMessage: string | null;
+  } | null;
 };
 
 type PmNotificationDispatchResponse = {
@@ -324,6 +357,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   );
   const [deliveryReadiness, setDeliveryReadiness] =
     useState<PmNotificationDeliveryReadiness | null>(null);
+  const [schedulerStatus, setSchedulerStatus] =
+    useState<PmNotificationSchedulerStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBulkDismissing, setIsBulkDismissing] = useState(false);
@@ -388,6 +423,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setStatusCounts(body.statusCounts);
         setLastDryRun(body.lastDryRun);
         setDeliveryReadiness(body.deliveryReadiness);
+        setSchedulerStatus(body.schedulerStatus);
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -868,6 +904,125 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
               ) : null}
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {canDispatchDryRun && schedulerStatus ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <ServerCog className="h-3.5 w-3.5" />
+                  Scheduled dispatcher
+                </div>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "uppercase",
+                    schedulerStatus.configuration.mode === "live"
+                      ? "border-rose-300 bg-rose-50 text-rose-800"
+                      : schedulerStatus.configuration.mode === "dry_run"
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-slate-200 bg-slate-50 text-slate-600",
+                  )}
+                >
+                  {labelFromSnakeCase(schedulerStatus.configuration.mode)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    schedulerStatus.configuration.authorizationConfigured
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-amber-200 bg-amber-50 text-amber-700",
+                  )}
+                >
+                  Cron auth{" "}
+                  {schedulerStatus.configuration.authorizationConfigured
+                    ? "configured"
+                    : "missing"}
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-slate-600">
+                {schedulerStatus.configuration.enabled
+                  ? `${schedulerStatus.configuration.schedule}; up to ${schedulerStatus.configuration.batchLimit} pending intents per run with ${schedulerStatus.configuration.maxAttempts} total email attempts.`
+                  : "Automation is disabled. Cron requests cannot prepare attempts or call the email provider until PM_NOTIFICATION_SCHEDULED_DISPATCH_ENABLED=true."}
+              </p>
+              {schedulerStatus.configuration.liveDeliveryRequested &&
+              schedulerStatus.configuration.mode !== "live" ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  Requested live automation is held in dry-run mode by:{" "}
+                  {schedulerStatus.configuration.blockingReasons.join(", ")}.
+                </p>
+              ) : null}
+            </div>
+            <div
+              className={cn(
+                "rounded-md border px-3 py-2 text-xs",
+                schedulerStatus.deadLetterCount > 0
+                  ? "border-rose-200 bg-rose-50 text-rose-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-700",
+              )}
+            >
+              <span className="font-semibold">
+                {schedulerStatus.deadLetterCount} dead-letter
+              </span>{" "}
+              {schedulerStatus.deadLetterCount === 1 ? "attempt" : "attempts"}
+            </div>
+          </div>
+
+          {schedulerStatus.lastRun ? (
+            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold text-slate-800">Last run</span>
+                <span>{formatDateTime(schedulerStatus.lastRun.startedAt)}</span>
+                <Badge variant="outline" className="capitalize">
+                  {labelFromSnakeCase(schedulerStatus.lastRun.status)}
+                </Badge>
+                <span>
+                  {schedulerStatus.lastRun.dryRun ? "Dry run" : "Live email"}
+                </span>
+              </div>
+              <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-6">
+                <span>
+                  {schedulerStatus.lastRun.scannedIntentCount} scanned
+                </span>
+                <span>
+                  {schedulerStatus.lastRun.candidateAttemptCount} candidates
+                </span>
+                <span>
+                  {schedulerStatus.lastRun.providerCallCount} provider calls
+                </span>
+                <span>
+                  {schedulerStatus.lastRun.retriedAttemptCount} retries
+                </span>
+                <span>
+                  {schedulerStatus.lastRun.deferredRetryCount} deferred
+                </span>
+                <span>
+                  {schedulerStatus.lastRun.preferenceSuppressedCount} suppressed
+                </span>
+              </div>
+              {schedulerStatus.lastRun.errorMessage ? (
+                <p className="mt-2 text-xs text-rose-700">
+                  {schedulerStatus.lastRun.errorMessage}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-3 rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
+              No scheduled dispatcher run has been recorded yet.
+            </p>
+          )}
+
+          {schedulerStatus.deadLetterCount > 0 ? (
+            <p className="mt-2 text-xs text-rose-700">
+              Review the delivery diagnostics below and correct recipient,
+              preference, or provider issues. The scheduler will not retry
+              dead-letter attempts automatically; escalate for a controlled
+              operator requeue after remediation.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

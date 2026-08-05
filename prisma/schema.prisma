@@ -364,6 +364,7 @@ enum PreventiveMaintenanceNotificationDeliveryStatus {
   sending
   sent
   failed
+  dead_letter
   skipped
 }
 
@@ -372,6 +373,8 @@ enum PreventiveMaintenanceNotificationAuditOperation {
   live_dispatch
   live_canary
   preference_update
+  scheduled_dispatch
+  scheduled_delivery_attempt
 }
 
 enum PreventiveMaintenanceNotificationAuditOutcome {
@@ -379,6 +382,13 @@ enum PreventiveMaintenanceNotificationAuditOutcome {
   succeeded
   completed_with_failures
   rejected
+  failed
+}
+
+enum PreventiveMaintenanceNotificationScheduledRunStatus {
+  running
+  succeeded
+  completed_with_failures
   failed
 }
 
@@ -1368,22 +1378,75 @@ model PreventiveMaintenanceNotificationDeliveryAttempt {
   skipReason           String?                                          @map("skip_reason") @db.VarChar(120)
   attemptNumber        Int                                              @default(1) @map("attempt_number")
   dedupeKey            String                                           @unique @map("dedupe_key") @db.VarChar(260)
+  claimToken           String?                                          @map("claim_token") @db.VarChar(80)
+  claimedAt            DateTime?                                        @map("claimed_at")
+  claimExpiresAt       DateTime?                                        @map("claim_expires_at")
+  nextRetryAt          DateTime?                                        @map("next_retry_at")
+  deadLetteredAt       DateTime?                                        @map("dead_lettered_at")
+  scheduledRunId       String?                                          @map("scheduled_run_id") @db.Uuid
   metadata             Json                                             @default(dbgenerated("'{}'::jsonb"))
   createdAt            DateTime                                         @default(now()) @map("created_at")
   updatedAt            DateTime                                         @updatedAt @map("updated_at")
 
-  notificationIntent PreventiveMaintenanceNotificationIntent @relation(fields: [notificationIntentId], references: [id], onDelete: Cascade)
+  notificationIntent PreventiveMaintenanceNotificationIntent        @relation(fields: [notificationIntentId], references: [id], onDelete: Cascade)
+  scheduledRun       PreventiveMaintenanceNotificationScheduledRun? @relation(fields: [scheduledRunId], references: [id], onDelete: SetNull)
 
   @@index([notificationIntentId, createdAt], map: "idx_pm_delivery_attempts_intent")
   @@index([organizationId, status, createdAt], map: "idx_pm_delivery_attempts_org_status")
   @@index([channel, status, createdAt], map: "idx_pm_delivery_attempts_channel_status")
+  @@index([status, nextRetryAt, createdAt], map: "idx_pm_delivery_attempts_retry")
+  @@index([status, claimExpiresAt], map: "idx_pm_delivery_attempts_claim_expiry")
+  @@index([scheduledRunId, status], map: "idx_pm_delivery_attempts_scheduled_run")
   @@map("preventive_maintenance_notification_delivery_attempts")
+}
+
+model PreventiveMaintenanceNotificationScheduledRun {
+  id                        String                                              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runKey                    String                                              @unique @map("run_key") @db.VarChar(160)
+  status                    PreventiveMaintenanceNotificationScheduledRunStatus @default(running)
+  dryRun                    Boolean                                             @default(true) @map("dry_run")
+  requestedLiveDelivery     Boolean                                             @default(false) @map("requested_live_delivery")
+  scheduleWindowStartedAt   DateTime                                            @map("schedule_window_started_at")
+  startedAt                 DateTime                                            @default(now()) @map("started_at")
+  completedAt               DateTime?                                           @map("completed_at")
+  scannedIntentCount        Int                                                 @default(0) @map("scanned_intent_count")
+  candidateAttemptCount     Int                                                 @default(0) @map("candidate_attempt_count")
+  createdAttemptCount       Int                                                 @default(0) @map("created_attempt_count")
+  existingAttemptCount      Int                                                 @default(0) @map("existing_attempt_count")
+  providerCallCount         Int                                                 @default(0) @map("provider_call_count")
+  retriedAttemptCount       Int                                                 @default(0) @map("retried_attempt_count")
+  deferredRetryCount        Int                                                 @default(0) @map("deferred_retry_count")
+  deadLetteredAttemptCount  Int                                                 @default(0) @map("dead_lettered_attempt_count")
+  preferenceSuppressedCount Int                                                 @default(0) @map("preference_suppressed_count")
+  suppressionReasonCounts   Json                                                @default(dbgenerated("'{}'::jsonb")) @map("suppression_reason_counts")
+  errorMessage              String?                                             @map("error_message")
+  metadata                  Json                                                @default(dbgenerated("'{}'::jsonb"))
+  createdAt                 DateTime                                            @default(now()) @map("created_at")
+  updatedAt                 DateTime                                            @updatedAt @map("updated_at")
+
+  deliveryAttempts PreventiveMaintenanceNotificationDeliveryAttempt[]
+
+  @@index([status, startedAt], map: "idx_pm_scheduled_runs_status_started")
+  @@index([scheduleWindowStartedAt], map: "idx_pm_scheduled_runs_window")
+  @@map("preventive_maintenance_notification_scheduled_runs")
+}
+
+model PreventiveMaintenanceNotificationSchedulerLease {
+  id         String   @id @db.VarChar(80)
+  claimToken String   @map("claim_token") @db.VarChar(80)
+  runId      String   @map("run_id") @db.Uuid
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([expiresAt], map: "idx_pm_scheduler_leases_expiry")
+  @@map("preventive_maintenance_notification_scheduler_leases")
 }
 
 model PreventiveMaintenanceNotificationAuditLog {
   id                      String                                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   organizationId          String?                                           @map("organization_id") @db.Uuid
-  actorUserId             String                                            @map("actor_user_id") @db.Uuid
+  actorUserId             String?                                           @map("actor_user_id") @db.Uuid
   actorRole               String                                            @map("actor_role") @db.VarChar(50)
   operation               PreventiveMaintenanceNotificationAuditOperation
   outcome                 PreventiveMaintenanceNotificationAuditOutcome     @default(attempted)
@@ -1399,7 +1462,7 @@ model PreventiveMaintenanceNotificationAuditLog {
   updatedAt               DateTime                                          @updatedAt @map("updated_at")
 
   organization Organization? @relation(fields: [organizationId], references: [id])
-  actorUser    User          @relation(fields: [actorUserId], references: [id])
+  actorUser    User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt], map: "idx_pm_notification_audit_org_created")
   @@index([actorUserId, createdAt], map: "idx_pm_notification_audit_actor_created")

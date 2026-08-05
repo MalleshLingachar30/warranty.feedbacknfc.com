@@ -50,6 +50,8 @@ export const preventiveMaintenanceNotificationSelect =
         errorMessage: true,
         skipReason: true,
         attemptNumber: true,
+        nextRetryAt: true,
+        deadLetteredAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -118,6 +120,7 @@ export type SerializedPreventiveMaintenanceLastDryRunSummary = {
     sending: number;
     sent: number;
     failed: number;
+    dead_letter: number;
     skipped: number;
   };
   missingRecipientCount: number;
@@ -250,6 +253,7 @@ export async function getPreventiveMaintenanceNotificationLastDryRunSummary(
     sending: 0,
     sent: 0,
     failed: 0,
+    dead_letter: 0,
     skipped: 0,
   };
 
