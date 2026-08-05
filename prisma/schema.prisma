@@ -368,8 +368,10 @@ enum PreventiveMaintenanceNotificationDeliveryStatus {
 }
 
 enum PreventiveMaintenanceNotificationAuditOperation {
+  dry_run_dispatch
   live_dispatch
   live_canary
+  preference_update
 }
 
 enum PreventiveMaintenanceNotificationAuditOutcome {
@@ -554,38 +556,39 @@ model Organization {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  parentOrganization                         Organization?                               @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
-  childOrganizations                         Organization[]                              @relation("OrganizationHierarchy")
-  users                                      User[]
-  productModels                              ProductModel[]
-  allocatedStickers                          Sticker[]                                   @relation("AllocatedOrganization")
-  products                                   Product[]
-  serviceCenters                             ServiceCenter[]
-  manufacturerClaims                         WarrantyClaim[]                             @relation("ManufacturerOrganizationClaims")
-  serviceCenterClaims                        WarrantyClaim[]                             @relation("ServiceCenterOrganizationClaims")
-  stickerAllocations                         StickerAllocation[]
-  assetIdentities                            AssetIdentity[]
-  serializedSalesLines                       SerializedSalesLine[]
-  saleRegistrations                          SaleRegistration[]
-  tagGenerationBatches                       TagGenerationBatch[]
-  installationJobs                           InstallationJob[]                           @relation("ManufacturerInstallationJobs")
-  integrationConnectors                      IntegrationConnector[]
-  integrationFeeds                           IntegrationFeed[]
-  integrationRuns                            IntegrationRun[]
-  integrationStagingRecords                  IntegrationStagingRecord[]
-  integrationReplayRequests                  IntegrationReplayRequest[]
-  erpItemMasterRecords                       ErpItemMasterRecord[]                       @relation("OrganizationErpItemMasterRecords")
-  importedDistributorMasterRecords           ErpDistributorMasterRecord[]                @relation("ManufacturerErpDistributorMasterRecords")
-  mappedDistributorMasterRecords             ErpDistributorMasterRecord[]                @relation("MappedDistributorMasterRecord")
-  erpSerializedDispatchRecords               ErpSerializedDispatchRecord[]               @relation("ManufacturerErpSerializedDispatchRecords")
-  mappedSerializedDispatchRecords            ErpSerializedDispatchRecord[]               @relation("ErpSerializedDispatchDistributor")
-  assetExternalIdentities                    AssetExternalIdentity[]
-  manufacturerInternalServiceOrders          InternalServiceOrder[]                      @relation("ManufacturerInternalServiceOrders")
-  sourceInternalServiceOrders                InternalServiceOrder[]                      @relation("SourceOrganizationInternalServiceOrders")
-  preventiveMaintenancePlans                 PreventiveMaintenancePlan[]
-  preventiveMaintenanceEvents                PreventiveMaintenanceEvent[]
-  preventiveMaintenanceNotifications         PreventiveMaintenanceNotificationIntent[]   @relation("PreventiveMaintenanceNotificationOrganization")
-  preventiveMaintenanceNotificationAuditLogs PreventiveMaintenanceNotificationAuditLog[]
+  parentOrganization                           Organization?                                 @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
+  childOrganizations                           Organization[]                                @relation("OrganizationHierarchy")
+  users                                        User[]
+  productModels                                ProductModel[]
+  allocatedStickers                            Sticker[]                                     @relation("AllocatedOrganization")
+  products                                     Product[]
+  serviceCenters                               ServiceCenter[]
+  manufacturerClaims                           WarrantyClaim[]                               @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims                          WarrantyClaim[]                               @relation("ServiceCenterOrganizationClaims")
+  stickerAllocations                           StickerAllocation[]
+  assetIdentities                              AssetIdentity[]
+  serializedSalesLines                         SerializedSalesLine[]
+  saleRegistrations                            SaleRegistration[]
+  tagGenerationBatches                         TagGenerationBatch[]
+  installationJobs                             InstallationJob[]                             @relation("ManufacturerInstallationJobs")
+  integrationConnectors                        IntegrationConnector[]
+  integrationFeeds                             IntegrationFeed[]
+  integrationRuns                              IntegrationRun[]
+  integrationStagingRecords                    IntegrationStagingRecord[]
+  integrationReplayRequests                    IntegrationReplayRequest[]
+  erpItemMasterRecords                         ErpItemMasterRecord[]                         @relation("OrganizationErpItemMasterRecords")
+  importedDistributorMasterRecords             ErpDistributorMasterRecord[]                  @relation("ManufacturerErpDistributorMasterRecords")
+  mappedDistributorMasterRecords               ErpDistributorMasterRecord[]                  @relation("MappedDistributorMasterRecord")
+  erpSerializedDispatchRecords                 ErpSerializedDispatchRecord[]                 @relation("ManufacturerErpSerializedDispatchRecords")
+  mappedSerializedDispatchRecords              ErpSerializedDispatchRecord[]                 @relation("ErpSerializedDispatchDistributor")
+  assetExternalIdentities                      AssetExternalIdentity[]
+  manufacturerInternalServiceOrders            InternalServiceOrder[]                        @relation("ManufacturerInternalServiceOrders")
+  sourceInternalServiceOrders                  InternalServiceOrder[]                        @relation("SourceOrganizationInternalServiceOrders")
+  preventiveMaintenancePlans                   PreventiveMaintenancePlan[]
+  preventiveMaintenanceEvents                  PreventiveMaintenanceEvent[]
+  preventiveMaintenanceNotifications           PreventiveMaintenanceNotificationIntent[]     @relation("PreventiveMaintenanceNotificationOrganization")
+  preventiveMaintenanceNotificationPreferences PreventiveMaintenanceNotificationPreference[]
+  preventiveMaintenanceNotificationAuditLogs   PreventiveMaintenanceNotificationAuditLog[]
 
   @@index([externalCode], map: "idx_organizations_external_code")
   @@index([parentOrganizationId], map: "idx_organizations_parent_org")
@@ -606,28 +609,29 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  organization                               Organization?                               @relation(fields: [organizationId], references: [id])
-  technicianProfile                          Technician?
-  reportedTickets                            Ticket[]                                    @relation("ReportedTickets")
-  approvedClaims                             WarrantyClaim[]                             @relation("ClaimApprover")
-  timelineEvents                             TicketTimeline[]                            @relation("TimelineActor")
-  stickerAllocations                         StickerAllocation[]                         @relation("AllocatedByUser")
-  createdTagGenerationBatches                TagGenerationBatch[]                        @relation("TagGenerationBatchCreator")
-  customerAssetIdentities                    AssetIdentity[]                             @relation("AssetIdentityCustomer")
-  customerProducts                           Product[]                                   @relation("CustomerProducts")
-  scanLogs                                   ScanLog[]                                   @relation("ScanLogActor")
-  submittedInstallationReports               InstallationReport[]
-  linkedPartUsages                           JobPartUsage[]
-  createdPartDispatches                      TicketPartDispatch[]                        @relation("TicketPartDispatchCreator")
-  createdPartReturns                         TicketPartReturn[]                          @relation("TicketPartReturnCreator")
-  integrationReplayRequests                  IntegrationReplayRequest[]                  @relation("IntegrationReplayRequestedBy")
-  requestedInternalServiceOrders             InternalServiceOrder[]                      @relation("RequestedInternalServiceOrders")
-  receivedInternalServiceOrders              InternalServiceOrder[]                      @relation("ReceivedInternalServiceOrders")
-  internalServiceTimelineEvents              InternalServiceTimeline[]                   @relation("InternalServiceTimelineActor")
-  createdPreventiveMaintenancePlans          PreventiveMaintenancePlan[]                 @relation("PreventiveMaintenancePlanCreator")
-  preventiveMaintenanceTimelineEvents        PreventiveMaintenanceEventTimeline[]        @relation("PreventiveMaintenanceTimelineActor")
-  preventiveMaintenanceNotifications         PreventiveMaintenanceNotificationIntent[]   @relation("PreventiveMaintenanceNotificationRecipient")
-  preventiveMaintenanceNotificationAuditLogs PreventiveMaintenanceNotificationAuditLog[]
+  organization                                        Organization?                                 @relation(fields: [organizationId], references: [id])
+  technicianProfile                                   Technician?
+  reportedTickets                                     Ticket[]                                      @relation("ReportedTickets")
+  approvedClaims                                      WarrantyClaim[]                               @relation("ClaimApprover")
+  timelineEvents                                      TicketTimeline[]                              @relation("TimelineActor")
+  stickerAllocations                                  StickerAllocation[]                           @relation("AllocatedByUser")
+  createdTagGenerationBatches                         TagGenerationBatch[]                          @relation("TagGenerationBatchCreator")
+  customerAssetIdentities                             AssetIdentity[]                               @relation("AssetIdentityCustomer")
+  customerProducts                                    Product[]                                     @relation("CustomerProducts")
+  scanLogs                                            ScanLog[]                                     @relation("ScanLogActor")
+  submittedInstallationReports                        InstallationReport[]
+  linkedPartUsages                                    JobPartUsage[]
+  createdPartDispatches                               TicketPartDispatch[]                          @relation("TicketPartDispatchCreator")
+  createdPartReturns                                  TicketPartReturn[]                            @relation("TicketPartReturnCreator")
+  integrationReplayRequests                           IntegrationReplayRequest[]                    @relation("IntegrationReplayRequestedBy")
+  requestedInternalServiceOrders                      InternalServiceOrder[]                        @relation("RequestedInternalServiceOrders")
+  receivedInternalServiceOrders                       InternalServiceOrder[]                        @relation("ReceivedInternalServiceOrders")
+  internalServiceTimelineEvents                       InternalServiceTimeline[]                     @relation("InternalServiceTimelineActor")
+  createdPreventiveMaintenancePlans                   PreventiveMaintenancePlan[]                   @relation("PreventiveMaintenancePlanCreator")
+  preventiveMaintenanceTimelineEvents                 PreventiveMaintenanceEventTimeline[]          @relation("PreventiveMaintenanceTimelineActor")
+  preventiveMaintenanceNotifications                  PreventiveMaintenanceNotificationIntent[]     @relation("PreventiveMaintenanceNotificationRecipient")
+  updatedPreventiveMaintenanceNotificationPreferences PreventiveMaintenanceNotificationPreference[] @relation("PreventiveMaintenanceNotificationPreferenceUpdatedBy")
+  preventiveMaintenanceNotificationAuditLogs          PreventiveMaintenanceNotificationAuditLog[]
 
   @@map("users")
 }
@@ -1332,6 +1336,24 @@ model PreventiveMaintenanceNotificationIntent {
   @@map("preventive_maintenance_notification_intents")
 }
 
+model PreventiveMaintenanceNotificationPreference {
+  id              String                                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String                                         @map("organization_id") @db.Uuid
+  recipientRole   PreventiveMaintenanceNotificationRecipientRole @map("recipient_role")
+  emailEnabled    Boolean                                        @default(true) @map("email_enabled")
+  smsEnabled      Boolean                                        @default(false) @map("sms_enabled")
+  updatedByUserId String?                                        @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime                                       @default(now()) @map("created_at")
+  updatedAt       DateTime                                       @updatedAt @map("updated_at")
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  updatedByUser User?        @relation("PreventiveMaintenanceNotificationPreferenceUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, recipientRole], map: "pm_notification_preferences_org_role_key")
+  @@index([organizationId, updatedAt], map: "idx_pm_notification_preferences_org_updated")
+  @@map("preventive_maintenance_notification_preferences")
+}
+
 model PreventiveMaintenanceNotificationDeliveryAttempt {
   id                   String                                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   notificationIntentId String                                           @map("notification_intent_id") @db.Uuid
@@ -1359,22 +1381,22 @@ model PreventiveMaintenanceNotificationDeliveryAttempt {
 }
 
 model PreventiveMaintenanceNotificationAuditLog {
-  id                      String                                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId          String?                                          @map("organization_id") @db.Uuid
-  actorUserId             String                                           @map("actor_user_id") @db.Uuid
-  actorRole               String                                           @map("actor_role") @db.VarChar(50)
+  id                      String                                            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId          String?                                           @map("organization_id") @db.Uuid
+  actorUserId             String                                            @map("actor_user_id") @db.Uuid
+  actorRole               String                                            @map("actor_role") @db.VarChar(50)
   operation               PreventiveMaintenanceNotificationAuditOperation
-  outcome                 PreventiveMaintenanceNotificationAuditOutcome    @default(attempted)
-  channel                 PreventiveMaintenanceNotificationDeliveryChannel
-  notificationIntentCount Int                                              @default(0) @map("notification_intent_count")
-  deliveryAttemptCount    Int                                              @default(0) @map("delivery_attempt_count")
-  providerCallCount       Int                                              @default(0) @map("provider_call_count")
-  recipientAddressMasked  String?                                          @map("recipient_address_masked") @db.VarChar(255)
-  providerMessageId       String?                                          @map("provider_message_id") @db.VarChar(255)
-  errorMessage            String?                                          @map("error_message")
-  metadata                Json                                             @default(dbgenerated("'{}'::jsonb"))
-  createdAt               DateTime                                         @default(now()) @map("created_at")
-  updatedAt               DateTime                                         @updatedAt @map("updated_at")
+  outcome                 PreventiveMaintenanceNotificationAuditOutcome     @default(attempted)
+  channel                 PreventiveMaintenanceNotificationDeliveryChannel?
+  notificationIntentCount Int                                               @default(0) @map("notification_intent_count")
+  deliveryAttemptCount    Int                                               @default(0) @map("delivery_attempt_count")
+  providerCallCount       Int                                               @default(0) @map("provider_call_count")
+  recipientAddressMasked  String?                                           @map("recipient_address_masked") @db.VarChar(255)
+  providerMessageId       String?                                           @map("provider_message_id") @db.VarChar(255)
+  errorMessage            String?                                           @map("error_message")
+  metadata                Json                                              @default(dbgenerated("'{}'::jsonb"))
+  createdAt               DateTime                                          @default(now()) @map("created_at")
+  updatedAt               DateTime                                          @updatedAt @map("updated_at")
 
   organization Organization? @relation(fields: [organizationId], references: [id])
   actorUser    User          @relation(fields: [actorUserId], references: [id])

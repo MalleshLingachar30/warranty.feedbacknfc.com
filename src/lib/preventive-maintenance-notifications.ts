@@ -121,6 +121,7 @@ export type SerializedPreventiveMaintenanceLastDryRunSummary = {
     skipped: number;
   };
   missingRecipientCount: number;
+  preferenceSuppressedCount: number;
   dryRunSkipCount: number;
 };
 
@@ -191,6 +192,7 @@ export async function getPreventiveMaintenanceNotificationLastDryRunSummary(
     latestAttempt,
     statusGroups,
     missingRecipientCount,
+    preferenceSuppressedCount,
     dryRunSkipCount,
     attemptCount,
   ] = await Promise.all([
@@ -213,9 +215,19 @@ export async function getPreventiveMaintenanceNotificationLastDryRunSummary(
     db.preventiveMaintenanceNotificationDeliveryAttempt.count({
       where: {
         ...attemptWhere,
-        skipReason: {
-          startsWith: "missing_recipient_",
-        },
+        OR: [
+          { skipReason: { contains: "_missing_" } },
+          { skipReason: { endsWith: "_unavailable" } },
+        ],
+      },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.count({
+      where: {
+        ...attemptWhere,
+        OR: [
+          { skipReason: { endsWith: "_email_disabled" } },
+          { skipReason: { endsWith: "_sms_disabled" } },
+        ],
       },
     }),
     db.preventiveMaintenanceNotificationDeliveryAttempt.count({
@@ -250,6 +262,7 @@ export async function getPreventiveMaintenanceNotificationLastDryRunSummary(
     attemptCount,
     statusCounts,
     missingRecipientCount,
+    preferenceSuppressedCount,
     dryRunSkipCount,
   };
 }

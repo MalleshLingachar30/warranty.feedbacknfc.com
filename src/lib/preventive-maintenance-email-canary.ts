@@ -11,6 +11,7 @@ import {
   startPreventiveMaintenanceNotificationAudit,
 } from "@/lib/preventive-maintenance-notification-audit";
 import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
+import { getPreventiveMaintenanceNotificationPreferences } from "@/lib/preventive-maintenance-notification-preferences";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 
 type SendCanaryInput = {
@@ -34,6 +35,12 @@ export async function sendPreventiveMaintenanceEmailCanary(
   }
 
   const readiness = getPreventiveMaintenanceEmailDeliveryReadiness();
+  const preferences = input.audience.organizationId
+    ? await getPreventiveMaintenanceNotificationPreferences(
+        input.audience.organizationId,
+        input.audience.role,
+      )
+    : null;
   const audit = await startPreventiveMaintenanceNotificationAudit({
     audience: input.audience,
     operation: "live_canary",
@@ -43,6 +50,8 @@ export async function sendPreventiveMaintenanceEmailCanary(
       provider: readiness.provider,
       liveEmailStatus: readiness.liveEmail.status,
       canaryStatus: readiness.canary.status,
+      organizationEmailEnabled:
+        preferences === null ? null : preferences.emailEnabledRoleCount > 0,
       confirmationProvided: input.confirmLiveCanary,
     },
   });
@@ -55,6 +64,20 @@ export async function sendPreventiveMaintenanceEmailCanary(
       errorMessage,
     });
     throw new PreventiveMaintenanceNotificationApiError(errorMessage, 400);
+  }
+
+  if (preferences && preferences.emailEnabledRoleCount === 0) {
+    const errorMessage =
+      "Live email canary is suppressed because email is disabled for every PM notification audience in this organization.";
+    await finishPreventiveMaintenanceNotificationAuditSafely({
+      auditId: audit.id,
+      outcome: "rejected",
+      errorMessage,
+      metadata: {
+        suppressionReason: "organization_email_disabled",
+      },
+    });
+    throw new PreventiveMaintenanceNotificationApiError(errorMessage, 409);
   }
 
   const configuration = getPreventiveMaintenanceEmailCanaryConfiguration();

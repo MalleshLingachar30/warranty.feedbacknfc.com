@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getPreventiveMaintenanceEmailDeliveryReadiness } from "@/lib/preventive-maintenance-email-delivery";
 import { canDispatchPreventiveMaintenanceNotifications } from "@/lib/preventive-maintenance-notification-dispatch";
+import { getPreventiveMaintenanceNotificationPreferences } from "@/lib/preventive-maintenance-notification-preferences";
 import {
   getPreventiveMaintenanceNotificationLastDryRunSummary,
   parsePreventiveMaintenanceNotificationLimit,
@@ -75,6 +76,13 @@ export async function GET(request: Request) {
     )
       ? getPreventiveMaintenanceEmailDeliveryReadiness()
       : null;
+    const preferencesPromise =
+      deliveryReadiness && audience.organizationId
+        ? getPreventiveMaintenanceNotificationPreferences(
+            audience.organizationId,
+            audience.role,
+          )
+        : Promise.resolve(null);
 
     const [
       notifications,
@@ -85,6 +93,7 @@ export async function GET(request: Request) {
       deliveredCount,
       cancelledCount,
       lastDryRun,
+      preferences,
     ] = await Promise.all([
       db.preventiveMaintenanceNotificationIntent.findMany({
         where,
@@ -132,6 +141,7 @@ export async function GET(request: Request) {
         },
       }),
       getPreventiveMaintenanceNotificationLastDryRunSummary(where),
+      preferencesPromise,
     ]);
 
     return NextResponse.json({
@@ -147,7 +157,12 @@ export async function GET(request: Request) {
         cancelled: cancelledCount,
       },
       lastDryRun,
-      deliveryReadiness,
+      deliveryReadiness: deliveryReadiness
+        ? {
+            ...deliveryReadiness,
+            preferences,
+          }
+        : null,
     });
   } catch (error) {
     return jsonError(error);

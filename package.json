@@ -20,6 +20,7 @@
     "test:pm-phase2": "node --experimental-strip-types scripts/run-pm-phase2-smoke.mjs",
     "test:pm-notification-operator": "node scripts/run-pm-notification-operator-smoke.js",
     "test:pm-notification-live-readiness": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-live-readiness-check.mjs",
+    "test:pm-notification-preferences": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-preference-check.mjs",
     "maintenance:pm-notification-smoke": "node scripts/run-pm-notification-operator-smoke.js --cleanup=archive"
   },
   "dependencies": {

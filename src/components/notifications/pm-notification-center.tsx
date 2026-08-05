@@ -25,6 +25,10 @@ import {
   PmDeliveryAttemptSummary,
   type PmDeliveryAttempt,
 } from "@/components/notifications/pm-delivery-attempt-summary";
+import {
+  PmNotificationPreferencesPanel,
+  type PmNotificationPreferencesView,
+} from "@/components/notifications/pm-notification-preferences-panel";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/roles";
 
@@ -102,6 +106,7 @@ type PmNotificationDeliveryReadiness = {
   sms: {
     status: "unsupported";
   };
+  preferences: PmNotificationPreferencesView | null;
 };
 
 type PmNotificationLastDryRun = {
@@ -112,6 +117,7 @@ type PmNotificationLastDryRun = {
     number
   >;
   missingRecipientCount: number;
+  preferenceSuppressedCount: number;
   dryRunSkipCount: number;
 };
 
@@ -125,6 +131,8 @@ type PmNotificationDispatchResponse = {
   missingRecipientCount: number;
   queuedAttemptCount: number;
   skippedAttemptCount: number;
+  preferenceSuppressedCount: number;
+  suppressionReasonCounts: Record<string, number>;
 };
 
 type PmNotificationCanaryResponse = {
@@ -271,7 +279,9 @@ function recipientLabel(notification: PmNotification) {
 function lastDryRunResultLabel(summary: PmNotificationLastDryRun) {
   const readyCount = summary.statusCounts.queued + summary.dryRunSkipCount;
   const issueCount =
-    summary.missingRecipientCount + summary.statusCounts.failed;
+    summary.missingRecipientCount +
+    summary.preferenceSuppressedCount +
+    summary.statusCounts.failed;
 
   if (summary.attemptCount === 0) {
     return "No attempts prepared";
@@ -573,6 +583,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     !isBulkDismissing &&
     filteredCount > 0 &&
     (statusFilter === "pending" || statusFilter === "all");
+  const preferencesBlockCanary =
+    deliveryReadiness?.preferences?.emailEnabledRoleCount === 0;
 
   return (
     <div className="space-y-5">
@@ -797,6 +809,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       }
                       disabled={
                         deliveryReadiness.canary.status !== "ready" ||
+                        preferencesBlockCanary ||
                         isSendingCanary
                       }
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-rose-700"
@@ -819,6 +832,11 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       Canary sending requires
                       PM_NOTIFICATION_EMAIL_CANARY_ENABLED=true.
                     </p>
+                  ) : preferencesBlockCanary ? (
+                    <p className="mt-1 pl-6 text-[11px] text-amber-800">
+                      Canary suppressed because email is disabled for every PM
+                      audience in this organization.
+                    </p>
                   ) : null}
                 </div>
                 <Button
@@ -828,6 +846,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   onClick={() => void sendLiveCanary()}
                   disabled={
                     deliveryReadiness.canary.status !== "ready" ||
+                    preferencesBlockCanary ||
                     !canaryConfirmed ||
                     isSendingCanary
                   }
@@ -850,6 +869,13 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {canDispatchDryRun && deliveryReadiness?.preferences ? (
+        <PmNotificationPreferencesPanel
+          key={deliveryReadiness.preferences.organizationId}
+          preferences={deliveryReadiness.preferences}
+        />
       ) : null}
 
       {canDispatchDryRun ? (
@@ -884,12 +910,16 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   )}
                 </div>
                 {lastDryRun ? (
-                  <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-4">
+                  <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-5">
                     <span>{lastDryRun.attemptCount} total attempts</span>
                     <span>{lastDryRun.statusCounts.queued} queued</span>
                     <span>{lastDryRun.statusCounts.skipped} skipped</span>
                     <span>
                       {lastDryRun.missingRecipientCount} missing recipients
+                    </span>
+                    <span>
+                      {lastDryRun.preferenceSuppressedCount} preference
+                      suppressed
                     </span>
                   </div>
                 ) : null}
@@ -947,6 +977,9 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
               {dispatchResult.candidateAttemptCount === 1 ? "" : "s"}.
               {dispatchResult.missingRecipientCount > 0
                 ? ` ${dispatchResult.missingRecipientCount} missing recipient ${dispatchResult.missingRecipientCount === 1 ? "address was" : "addresses were"} skipped.`
+                : ""}
+              {dispatchResult.preferenceSuppressedCount > 0
+                ? ` ${dispatchResult.preferenceSuppressedCount} attempt${dispatchResult.preferenceSuppressedCount === 1 ? " was" : "s were"} suppressed by organization rules.`
                 : ""}
             </p>
           ) : null}

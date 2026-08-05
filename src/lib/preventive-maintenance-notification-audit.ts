@@ -13,7 +13,7 @@ import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive
 type StartAuditInput = {
   audience: PreventiveMaintenanceNotificationAudience;
   operation: PreventiveMaintenanceNotificationAuditOperation;
-  channel: PreventiveMaintenanceNotificationDeliveryChannel;
+  channel?: PreventiveMaintenanceNotificationDeliveryChannel | null;
   recipientAddressMasked?: string | null;
   metadata?: Prisma.InputJsonValue;
 };
@@ -39,7 +39,7 @@ export async function startPreventiveMaintenanceNotificationAudit(
       actorRole: input.audience.role,
       operation: input.operation,
       outcome: "attempted",
-      channel: input.channel,
+      channel: input.channel ?? null,
       recipientAddressMasked: input.recipientAddressMasked ?? null,
       metadata: input.metadata ?? {},
     },

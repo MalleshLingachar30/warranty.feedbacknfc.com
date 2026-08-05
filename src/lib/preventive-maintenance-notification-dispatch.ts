@@ -21,6 +21,14 @@ import {
   startPreventiveMaintenanceNotificationAudit,
 } from "@/lib/preventive-maintenance-notification-audit";
 import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
+import {
+  getPreventiveMaintenanceNotificationRolePreference,
+  isPreventiveMaintenanceMissingRecipientReason,
+  isPreventiveMaintenancePreferenceSuppressionReason,
+  resolvePreventiveMaintenanceNotificationSuppression,
+  type PreventiveMaintenanceNotificationRolePreference,
+} from "@/lib/preventive-maintenance-notification-preference-policy";
+import { getPreventiveMaintenanceNotificationPreferencesForOrganizations } from "@/lib/preventive-maintenance-notification-preferences";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 import type { AppRole } from "@/lib/roles";
 
@@ -62,6 +70,8 @@ export type DispatchPreventiveMaintenanceNotificationsResult = {
   skippedAttemptCount: number;
   retriedAttemptCount: number;
   providerCallCount: number;
+  preferenceSuppressedCount: number;
+  suppressionReasonCounts: Record<string, number>;
   attempts: SerializedPreventiveMaintenanceDeliveryAttempt[];
 };
 
@@ -72,6 +82,29 @@ type DeliveryAttemptCandidate = {
   createInput: DeliveryAttemptCreateInput;
   title: string;
   message: string;
+};
+
+type RecipientOrganization = {
+  id: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+};
+
+type RecipientServiceCenter = {
+  id: string;
+  organizationId: string;
+  email: string | null;
+  phone: string | null;
+  isActive: boolean;
+};
+
+type DeliveryRecipientDirectory = {
+  organizations: Map<string, RecipientOrganization>;
+  serviceCenters: Map<string, RecipientServiceCenter>;
+  preferencesByOrganization: Map<
+    string,
+    PreventiveMaintenanceNotificationRolePreference[]
+  >;
 };
 
 type SerializedPreventiveMaintenanceDeliveryAttempt =
@@ -89,12 +122,17 @@ const dispatchableNotificationIntentSelect =
     organizationId: true,
     triggerType: true,
     recipientRole: true,
+    recipientUserId: true,
+    recipientOrganizationId: true,
+    recipientServiceCenterId: true,
     title: true,
     message: true,
     recipientUser: {
       select: {
         email: true,
         phone: true,
+        organizationId: true,
+        isActive: true,
       },
     },
   });
@@ -163,20 +201,16 @@ export function parsePreventiveMaintenanceDispatchLimit(value: unknown) {
 export async function dispatchPreventiveMaintenanceNotifications(
   input: DispatchPreventiveMaintenanceNotificationsInput,
 ): Promise<DispatchPreventiveMaintenanceNotificationsResult> {
-  if (input.dryRun) {
-    return executePreventiveMaintenanceNotificationDispatch(input);
-  }
-
   if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {
     throw new PreventiveMaintenanceNotificationApiError("Forbidden", 403);
   }
 
   const audit = await startPreventiveMaintenanceNotificationAudit({
     audience: input.audience,
-    operation: "live_dispatch",
-    channel: "email",
+    operation: input.dryRun ? "dry_run_dispatch" : "live_dispatch",
     metadata: {
       channels: input.channels,
+      dryRun: input.dryRun,
       limit: input.limit,
       triggerType: input.triggerType ?? null,
       retryFailed: input.retryFailed === true,
@@ -194,6 +228,12 @@ export async function dispatchPreventiveMaintenanceNotifications(
       notificationIntentCount: result.scannedIntentCount,
       deliveryAttemptCount: result.candidateAttemptCount,
       providerCallCount: result.providerCallCount,
+      metadata: {
+        channels: input.channels,
+        dryRun: input.dryRun,
+        preferenceSuppressedCount: result.preferenceSuppressedCount,
+        suppressionReasonCounts: result.suppressionReasonCounts,
+      },
     });
     return result;
   } catch (error) {
@@ -241,11 +281,18 @@ async function executePreventiveMaintenanceNotificationDispatch(
     take: input.limit,
     select: dispatchableNotificationIntentSelect,
   });
+  const recipientDirectory = await loadDeliveryRecipientDirectory(intents);
+  const emailConfiguration =
+    getPreventiveMaintenanceEmailDeliveryConfiguration();
 
   const candidates = buildDeliveryAttemptCandidates({
     channels: input.channels,
     dryRun: input.dryRun,
     intents,
+    recipientDirectory,
+    emailDeliverySkipReason: emailConfiguration.enabled
+      ? null
+      : emailConfiguration.skipReason,
   });
   const createInputs = candidates.map((candidate) => candidate.createInput);
 
@@ -259,19 +306,10 @@ async function executePreventiveMaintenanceNotificationDispatch(
   const preparedAt =
     input.dryRun && createInputs.length > 0 ? new Date() : null;
 
-  if (preparedAt) {
-    await db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
-      where: {
-        dryRun: true,
-        dedupeKey: {
-          in: createInputs.map((attempt) => attempt.dedupeKey),
-        },
-      },
-      data: {
-        updatedAt: preparedAt,
-      },
-    });
-  }
+  await reconcilePreflightDeliveryAttempts({
+    candidates,
+    preparedAt,
+  });
 
   const attempts =
     createInputs.length > 0
@@ -328,6 +366,7 @@ async function executePreventiveMaintenanceNotificationDispatch(
         })
       : [];
   const statusCounts = countAttemptStatuses(finalAttempts);
+  const suppressionReasonCounts = countSuppressionReasons(finalAttempts);
 
   return {
     dryRun: input.dryRun,
@@ -338,7 +377,7 @@ async function executePreventiveMaintenanceNotificationDispatch(
     createdAttemptCount: createResult.count,
     existingAttemptCount: Math.max(0, createInputs.length - createResult.count),
     missingRecipientCount: finalAttempts.filter((attempt) =>
-      attempt.skipReason?.startsWith("missing_recipient_"),
+      isPreventiveMaintenanceMissingRecipientReason(attempt.skipReason),
     ).length,
     queuedAttemptCount: statusCounts.queued,
     sentAttemptCount: statusCounts.sent,
@@ -346,6 +385,10 @@ async function executePreventiveMaintenanceNotificationDispatch(
     skippedAttemptCount: statusCounts.skipped,
     retriedAttemptCount: dispatchResult.retriedAttemptCount,
     providerCallCount: dispatchResult.providerCallCount,
+    preferenceSuppressedCount: finalAttempts.filter((attempt) =>
+      isPreventiveMaintenancePreferenceSuppressionReason(attempt.skipReason),
+    ).length,
+    suppressionReasonCounts,
     attempts: finalAttempts.map(serializeDeliveryAttempt),
   };
 }
@@ -377,15 +420,7 @@ function validateDispatchMode(
   );
   if (unsupportedChannels.length > 0) {
     throw new PreventiveMaintenanceNotificationApiError(
-      "Phase 4D1 supports live delivery for email only.",
-      400,
-    );
-  }
-
-  const emailConfig = getPreventiveMaintenanceEmailDeliveryConfiguration();
-  if (!emailConfig.enabled) {
-    throw new PreventiveMaintenanceNotificationApiError(
-      `Email delivery is not enabled: ${emailConfig.skipReason}.`,
+      "Live SMS delivery is unsupported. Confirmed live delivery accepts email only.",
       400,
     );
   }
@@ -395,14 +430,32 @@ function buildDeliveryAttemptCandidates(input: {
   intents: DispatchableNotificationIntent[];
   channels: PreventiveMaintenanceDispatchChannel[];
   dryRun: boolean;
+  recipientDirectory: DeliveryRecipientDirectory;
+  emailDeliverySkipReason: string | null;
 }): DeliveryAttemptCandidate[] {
   return input.intents.flatMap((intent) =>
     input.channels.map((channel) => {
-      const recipientAddress = resolveRecipientAddress(intent, channel);
-      const skipReason = resolveInitialSkipReason({
+      const recipient = resolveDeliveryRecipient({
+        intent,
+        directory: input.recipientDirectory,
+        channel,
+      });
+      const preferences =
+        input.recipientDirectory.preferencesByOrganization.get(
+          recipient.preferenceOrganizationId,
+        ) ?? [];
+      const preference = getPreventiveMaintenanceNotificationRolePreference(
+        preferences,
+        intent.recipientRole,
+      );
+      const skipReason = resolvePreventiveMaintenanceNotificationSuppression({
+        recipientRole: intent.recipientRole,
         channel,
         dryRun: input.dryRun,
-        recipientAddress,
+        preference,
+        recipientAvailable: recipient.available,
+        recipientAddress: recipient.address,
+        emailDeliverySkipReason: input.emailDeliverySkipReason,
       });
 
       return {
@@ -412,7 +465,7 @@ function buildDeliveryAttemptCandidates(input: {
           channel,
           status: skipReason ? "skipped" : "queued",
           dryRun: input.dryRun,
-          recipientAddress,
+          recipientAddress: recipient.address,
           skipReason,
           attemptNumber: 1,
           dedupeKey: buildDeliveryAttemptDedupeKey({
@@ -424,6 +477,12 @@ function buildDeliveryAttemptCandidates(input: {
             dryRun: input.dryRun,
             triggerType: intent.triggerType,
             recipientRole: intent.recipientRole,
+            preferenceOrganizationId: recipient.preferenceOrganizationId,
+            preferenceSource: preference.source,
+            preferenceChannelEnabled:
+              channel === "email"
+                ? preference.emailEnabled
+                : preference.smsEnabled,
             title: intent.title,
           },
         },
@@ -434,38 +493,194 @@ function buildDeliveryAttemptCandidates(input: {
   );
 }
 
-function resolveInitialSkipReason(input: {
+function resolveDeliveryRecipient(input: {
+  intent: DispatchableNotificationIntent;
+  directory: DeliveryRecipientDirectory;
   channel: PreventiveMaintenanceDispatchChannel;
-  dryRun: boolean;
-  recipientAddress: string | null;
 }) {
-  if (!input.recipientAddress) {
-    return `missing_recipient_${input.channel}`;
-  }
+  const intent = input.intent;
+  const serviceCenter = intent.recipientServiceCenterId
+    ? input.directory.serviceCenters.get(intent.recipientServiceCenterId)
+    : null;
+  const recipientOrganizationId = resolvePreferenceOrganizationId({
+    intent,
+    serviceCenter,
+  });
+  const recipientOrganization = input.directory.organizations.get(
+    recipientOrganizationId,
+  );
+  const userAddress =
+    input.channel === "email"
+      ? intent.recipientUser?.email
+      : intent.recipientUser?.phone;
+  const serviceCenterAddress =
+    input.channel === "email" ? serviceCenter?.email : serviceCenter?.phone;
+  const organizationAddress =
+    input.channel === "email"
+      ? recipientOrganization?.contactEmail
+      : recipientOrganization?.contactPhone;
 
-  if (input.dryRun) {
-    return "dry_run";
+  switch (intent.recipientRole) {
+    case "customer":
+    case "technician":
+      return {
+        address: userAddress ?? null,
+        available: intent.recipientUser?.isActive === true,
+        preferenceOrganizationId: recipientOrganizationId,
+      };
+    case "service_center":
+      return {
+        address:
+          userAddress ?? serviceCenterAddress ?? organizationAddress ?? null,
+        available:
+          intent.recipientUser?.isActive === true ||
+          serviceCenter?.isActive === true ||
+          Boolean(recipientOrganization),
+        preferenceOrganizationId: recipientOrganizationId,
+      };
+    case "manufacturer":
+      return {
+        address: userAddress ?? organizationAddress ?? null,
+        available: intent.recipientUserId
+          ? intent.recipientUser?.isActive === true
+          : Boolean(recipientOrganization),
+        preferenceOrganizationId: recipientOrganizationId,
+      };
+    default:
+      return {
+        address: null,
+        available: false,
+        preferenceOrganizationId: recipientOrganizationId,
+      };
   }
-
-  if (input.channel !== "email") {
-    return "delivery_channel_not_supported";
-  }
-
-  return null;
 }
 
-function resolveRecipientAddress(
-  intent: DispatchableNotificationIntent,
-  channel: PreventiveMaintenanceDispatchChannel,
-) {
-  switch (channel) {
-    case "email":
-      return intent.recipientUser?.email ?? null;
-    case "sms":
-      return intent.recipientUser?.phone ?? null;
+function resolvePreferenceOrganizationId(input: {
+  intent: DispatchableNotificationIntent;
+  serviceCenter: RecipientServiceCenter | null | undefined;
+}) {
+  switch (input.intent.recipientRole) {
+    case "service_center":
+      return (
+        input.intent.recipientOrganizationId ??
+        input.serviceCenter?.organizationId ??
+        input.intent.organizationId
+      );
+    case "technician":
+      return (
+        input.intent.recipientUser?.organizationId ??
+        input.serviceCenter?.organizationId ??
+        input.intent.organizationId
+      );
+    case "manufacturer":
+      return (
+        input.intent.recipientOrganizationId ??
+        input.intent.recipientUser?.organizationId ??
+        input.intent.organizationId
+      );
+    case "customer":
     default:
-      return null;
+      return input.intent.organizationId;
   }
+}
+
+async function loadDeliveryRecipientDirectory(
+  intents: DispatchableNotificationIntent[],
+): Promise<DeliveryRecipientDirectory> {
+  const serviceCenterIds = [
+    ...new Set(
+      intents.flatMap((intent) =>
+        intent.recipientServiceCenterId
+          ? [intent.recipientServiceCenterId]
+          : [],
+      ),
+    ),
+  ];
+  const serviceCenters =
+    serviceCenterIds.length > 0
+      ? await db.serviceCenter.findMany({
+          where: { id: { in: serviceCenterIds } },
+          select: {
+            id: true,
+            organizationId: true,
+            email: true,
+            phone: true,
+            isActive: true,
+          },
+        })
+      : [];
+  const serviceCenterById = new Map(
+    serviceCenters.map((serviceCenter) => [serviceCenter.id, serviceCenter]),
+  );
+  const organizationIds = [
+    ...new Set(
+      intents.flatMap((intent) => {
+        const serviceCenter = intent.recipientServiceCenterId
+          ? serviceCenterById.get(intent.recipientServiceCenterId)
+          : null;
+
+        return [
+          intent.organizationId,
+          intent.recipientOrganizationId,
+          intent.recipientUser?.organizationId,
+          serviceCenter?.organizationId,
+        ].filter((organizationId): organizationId is string =>
+          Boolean(organizationId),
+        );
+      }),
+    ),
+  ];
+  const [organizations, preferencesByOrganization] = await Promise.all([
+    organizationIds.length > 0
+      ? db.organization.findMany({
+          where: { id: { in: organizationIds } },
+          select: {
+            id: true,
+            contactEmail: true,
+            contactPhone: true,
+          },
+        })
+      : Promise.resolve([]),
+    getPreventiveMaintenanceNotificationPreferencesForOrganizations(
+      organizationIds,
+    ),
+  ]);
+
+  return {
+    organizations: new Map(
+      organizations.map((organization) => [organization.id, organization]),
+    ),
+    serviceCenters: serviceCenterById,
+    preferencesByOrganization,
+  };
+}
+
+async function reconcilePreflightDeliveryAttempts(input: {
+  candidates: DeliveryAttemptCandidate[];
+  preparedAt: Date | null;
+}) {
+  if (input.candidates.length === 0) {
+    return;
+  }
+
+  await db.$transaction(
+    input.candidates.map((candidate) =>
+      db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
+        where: {
+          dedupeKey: candidate.createInput.dedupeKey,
+          status: { in: ["skipped", "queued"] },
+          providerMessageId: null,
+        },
+        data: {
+          status: candidate.createInput.status ?? "queued",
+          recipientAddress: candidate.createInput.recipientAddress ?? null,
+          skipReason: candidate.createInput.skipReason ?? null,
+          metadata: candidate.createInput.metadata ?? {},
+          ...(input.preparedAt ? { updatedAt: input.preparedAt } : {}),
+        },
+      }),
+    ),
+  );
 }
 
 function buildDeliveryAttemptDedupeKey(input: {
@@ -528,14 +743,19 @@ async function dispatchEligibleEmailAttempts(input: {
       attempt.dryRun ||
       attempt.channel !== "email" ||
       (attempt.status !== "queued" &&
-        !(input.retryFailed && attempt.status === "failed")) ||
-      !attempt.recipientAddress
+        !(input.retryFailed && attempt.status === "failed"))
     ) {
       continue;
     }
 
     const candidate = candidatesByDedupeKey.get(attempt.dedupeKey);
-    if (!candidate) {
+    const currentRecipientAddress = candidate?.createInput.recipientAddress;
+    if (
+      !candidate ||
+      candidate.createInput.status !== "queued" ||
+      typeof currentRecipientAddress !== "string" ||
+      !currentRecipientAddress
+    ) {
       continue;
     }
 
@@ -547,6 +767,7 @@ async function dispatchEligibleEmailAttempts(input: {
       attemptId: attempt.id,
       currentStatus: attempt.status,
       nextAttemptNumber,
+      recipientAddress: currentRecipientAddress,
     });
 
     if (claim.count !== 1) {
@@ -559,7 +780,7 @@ async function dispatchEligibleEmailAttempts(input: {
     providerCallCount += 1;
 
     const deliveryResult = await sendPreventiveMaintenanceEmailWithResend({
-      to: attempt.recipientAddress,
+      to: currentRecipientAddress,
       subject: candidate.title,
       text: candidate.message,
       idempotencyKey: buildProviderIdempotencyKey({
@@ -615,6 +836,7 @@ function claimEmailAttemptForDispatch(input: {
   attemptId: string;
   currentStatus: "queued" | "sending" | "sent" | "failed" | "skipped";
   nextAttemptNumber: number;
+  recipientAddress: string;
 }) {
   return db.preventiveMaintenanceNotificationDeliveryAttempt.updateMany({
     where: {
@@ -626,6 +848,7 @@ function claimEmailAttemptForDispatch(input: {
     data: {
       status: "sending",
       attemptNumber: input.nextAttemptNumber,
+      recipientAddress: input.recipientAddress,
       errorMessage: null,
       skipReason: null,
       providerResponse: Prisma.JsonNull,
@@ -678,6 +901,22 @@ function countAttemptStatuses(
       skipped: 0,
     },
   );
+}
+
+function countSuppressionReasons(
+  attempts: Array<
+    Prisma.PreventiveMaintenanceNotificationDeliveryAttemptGetPayload<{
+      select: typeof deliveryAttemptSelect;
+    }>
+  >,
+) {
+  return attempts.reduce<Record<string, number>>((counts, attempt) => {
+    if (attempt.skipReason) {
+      counts[attempt.skipReason] = (counts[attempt.skipReason] ?? 0) + 1;
+    }
+
+    return counts;
+  }, {});
 }
 
 function serializeDeliveryAttempt(
