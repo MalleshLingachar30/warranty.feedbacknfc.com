@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 
 import { PmNotificationCenter } from "@/components/notifications/pm-notification-center";
 
+type FetchCall = [input: RequestInfo | URL, init?: RequestInit];
+
 const notificationResponse = {
   notifications: [],
   pendingCount: 3,
@@ -71,7 +73,7 @@ describe("PmNotificationCenter dry-run interaction", () => {
     });
     await waitFor(() => {
       expect(
-        fetchMock.mock.calls.filter(([input]) =>
+        fetchMock.mock.calls.filter(([input]: FetchCall) =>
           String(input).startsWith(
             "/api/preventive-maintenance/notifications?",
           ),
@@ -88,7 +90,7 @@ describe("PmNotificationCenter dry-run interaction", () => {
     );
 
     const dispatchCall = fetchMock.mock.calls.find(
-      ([input]) =>
+      ([input]: FetchCall) =>
         String(input) === "/api/preventive-maintenance/notifications/dispatch",
     );
     expect(dispatchCall).toBeDefined();
@@ -109,7 +111,7 @@ describe("PmNotificationCenter dry-run interaction", () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(button.textContent).toContain("Run dry run");
     expect(
-      fetchMock.mock.calls.filter(([input]) =>
+      fetchMock.mock.calls.filter(([input]: FetchCall) =>
         String(input).startsWith("/api/preventive-maintenance/notifications?"),
       ),
     ).toHaveLength(2);
@@ -154,7 +156,7 @@ describe("PmNotificationCenter dry-run interaction", () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
     expect(
       fetchMock.mock.calls.some(
-        ([input, init]) =>
+        ([input, init]: FetchCall) =>
           String(input) ===
             "/api/preventive-maintenance/notifications/dispatch" &&
           init?.method === "POST",
