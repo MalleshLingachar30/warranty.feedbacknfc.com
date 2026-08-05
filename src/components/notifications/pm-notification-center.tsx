@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Bell,
@@ -30,6 +30,10 @@ import {
   PmNotificationPreferencesPanel,
   type PmNotificationPreferencesView,
 } from "@/components/notifications/pm-notification-preferences-panel";
+import {
+  runPmNotificationDryRun,
+  type PmNotificationDispatchResponse,
+} from "@/lib/preventive-maintenance-notification-dry-run-client";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/roles";
 
@@ -152,20 +156,6 @@ type PmNotificationSchedulerStatus = {
     preferenceSuppressedCount: number;
     errorMessage: string | null;
   } | null;
-};
-
-type PmNotificationDispatchResponse = {
-  dryRun: boolean;
-  preparedAt: string | null;
-  scannedIntentCount: number;
-  candidateAttemptCount: number;
-  createdAttemptCount: number;
-  existingAttemptCount: number;
-  missingRecipientCount: number;
-  queuedAttemptCount: number;
-  skippedAttemptCount: number;
-  preferenceSuppressedCount: number;
-  suppressionReasonCounts: Record<string, number>;
 };
 
 type PmNotificationCanaryResponse = {
@@ -369,10 +359,12 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     useState<PmNotificationCanaryResponse | null>(null);
   const [dispatchResult, setDispatchResult] =
     useState<PmNotificationDispatchResponse | null>(null);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [error, setError] = useState<string | null>(null);
+  const notificationRequestIdRef = useRef(0);
   const workspaceHref = useMemo(() => pmWorkspaceHref(role), [role]);
   const canDispatchDryRun = useMemo(() => canRunPmDeliveryDryRun(role), [role]);
 
@@ -391,6 +383,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
 
   const fetchNotifications = useCallback(
     async (options?: { silent?: boolean }) => {
+      const requestId = ++notificationRequestIdRef.current;
+
       if (options?.silent) {
         setIsRefreshing(true);
       } else {
@@ -417,6 +411,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           );
         }
 
+        if (requestId !== notificationRequestIdRef.current) {
+          return;
+        }
+
         setNotifications(body.notifications);
         setPendingCount(body.pendingCount);
         setFilteredCount(body.filteredCount);
@@ -425,14 +423,20 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setDeliveryReadiness(body.deliveryReadiness);
         setSchedulerStatus(body.schedulerStatus);
       } catch (requestError) {
+        if (requestId !== notificationRequestIdRef.current) {
+          return;
+        }
+
         setError(
           requestError instanceof Error
             ? requestError.message
             : "Unable to load PM notifications.",
         );
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (requestId === notificationRequestIdRef.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [queryString],
@@ -441,6 +445,11 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   useEffect(() => {
     void fetchNotifications();
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    setDispatchResult(null);
+    setDispatchError(null);
+  }, [triggerFilter]);
 
   const dismissNotification = useCallback(
     async (notificationId: string) => {
@@ -527,41 +536,18 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
 
   const runDeliveryDryRun = useCallback(async () => {
     setIsDispatchingDryRun(true);
-    setError(null);
     setDispatchResult(null);
+    setDispatchError(null);
 
     try {
-      const response = await fetch(
-        "/api/preventive-maintenance/notifications/dispatch",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            dryRun: true,
-            channels: ["email", "sms"],
-            limit: 50,
-            triggerType: triggerFilter === "all" ? undefined : triggerFilter,
-          }),
-        },
-      );
-      const body = (await response.json()) as
-        | PmNotificationDispatchResponse
-        | { error?: string };
-
-      if (!response.ok || !("createdAttemptCount" in body)) {
-        throw new Error(
-          "error" in body
-            ? (body.error ?? "Unable to run delivery dry run.")
-            : "Unable to run delivery dry run.",
-        );
-      }
+      const body = await runPmNotificationDryRun({
+        triggerType: triggerFilter === "all" ? undefined : triggerFilter,
+      });
 
       setDispatchResult(body);
       await fetchNotifications({ silent: true });
     } catch (requestError) {
-      setError(
+      setDispatchError(
         requestError instanceof Error
           ? requestError.message
           : "Unable to run delivery dry run.",
@@ -1112,8 +1098,13 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
               <Button
                 type="button"
                 size="sm"
-                onClick={() => void runDeliveryDryRun()}
-                disabled={isDispatchingDryRun || isLoading}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void runDeliveryDryRun();
+                }}
+                disabled={isDispatchingDryRun}
+                aria-describedby="pm-delivery-dry-run-feedback"
               >
                 {isDispatchingDryRun ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1124,20 +1115,38 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
               </Button>
             </div>
           </div>
-          {dispatchResult ? (
-            <p className="mt-2 text-xs text-slate-500">
-              Scanned {dispatchResult.scannedIntentCount} pending notification
-              {dispatchResult.scannedIntentCount === 1 ? "" : "s"} and prepared{" "}
-              {dispatchResult.candidateAttemptCount} channel attempt
-              {dispatchResult.candidateAttemptCount === 1 ? "" : "s"}.
-              {dispatchResult.missingRecipientCount > 0
-                ? ` ${dispatchResult.missingRecipientCount} missing recipient ${dispatchResult.missingRecipientCount === 1 ? "address was" : "addresses were"} skipped.`
-                : ""}
-              {dispatchResult.preferenceSuppressedCount > 0
-                ? ` ${dispatchResult.preferenceSuppressedCount} attempt${dispatchResult.preferenceSuppressedCount === 1 ? " was" : "s were"} suppressed by organization rules.`
-                : ""}
-            </p>
-          ) : null}
+          <div
+            id="pm-delivery-dry-run-feedback"
+            className="mt-2 min-h-4 text-xs"
+            role="status"
+            aria-live="polite"
+          >
+            {isDispatchingDryRun ? (
+              <p className="text-slate-600">
+                Preparing non-live email and SMS attempts…
+              </p>
+            ) : dispatchError ? (
+              <p className="text-rose-700">{dispatchError}</p>
+            ) : dispatchResult ? (
+              <p className="text-emerald-700">
+                Scanned {dispatchResult.scannedIntentCount} pending notification
+                {dispatchResult.scannedIntentCount === 1 ? "" : "s"} and
+                prepared {dispatchResult.candidateAttemptCount} channel attempt
+                {dispatchResult.candidateAttemptCount === 1 ? "" : "s"}.
+                {dispatchResult.missingRecipientCount > 0
+                  ? ` ${dispatchResult.missingRecipientCount} missing recipient ${dispatchResult.missingRecipientCount === 1 ? "address was" : "addresses were"} skipped.`
+                  : ""}
+                {dispatchResult.preferenceSuppressedCount > 0
+                  ? ` ${dispatchResult.preferenceSuppressedCount} attempt${dispatchResult.preferenceSuppressedCount === 1 ? " was" : "s were"} suppressed by organization rules.`
+                  : ""}
+              </p>
+            ) : (
+              <p className="text-slate-500">
+                This control prepares attempts only; it never sends live email
+                or SMS.
+              </p>
+            )}
+          </div>
         </div>
       ) : null}
 
