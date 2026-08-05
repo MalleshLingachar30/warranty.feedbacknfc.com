@@ -30,10 +30,8 @@ import {
   PmNotificationPreferencesPanel,
   type PmNotificationPreferencesView,
 } from "@/components/notifications/pm-notification-preferences-panel";
-import {
-  runPmNotificationDryRun,
-  type PmNotificationDispatchResponse,
-} from "@/lib/preventive-maintenance-notification-dry-run-client";
+import { PmNotificationDryRunAction } from "@/components/notifications/pm-notification-dry-run-action";
+import { runPmNotificationDryRun } from "@/lib/preventive-maintenance-notification-dry-run-client";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/roles";
 
@@ -352,14 +350,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isBulkDismissing, setIsBulkDismissing] = useState(false);
-  const [isDispatchingDryRun, setIsDispatchingDryRun] = useState(false);
   const [isSendingCanary, setIsSendingCanary] = useState(false);
   const [canaryConfirmed, setCanaryConfirmed] = useState(false);
   const [canaryResult, setCanaryResult] =
     useState<PmNotificationCanaryResponse | null>(null);
-  const [dispatchResult, setDispatchResult] =
-    useState<PmNotificationDispatchResponse | null>(null);
-  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -446,11 +440,6 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     void fetchNotifications();
   }, [fetchNotifications]);
 
-  useEffect(() => {
-    setDispatchResult(null);
-    setDispatchError(null);
-  }, [triggerFilter]);
-
   const dismissNotification = useCallback(
     async (notificationId: string) => {
       setDismissingIds((current) => new Set(current).add(notificationId));
@@ -535,26 +524,12 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   }, [fetchNotifications, statusFilter, triggerFilter]);
 
   const runDeliveryDryRun = useCallback(async () => {
-    setIsDispatchingDryRun(true);
-    setDispatchResult(null);
-    setDispatchError(null);
+    const body = await runPmNotificationDryRun({
+      triggerType: triggerFilter === "all" ? undefined : triggerFilter,
+    });
 
-    try {
-      const body = await runPmNotificationDryRun({
-        triggerType: triggerFilter === "all" ? undefined : triggerFilter,
-      });
-
-      setDispatchResult(body);
-      await fetchNotifications({ silent: true });
-    } catch (requestError) {
-      setDispatchError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to run delivery dry run.",
-      );
-    } finally {
-      setIsDispatchingDryRun(false);
-    }
+    await fetchNotifications({ silent: true });
+    return body;
   }, [fetchNotifications, triggerFilter]);
 
   const sendLiveCanary = useCallback(async () => {
@@ -1066,86 +1041,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                 ) : null}
               </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              {dispatchResult ? (
-                <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[310px]">
-                  <div className="rounded-md border border-slate-200 px-2 py-1.5">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                      New
-                    </p>
-                    <p className="text-sm font-semibold text-slate-950">
-                      {dispatchResult.createdAttemptCount}
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 px-2 py-1.5">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                      Existing
-                    </p>
-                    <p className="text-sm font-semibold text-slate-950">
-                      {dispatchResult.existingAttemptCount}
-                    </p>
-                  </div>
-                  <div className="rounded-md border border-slate-200 px-2 py-1.5">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                      Skipped
-                    </p>
-                    <p className="text-sm font-semibold text-slate-950">
-                      {dispatchResult.skippedAttemptCount}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void runDeliveryDryRun();
-                }}
-                disabled={isDispatchingDryRun}
-                aria-describedby="pm-delivery-dry-run-feedback"
-              >
-                {isDispatchingDryRun ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                Run dry run
-              </Button>
-            </div>
-          </div>
-          <div
-            id="pm-delivery-dry-run-feedback"
-            className="mt-2 min-h-4 text-xs"
-            role="status"
-            aria-live="polite"
-          >
-            {isDispatchingDryRun ? (
-              <p className="text-slate-600">
-                Preparing non-live email and SMS attempts…
-              </p>
-            ) : dispatchError ? (
-              <p className="text-rose-700">{dispatchError}</p>
-            ) : dispatchResult ? (
-              <p className="text-emerald-700">
-                Scanned {dispatchResult.scannedIntentCount} pending notification
-                {dispatchResult.scannedIntentCount === 1 ? "" : "s"} and
-                prepared {dispatchResult.candidateAttemptCount} channel attempt
-                {dispatchResult.candidateAttemptCount === 1 ? "" : "s"}.
-                {dispatchResult.missingRecipientCount > 0
-                  ? ` ${dispatchResult.missingRecipientCount} missing recipient ${dispatchResult.missingRecipientCount === 1 ? "address was" : "addresses were"} skipped.`
-                  : ""}
-                {dispatchResult.preferenceSuppressedCount > 0
-                  ? ` ${dispatchResult.preferenceSuppressedCount} attempt${dispatchResult.preferenceSuppressedCount === 1 ? " was" : "s were"} suppressed by organization rules.`
-                  : ""}
-              </p>
-            ) : (
-              <p className="text-slate-500">
-                This control prepares attempts only; it never sends live email
-                or SMS.
-              </p>
-            )}
+            <PmNotificationDryRunAction
+              key={triggerFilter}
+              runDryRun={runDeliveryDryRun}
+            />
           </div>
         </div>
       ) : null}
