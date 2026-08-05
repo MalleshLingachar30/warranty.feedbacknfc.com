@@ -71,6 +71,16 @@ describe("PmNotificationCenter dry-run interaction", () => {
     const button = await screen.findByRole("button", {
       name: "Run dry run",
     });
+    const filterPanel = screen.getByTestId("pm-notification-filter-panel");
+    const dryRunPanel = screen.getByTestId("pm-delivery-dry-run-panel");
+
+    // Keep the production-facing action directly after the compact filters.
+    // Long readiness, scheduler, and preferences diagnostics follow this panel,
+    // so moving it below them can put the clickable target outside the viewport.
+    expect(filterPanel.nextElementSibling).toBe(dryRunPanel);
+    expect(button.closest("[data-testid='pm-delivery-dry-run-panel']")).toBe(
+      dryRunPanel,
+    );
     await waitFor(() => {
       expect(
         fetchMock.mock.calls.filter(([input]: FetchCall) =>
