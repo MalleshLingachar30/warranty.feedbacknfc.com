@@ -16,6 +16,7 @@ import {
 } from "@/lib/preventive-maintenance-delivery-attempts";
 import {
   getPreventiveMaintenanceEmailDeliveryConfiguration,
+  getPreventiveMaintenanceEmailDeliveryReadiness,
   sendPreventiveMaintenanceEmailWithResend,
 } from "@/lib/preventive-maintenance-email-delivery";
 import {
@@ -25,6 +26,11 @@ import {
   startPreventiveMaintenanceNotificationSystemAudit,
 } from "@/lib/preventive-maintenance-notification-audit";
 import { PreventiveMaintenanceNotificationApiError } from "@/lib/preventive-maintenance-api-error";
+import {
+  PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP,
+  resolvePreventiveMaintenanceManualEmailPilotRequest,
+  summarizePreventiveMaintenanceManualEmailPilotRequest,
+} from "@/lib/preventive-maintenance-manual-email-pilot-policy";
 import {
   getPreventiveMaintenanceNotificationRolePreference,
   isPreventiveMaintenanceMissingRecipientReason,
@@ -103,6 +109,9 @@ type DispatchExecutionContext =
       source: "manual";
     }
   | {
+      source: "manual_pilot";
+    }
+  | {
       source: "scheduled";
       scheduledRunId: string;
     };
@@ -113,6 +122,7 @@ type ExecutePreventiveMaintenanceNotificationDispatchInput = Omit<
 > & {
   scopeWhere: Prisma.PreventiveMaintenanceNotificationIntentWhereInput;
   executionContext: DispatchExecutionContext;
+  expectedIntentCount?: number;
 };
 
 type RecipientOrganization = {
@@ -256,6 +266,13 @@ export async function dispatchPreventiveMaintenanceNotifications(
   });
 
   try {
+    if (!input.dryRun) {
+      throw new PreventiveMaintenanceNotificationApiError(
+        "Generic PM notification dispatch is dry-run only. Use the dedicated manual live email pilot endpoint for reviewed live sends.",
+        400,
+      );
+    }
+
     const result = await executePreventiveMaintenanceNotificationDispatch({
       ...input,
       scopeWhere: input.audience.where,
@@ -317,6 +334,194 @@ export async function dispatchPreventiveMaintenanceNotificationsForScheduledRun(
       scheduledRunId: input.scheduledRunId,
     },
   });
+}
+
+export async function sendPreventiveMaintenanceManualEmailPilot(input: {
+  audience: PreventiveMaintenanceNotificationAudience;
+  request: unknown;
+}) {
+  if (!canDispatchPreventiveMaintenanceNotifications(input.audience.role)) {
+    throw new PreventiveMaintenanceNotificationApiError("Forbidden", 403);
+  }
+
+  const requestSummary = summarizePreventiveMaintenanceManualEmailPilotRequest(
+    input.request,
+  );
+  const readiness = getPreventiveMaintenanceEmailDeliveryReadiness();
+  const audit = await startPreventiveMaintenanceNotificationAudit({
+    audience: input.audience,
+    operation: "manual_live_email_pilot",
+    channel: "email",
+    metadata: {
+      provider: readiness.provider,
+      liveEmailStatus: readiness.liveEmail.status,
+      batchCap: PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP,
+      ...requestSummary,
+    },
+  });
+
+  try {
+    const resolution = resolvePreventiveMaintenanceManualEmailPilotRequest(
+      input.request,
+    );
+    if (!resolution.ok) {
+      throw new PreventiveMaintenanceNotificationApiError(
+        resolution.error,
+        resolution.status,
+      );
+    }
+
+    if (readiness.liveEmail.status !== "ready") {
+      const blockingConfiguration =
+        readiness.liveEmail.status === "disabled"
+          ? "PM_NOTIFICATION_EMAIL_DELIVERY_ENABLED"
+          : readiness.liveEmail.missingConfiguration.join(", ");
+      throw new PreventiveMaintenanceNotificationApiError(
+        `Manual live email pilot is not ready: ${blockingConfiguration}.`,
+        409,
+      );
+    }
+
+    const notificationIds = resolution.request.notificationIds;
+    const reviewedNotifications =
+      await db.preventiveMaintenanceNotificationIntent.findMany({
+        where: {
+          AND: [
+            input.audience.where,
+            {
+              id: { in: notificationIds },
+              channel: "in_app",
+              status: "pending",
+            },
+          ],
+        },
+        select: {
+          id: true,
+          deliveryAttempts: {
+            where: {
+              channel: "email",
+              dryRun: true,
+            },
+            orderBy: {
+              updatedAt: "desc",
+            },
+            take: 1,
+            select: {
+              updatedAt: true,
+            },
+          },
+        },
+      });
+
+    if (reviewedNotifications.length !== notificationIds.length) {
+      throw new PreventiveMaintenanceNotificationApiError(
+        "The manual pilot selection must contain only exact, pending notifications in the operator's authorized scope.",
+        409,
+      );
+    }
+
+    const missingDryRunReviewCount = reviewedNotifications.filter(
+      (notification) => notification.deliveryAttempts.length === 0,
+    ).length;
+    if (missingDryRunReviewCount > 0) {
+      throw new PreventiveMaintenanceNotificationApiError(
+        `Run and review an email delivery dry run for every selected notification before live delivery. ${missingDryRunReviewCount} selected notification${missingDryRunReviewCount === 1 ? " is" : "s are"} missing dry-run diagnostics.`,
+        409,
+      );
+    }
+
+    const result = await executePreventiveMaintenanceNotificationDispatch({
+      channels: ["email"],
+      limit: notificationIds.length,
+      dryRun: false,
+      confirmLiveDelivery: true,
+      retryFailed: false,
+      triggerType: null,
+      scopeWhere: {
+        AND: [
+          input.audience.where,
+          {
+            id: {
+              in: notificationIds,
+            },
+          },
+        ],
+      },
+      executionContext: { source: "manual_pilot" },
+      expectedIntentCount: notificationIds.length,
+    });
+
+    await finishPreventiveMaintenanceNotificationAuditSafely({
+      auditId: audit.id,
+      outcome:
+        result.failedAttemptCount > 0 || result.deadLetteredAttemptCount > 0
+          ? "completed_with_failures"
+          : "succeeded",
+      notificationIntentCount: result.scannedIntentCount,
+      deliveryAttemptCount: result.candidateAttemptCount,
+      providerCallCount: result.providerCallCount,
+      metadata: {
+        mode: "manual_live_email_pilot",
+        confirmationProvided: true,
+        selectedNotificationCount: notificationIds.length,
+        sentAttemptCount: result.sentAttemptCount,
+        failedAttemptCount: result.failedAttemptCount,
+        skippedAttemptCount: result.skippedAttemptCount,
+        missingRecipientCount: result.missingRecipientCount,
+        preferenceSuppressedCount: result.preferenceSuppressedCount,
+        suppressionReasonCounts: result.suppressionReasonCounts,
+      },
+    });
+
+    return {
+      ok: true as const,
+      mode: "manual_live_email_pilot" as const,
+      auditId: audit.id,
+      completedAt: new Date().toISOString(),
+      selectedNotificationCount: notificationIds.length,
+      scannedIntentCount: result.scannedIntentCount,
+      candidateAttemptCount: result.candidateAttemptCount,
+      createdAttemptCount: result.createdAttemptCount,
+      existingAttemptCount: result.existingAttemptCount,
+      sentAttemptCount: result.sentAttemptCount,
+      failedAttemptCount: result.failedAttemptCount,
+      skippedAttemptCount: result.skippedAttemptCount,
+      missingRecipientCount: result.missingRecipientCount,
+      preferenceSuppressedCount: result.preferenceSuppressedCount,
+      providerCallCount: result.providerCallCount,
+      suppressionReasonCounts: result.suppressionReasonCounts,
+      attempts: result.attempts.map((attempt) => ({
+        id: attempt.id,
+        notificationIntentId: attempt.notificationIntentId,
+        channel: attempt.channel,
+        status: attempt.status,
+        recipientAddressMasked: attempt.recipientAddressMasked,
+        hasRecipientAddress: attempt.hasRecipientAddress,
+        errorMessage: attempt.errorMessage,
+        skipReason: attempt.skipReason,
+        attemptNumber: attempt.attemptNumber,
+        updatedAt: attempt.updatedAt,
+      })),
+    };
+  } catch (error) {
+    await finishPreventiveMaintenanceNotificationAuditSafely({
+      auditId: audit.id,
+      outcome:
+        error instanceof PreventiveMaintenanceNotificationApiError &&
+        error.status < 500
+          ? "rejected"
+          : "failed",
+      errorMessage: preventiveMaintenanceAuditErrorMessage(error),
+      metadata: {
+        mode: "manual_live_email_pilot",
+        provider: readiness.provider,
+        liveEmailStatus: readiness.liveEmail.status,
+        batchCap: PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP,
+        ...requestSummary,
+      },
+    });
+    throw error;
+  }
 }
 
 function buildScheduledDispatchScopeWhere(input: {
@@ -420,6 +625,17 @@ async function executePreventiveMaintenanceNotificationDispatch(
     take: input.limit,
     select: dispatchableNotificationIntentSelect,
   });
+
+  if (
+    input.expectedIntentCount !== undefined &&
+    intents.length !== input.expectedIntentCount
+  ) {
+    throw new PreventiveMaintenanceNotificationApiError(
+      "The reviewed manual pilot batch changed before delivery. Refresh, review, and confirm the exact pending selection again.",
+      409,
+    );
+  }
+
   const recipientDirectory = await loadDeliveryRecipientDirectory(intents);
   const emailConfiguration =
     getPreventiveMaintenanceEmailDeliveryConfiguration();

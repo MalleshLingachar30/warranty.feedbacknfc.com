@@ -89,6 +89,19 @@ function numberFromMetadata(metadata: Prisma.JsonValue, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function dispatchSourceFromMetadata(metadata: Prisma.JsonValue) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const source = metadata.dispatchSource;
+  return source === "manual_pilot" ||
+    source === "scheduled" ||
+    source === "manual"
+    ? source
+    : null;
+}
+
 function serializeRunTimestamp(run: ScheduledRunReportingRow | null) {
   if (!run) {
     return null;
@@ -252,6 +265,7 @@ export async function getPmNotificationReporting(input: {
     missingRecipientCount,
     preferenceSuppressedCount,
     scheduler,
+    manualPilotAuditGroups,
   ] = await Promise.all([
     db.preventiveMaintenanceNotificationIntent.findMany({
       where: notificationWhere,
@@ -309,6 +323,7 @@ export async function getPmNotificationReporting(input: {
         attemptNumber: true,
         nextRetryAt: true,
         deadLetteredAt: true,
+        metadata: true,
         createdAt: true,
         updatedAt: true,
         notificationIntent: {
@@ -343,11 +358,36 @@ export async function getPmNotificationReporting(input: {
       },
     }),
     getSchedulerHealth({ audience: input.audience, scopeWhere }),
+    db.preventiveMaintenanceNotificationAuditLog.groupBy({
+      by: ["outcome"],
+      where: {
+        operation: "manual_live_email_pilot",
+        createdAt: {
+          gte: input.filters.startAt,
+          lt: input.filters.endAtExclusive,
+        },
+        ...(isPmNotificationReportingGlobalScope(input.audience.role)
+          ? {}
+          : { organizationId: input.audience.organizationId }),
+      },
+      _count: { _all: true },
+      _sum: {
+        deliveryAttemptCount: true,
+        providerCallCount: true,
+      },
+    }),
   ]);
 
   const notificationStatusCounts = emptyNotificationStatusCounts();
   const attemptStatusCounts = emptyAttemptStatusCounts();
   const channelStatusCounts = emptyChannelStatusCounts();
+  const manualPilotOutcomeCounts = {
+    attempted: 0,
+    succeeded: 0,
+    completed_with_failures: 0,
+    rejected: 0,
+    failed: 0,
+  };
 
   for (const notification of notifications) {
     notificationStatusCounts[notification.status] += 1;
@@ -356,6 +396,10 @@ export async function getPmNotificationReporting(input: {
   for (const group of attemptGroups) {
     attemptStatusCounts[group.status] += group._count._all;
     channelStatusCounts[group.channel][group.status] += group._count._all;
+  }
+
+  for (const group of manualPilotAuditGroups) {
+    manualPilotOutcomeCounts[group.outcome] = group._count._all;
   }
 
   const complianceRows: PmNotificationReportCsvRow[] = notifications.map(
@@ -437,6 +481,21 @@ export async function getPmNotificationReporting(input: {
       pmStatusChange,
     },
     scheduler,
+    manualPilot: {
+      batchCount: manualPilotAuditGroups.reduce(
+        (total, group) => total + group._count._all,
+        0,
+      ),
+      deliveryAttemptCount: manualPilotAuditGroups.reduce(
+        (total, group) => total + (group._sum.deliveryAttemptCount ?? 0),
+        0,
+      ),
+      providerCallCount: manualPilotAuditGroups.reduce(
+        (total, group) => total + (group._sum.providerCallCount ?? 0),
+        0,
+      ),
+      outcomeCounts: manualPilotOutcomeCounts,
+    },
     recentAttempts: recentAttempts.map((attempt) => ({
       id: attempt.id,
       eventNumber: attempt.notificationIntent.event.eventNumber,
@@ -445,6 +504,7 @@ export async function getPmNotificationReporting(input: {
       channel: attempt.channel,
       status: attempt.status,
       dryRun: attempt.dryRun,
+      dispatchSource: dispatchSourceFromMetadata(attempt.metadata),
       skipReason: sanitizePmNotificationReportingDiagnostic(attempt.skipReason),
       attemptNumber: attempt.attemptNumber,
       nextRetryAt: attempt.nextRetryAt?.toISOString() ?? null,

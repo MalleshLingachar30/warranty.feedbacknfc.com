@@ -372,6 +372,7 @@ enum PreventiveMaintenanceNotificationAuditOperation {
   dry_run_dispatch
   live_dispatch
   live_canary
+  manual_live_email_pilot
   preference_update
   scheduled_dispatch
   scheduled_delivery_attempt

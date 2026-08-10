@@ -7,6 +7,7 @@ import {
   Download,
   FileCheck2,
   Inbox,
+  MailCheck,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
@@ -200,7 +201,7 @@ export function PmNotificationReportingDashboard({
     <div className="flex min-w-0 max-w-full flex-col gap-6 break-words">
       <PageHeader
         title="PM notification reporting"
-        description="Validate delivery, suppression, scheduler health, and response outcomes from canonical Phase 4 records."
+        description="Validate delivery, manual live pilot, suppression, scheduler health, and response outcomes from canonical PM notification records."
         actions={
           <>
             <Button asChild variant="outline" size="sm">
@@ -509,6 +510,43 @@ export function PmNotificationReportingDashboard({
         </Card>
       </div>
 
+      <Card className="min-w-0 border-rose-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MailCheck />
+            Manual live email pilot audit
+          </CardTitle>
+          <CardDescription>
+            Counts come directly from role-gated manual pilot audit records for
+            this date range. Recipient addresses and provider payloads are not
+            included.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-7">
+            {[
+              ["Batches", reporting.manualPilot.batchCount],
+              ["Succeeded", reporting.manualPilot.outcomeCounts.succeeded],
+              [
+                "With failures",
+                reporting.manualPilot.outcomeCounts.completed_with_failures,
+              ],
+              ["Rejected", reporting.manualPilot.outcomeCounts.rejected],
+              ["Failed", reporting.manualPilot.outcomeCounts.failed],
+              ["Attempts", reporting.manualPilot.deliveryAttemptCount],
+              ["Provider calls", reporting.manualPilot.providerCallCount],
+            ].map(([label, value]) => (
+              <div key={label} className="flex flex-col gap-1">
+                <dt className="text-xs text-muted-foreground">{label}</dt>
+                <dd className="font-mono text-lg font-semibold tabular-nums">
+                  {Number(value).toLocaleString("en-IN")}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </CardContent>
+      </Card>
+
       <section className="flex flex-col gap-3" aria-labelledby="response-title">
         <div className="flex flex-col gap-1">
           <h2 id="response-title" className="text-lg font-semibold">
@@ -596,7 +634,15 @@ export function PmNotificationReportingDashboard({
                         {labelFromSnakeCase(attempt.status)}
                       </Badge>
                     </TableCell>
-                    <TableCell>{attempt.dryRun ? "Dry run" : "Live"}</TableCell>
+                    <TableCell>
+                      {attempt.dryRun
+                        ? "Dry run"
+                        : attempt.dispatchSource === "manual_pilot"
+                          ? "Manual pilot"
+                          : attempt.dispatchSource === "scheduled"
+                            ? "Scheduled live"
+                            : "Live"}
+                    </TableCell>
                     <TableCell className="font-mono tabular-nums">
                       {attempt.attemptNumber}
                     </TableCell>

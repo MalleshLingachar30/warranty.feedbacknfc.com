@@ -31,7 +31,13 @@ import {
   type PmNotificationPreferencesView,
 } from "@/components/notifications/pm-notification-preferences-panel";
 import { PmNotificationDryRunAction } from "@/components/notifications/pm-notification-dry-run-action";
+import { PmNotificationManualEmailPilotPanel } from "@/components/notifications/pm-notification-manual-email-pilot-panel";
 import { runPmNotificationDryRun } from "@/lib/preventive-maintenance-notification-dry-run-client";
+import {
+  runPmNotificationManualEmailPilot,
+  type PmNotificationManualEmailPilotResponse,
+} from "@/lib/preventive-maintenance-manual-email-pilot-client";
+import { PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP } from "@/lib/preventive-maintenance-manual-email-pilot-policy";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/lib/roles";
 
@@ -354,6 +360,13 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
   const [canaryConfirmed, setCanaryConfirmed] = useState(false);
   const [canaryResult, setCanaryResult] =
     useState<PmNotificationCanaryResponse | null>(null);
+  const [selectedPilotIds, setSelectedPilotIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [pilotConfirmed, setPilotConfirmed] = useState(false);
+  const [isSendingPilot, setIsSendingPilot] = useState(false);
+  const [pilotResult, setPilotResult] =
+    useState<PmNotificationManualEmailPilotResponse | null>(null);
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -416,6 +429,19 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setLastDryRun(body.lastDryRun);
         setDeliveryReadiness(body.deliveryReadiness);
         setSchedulerStatus(body.schedulerStatus);
+        const visiblePendingIds = new Set(
+          body.notifications
+            .filter((notification) => notification.status === "pending")
+            .map((notification) => notification.id),
+        );
+        setSelectedPilotIds((current) => {
+          const next = new Set(
+            [...current].filter((notificationId) =>
+              visiblePendingIds.has(notificationId),
+            ),
+          );
+          return next.size === current.size ? current : next;
+        });
       } catch (requestError) {
         if (requestId !== notificationRequestIdRef.current) {
           return;
@@ -575,6 +601,98 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     }
   }, [canaryConfirmed]);
 
+  const togglePilotSelection = useCallback(
+    (notificationId: string, checked: boolean) => {
+      setSelectedPilotIds((current) => {
+        const next = new Set(current);
+        if (checked) {
+          if (
+            next.size >= PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP
+          ) {
+            return current;
+          }
+          next.add(notificationId);
+        } else {
+          next.delete(notificationId);
+        }
+        return next;
+      });
+      setPilotConfirmed(false);
+      setPilotResult(null);
+    },
+    [],
+  );
+
+  const resetPilotSelection = useCallback(() => {
+    setSelectedPilotIds(new Set());
+    setPilotConfirmed(false);
+    setPilotResult(null);
+  }, []);
+
+  const sendManualEmailPilot = useCallback(async () => {
+    setIsSendingPilot(true);
+    setError(null);
+    setPilotResult(null);
+
+    try {
+      const result = await runPmNotificationManualEmailPilot({
+        notificationIds: [...selectedPilotIds],
+      });
+      setPilotResult(result);
+      setPilotConfirmed(false);
+      setSelectedPilotIds(new Set());
+      await fetchNotifications({ silent: true });
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to complete the manual live email pilot.",
+      );
+    } finally {
+      setIsSendingPilot(false);
+    }
+  }, [fetchNotifications, selectedPilotIds]);
+
+  const selectedPilotDiagnostics = useMemo(() => {
+    const diagnostics = {
+      reviewedCount: 0,
+      readyCount: 0,
+      missingRecipientCount: 0,
+      preferenceSuppressedCount: 0,
+      otherSuppressedCount: 0,
+    };
+
+    for (const notification of notifications) {
+      if (!selectedPilotIds.has(notification.id)) {
+        continue;
+      }
+
+      const dryRunEmailAttempt = notification.deliveryAttempts.find(
+        (attempt) => attempt.channel === "email" && attempt.dryRun,
+      );
+      if (!dryRunEmailAttempt) {
+        continue;
+      }
+
+      diagnostics.reviewedCount += 1;
+      const skipReason = dryRunEmailAttempt.skipReason;
+      if (skipReason === "dry_run") {
+        diagnostics.readyCount += 1;
+      } else if (
+        skipReason?.includes("_missing_email") ||
+        skipReason?.endsWith("_unavailable")
+      ) {
+        diagnostics.missingRecipientCount += 1;
+      } else if (skipReason?.endsWith("_email_disabled")) {
+        diagnostics.preferenceSuppressedCount += 1;
+      } else {
+        diagnostics.otherSuppressedCount += 1;
+      }
+    }
+
+    return diagnostics;
+  }, [notifications, selectedPilotIds]);
+
   const canDismissAll =
     !isLoading &&
     !isBulkDismissing &&
@@ -629,7 +747,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   variant={
                     statusFilter === filter.value ? "default" : "outline"
                   }
-                  onClick={() => setStatusFilter(filter.value)}
+                  onClick={() => {
+                    resetPilotSelection();
+                    setStatusFilter(filter.value);
+                  }}
                 >
                   {filter.label}
                 </Button>
@@ -649,7 +770,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   variant={
                     triggerFilter === filter.value ? "default" : "outline"
                   }
-                  onClick={() => setTriggerFilter(filter.value)}
+                  onClick={() => {
+                    resetPilotSelection();
+                    setTriggerFilter(filter.value);
+                  }}
                 >
                   {filter.label}
                 </Button>
@@ -745,6 +869,19 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             />
           </div>
         </div>
+      ) : null}
+
+      {canDispatchDryRun && deliveryReadiness ? (
+        <PmNotificationManualEmailPilotPanel
+          selectedCount={selectedPilotIds.size}
+          diagnostics={selectedPilotDiagnostics}
+          liveEmailReadiness={deliveryReadiness.liveEmail}
+          confirmationChecked={pilotConfirmed}
+          isSending={isSendingPilot}
+          result={pilotResult}
+          onConfirmationChange={setPilotConfirmed}
+          onSend={() => void sendManualEmailPilot()}
+        />
       ) : null}
 
       {canDispatchDryRun && deliveryReadiness ? (
@@ -1157,6 +1294,30 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                     </div>
 
                     <div className="flex min-w-[150px] shrink-0 items-center gap-2 lg:justify-end">
+                      {canDispatchDryRun &&
+                      notification.status === "pending" ? (
+                        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-800 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-rose-700"
+                            checked={selectedPilotIds.has(notification.id)}
+                            onChange={(event) =>
+                              togglePilotSelection(
+                                notification.id,
+                                event.target.checked,
+                              )
+                            }
+                            disabled={
+                              isSendingPilot ||
+                              (!selectedPilotIds.has(notification.id) &&
+                                selectedPilotIds.size >=
+                                  PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP)
+                            }
+                            aria-label={`Select ${notification.title} for manual live email pilot`}
+                          />
+                          Pilot
+                        </label>
+                      ) : null}
                       <Button asChild size="sm" variant="outline">
                         <Link href={workspaceHref}>Open PM</Link>
                       </Button>
