@@ -368,6 +368,24 @@ enum PreventiveMaintenanceNotificationDeliveryStatus {
   skipped
 }
 
+enum PreventiveMaintenanceNotificationProviderEventStatus {
+  accepted
+  sent
+  delivered
+  bounced
+  suppressed
+  delivery_delayed
+  complained
+  failed
+  unknown
+}
+
+enum PreventiveMaintenanceNotificationRecipientHygieneStatus {
+  bounced
+  suppressed
+  complained
+}
+
 enum PreventiveMaintenanceNotificationAuditOperation {
   dry_run_dispatch
   live_dispatch
@@ -376,6 +394,7 @@ enum PreventiveMaintenanceNotificationAuditOperation {
   preference_update
   scheduled_dispatch
   scheduled_delivery_attempt
+  provider_reconciliation
 }
 
 enum PreventiveMaintenanceNotificationAuditOutcome {
@@ -567,39 +586,40 @@ model Organization {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  parentOrganization                           Organization?                                 @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
-  childOrganizations                           Organization[]                                @relation("OrganizationHierarchy")
+  parentOrganization                           Organization?                                       @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id])
+  childOrganizations                           Organization[]                                      @relation("OrganizationHierarchy")
   users                                        User[]
   productModels                                ProductModel[]
-  allocatedStickers                            Sticker[]                                     @relation("AllocatedOrganization")
+  allocatedStickers                            Sticker[]                                           @relation("AllocatedOrganization")
   products                                     Product[]
   serviceCenters                               ServiceCenter[]
-  manufacturerClaims                           WarrantyClaim[]                               @relation("ManufacturerOrganizationClaims")
-  serviceCenterClaims                          WarrantyClaim[]                               @relation("ServiceCenterOrganizationClaims")
+  manufacturerClaims                           WarrantyClaim[]                                     @relation("ManufacturerOrganizationClaims")
+  serviceCenterClaims                          WarrantyClaim[]                                     @relation("ServiceCenterOrganizationClaims")
   stickerAllocations                           StickerAllocation[]
   assetIdentities                              AssetIdentity[]
   serializedSalesLines                         SerializedSalesLine[]
   saleRegistrations                            SaleRegistration[]
   tagGenerationBatches                         TagGenerationBatch[]
-  installationJobs                             InstallationJob[]                             @relation("ManufacturerInstallationJobs")
+  installationJobs                             InstallationJob[]                                   @relation("ManufacturerInstallationJobs")
   integrationConnectors                        IntegrationConnector[]
   integrationFeeds                             IntegrationFeed[]
   integrationRuns                              IntegrationRun[]
   integrationStagingRecords                    IntegrationStagingRecord[]
   integrationReplayRequests                    IntegrationReplayRequest[]
-  erpItemMasterRecords                         ErpItemMasterRecord[]                         @relation("OrganizationErpItemMasterRecords")
-  importedDistributorMasterRecords             ErpDistributorMasterRecord[]                  @relation("ManufacturerErpDistributorMasterRecords")
-  mappedDistributorMasterRecords               ErpDistributorMasterRecord[]                  @relation("MappedDistributorMasterRecord")
-  erpSerializedDispatchRecords                 ErpSerializedDispatchRecord[]                 @relation("ManufacturerErpSerializedDispatchRecords")
-  mappedSerializedDispatchRecords              ErpSerializedDispatchRecord[]                 @relation("ErpSerializedDispatchDistributor")
+  erpItemMasterRecords                         ErpItemMasterRecord[]                               @relation("OrganizationErpItemMasterRecords")
+  importedDistributorMasterRecords             ErpDistributorMasterRecord[]                        @relation("ManufacturerErpDistributorMasterRecords")
+  mappedDistributorMasterRecords               ErpDistributorMasterRecord[]                        @relation("MappedDistributorMasterRecord")
+  erpSerializedDispatchRecords                 ErpSerializedDispatchRecord[]                       @relation("ManufacturerErpSerializedDispatchRecords")
+  mappedSerializedDispatchRecords              ErpSerializedDispatchRecord[]                       @relation("ErpSerializedDispatchDistributor")
   assetExternalIdentities                      AssetExternalIdentity[]
-  manufacturerInternalServiceOrders            InternalServiceOrder[]                        @relation("ManufacturerInternalServiceOrders")
-  sourceInternalServiceOrders                  InternalServiceOrder[]                        @relation("SourceOrganizationInternalServiceOrders")
+  manufacturerInternalServiceOrders            InternalServiceOrder[]                              @relation("ManufacturerInternalServiceOrders")
+  sourceInternalServiceOrders                  InternalServiceOrder[]                              @relation("SourceOrganizationInternalServiceOrders")
   preventiveMaintenancePlans                   PreventiveMaintenancePlan[]
   preventiveMaintenanceEvents                  PreventiveMaintenanceEvent[]
-  preventiveMaintenanceNotifications           PreventiveMaintenanceNotificationIntent[]     @relation("PreventiveMaintenanceNotificationOrganization")
+  preventiveMaintenanceNotifications           PreventiveMaintenanceNotificationIntent[]           @relation("PreventiveMaintenanceNotificationOrganization")
   preventiveMaintenanceNotificationPreferences PreventiveMaintenanceNotificationPreference[]
   preventiveMaintenanceNotificationAuditLogs   PreventiveMaintenanceNotificationAuditLog[]
+  preventiveMaintenanceRecipientHygieneRecords PreventiveMaintenanceNotificationRecipientHygiene[]
 
   @@index([externalCode], map: "idx_organizations_external_code")
   @@index([parentOrganizationId], map: "idx_organizations_parent_org")
@@ -1366,31 +1386,35 @@ model PreventiveMaintenanceNotificationPreference {
 }
 
 model PreventiveMaintenanceNotificationDeliveryAttempt {
-  id                   String                                           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  notificationIntentId String                                           @map("notification_intent_id") @db.Uuid
-  organizationId       String                                           @map("organization_id") @db.Uuid
+  id                   String                                                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  notificationIntentId String                                                @map("notification_intent_id") @db.Uuid
+  organizationId       String                                                @map("organization_id") @db.Uuid
   channel              PreventiveMaintenanceNotificationDeliveryChannel
-  status               PreventiveMaintenanceNotificationDeliveryStatus  @default(queued)
-  dryRun               Boolean                                          @default(true) @map("dry_run")
-  recipientAddress     String?                                          @map("recipient_address") @db.VarChar(255)
-  providerMessageId    String?                                          @map("provider_message_id") @db.VarChar(255)
-  providerResponse     Json?                                            @map("provider_response")
-  errorMessage         String?                                          @map("error_message")
-  skipReason           String?                                          @map("skip_reason") @db.VarChar(120)
-  attemptNumber        Int                                              @default(1) @map("attempt_number")
-  dedupeKey            String                                           @unique @map("dedupe_key") @db.VarChar(260)
-  claimToken           String?                                          @map("claim_token") @db.VarChar(80)
-  claimedAt            DateTime?                                        @map("claimed_at")
-  claimExpiresAt       DateTime?                                        @map("claim_expires_at")
-  nextRetryAt          DateTime?                                        @map("next_retry_at")
-  deadLetteredAt       DateTime?                                        @map("dead_lettered_at")
-  scheduledRunId       String?                                          @map("scheduled_run_id") @db.Uuid
-  metadata             Json                                             @default(dbgenerated("'{}'::jsonb"))
-  createdAt            DateTime                                         @default(now()) @map("created_at")
-  updatedAt            DateTime                                         @updatedAt @map("updated_at")
+  status               PreventiveMaintenanceNotificationDeliveryStatus       @default(queued)
+  dryRun               Boolean                                               @default(true) @map("dry_run")
+  recipientAddress     String?                                               @map("recipient_address") @db.VarChar(255)
+  providerMessageId    String?                                               @map("provider_message_id") @db.VarChar(255)
+  providerResponse     Json?                                                 @map("provider_response")
+  providerEventStatus  PreventiveMaintenanceNotificationProviderEventStatus? @map("provider_event_status")
+  providerEventAt      DateTime?                                             @map("provider_event_at")
+  providerReconciledAt DateTime?                                             @map("provider_reconciled_at")
+  errorMessage         String?                                               @map("error_message")
+  skipReason           String?                                               @map("skip_reason") @db.VarChar(120)
+  attemptNumber        Int                                                   @default(1) @map("attempt_number")
+  dedupeKey            String                                                @unique @map("dedupe_key") @db.VarChar(260)
+  claimToken           String?                                               @map("claim_token") @db.VarChar(80)
+  claimedAt            DateTime?                                             @map("claimed_at")
+  claimExpiresAt       DateTime?                                             @map("claim_expires_at")
+  nextRetryAt          DateTime?                                             @map("next_retry_at")
+  deadLetteredAt       DateTime?                                             @map("dead_lettered_at")
+  scheduledRunId       String?                                               @map("scheduled_run_id") @db.Uuid
+  metadata             Json                                                  @default(dbgenerated("'{}'::jsonb"))
+  createdAt            DateTime                                              @default(now()) @map("created_at")
+  updatedAt            DateTime                                              @updatedAt @map("updated_at")
 
-  notificationIntent PreventiveMaintenanceNotificationIntent        @relation(fields: [notificationIntentId], references: [id], onDelete: Cascade)
-  scheduledRun       PreventiveMaintenanceNotificationScheduledRun? @relation(fields: [scheduledRunId], references: [id], onDelete: SetNull)
+  notificationIntent PreventiveMaintenanceNotificationIntent             @relation(fields: [notificationIntentId], references: [id], onDelete: Cascade)
+  scheduledRun       PreventiveMaintenanceNotificationScheduledRun?      @relation(fields: [scheduledRunId], references: [id], onDelete: SetNull)
+  hygieneSignals     PreventiveMaintenanceNotificationRecipientHygiene[]
 
   @@index([notificationIntentId, createdAt], map: "idx_pm_delivery_attempts_intent")
   @@index([organizationId, status, createdAt], map: "idx_pm_delivery_attempts_org_status")
@@ -1398,7 +1422,31 @@ model PreventiveMaintenanceNotificationDeliveryAttempt {
   @@index([status, nextRetryAt, createdAt], map: "idx_pm_delivery_attempts_retry")
   @@index([status, claimExpiresAt], map: "idx_pm_delivery_attempts_claim_expiry")
   @@index([scheduledRunId, status], map: "idx_pm_delivery_attempts_scheduled_run")
+  @@index([providerEventStatus, providerEventAt], map: "idx_pm_delivery_attempts_provider_event")
+  @@index([providerMessageId], map: "idx_pm_delivery_attempts_provider_message")
   @@map("preventive_maintenance_notification_delivery_attempts")
+}
+
+model PreventiveMaintenanceNotificationRecipientHygiene {
+  id                     String                                                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId         String                                                  @map("organization_id") @db.Uuid
+  channel                PreventiveMaintenanceNotificationDeliveryChannel
+  recipientAddressHash   String                                                  @map("recipient_address_hash") @db.VarChar(64)
+  recipientAddressMasked String                                                  @map("recipient_address_masked") @db.VarChar(255)
+  status                 PreventiveMaintenanceNotificationRecipientHygieneStatus
+  sourceAttemptId        String?                                                 @map("source_attempt_id") @db.Uuid
+  firstSeenAt            DateTime                                                @map("first_seen_at")
+  lastSeenAt             DateTime                                                @map("last_seen_at")
+  createdAt              DateTime                                                @default(now()) @map("created_at")
+  updatedAt              DateTime                                                @updatedAt @map("updated_at")
+
+  organization  Organization                                      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceAttempt PreventiveMaintenanceNotificationDeliveryAttempt? @relation(fields: [sourceAttemptId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, channel, recipientAddressHash], map: "pm_recipient_hygiene_org_channel_address_key")
+  @@index([organizationId, status, lastSeenAt], map: "idx_pm_recipient_hygiene_org_status")
+  @@index([channel, recipientAddressHash], map: "idx_pm_recipient_hygiene_channel_address")
+  @@map("preventive_maintenance_notification_recipient_hygiene")
 }
 
 model PreventiveMaintenanceNotificationScheduledRun {

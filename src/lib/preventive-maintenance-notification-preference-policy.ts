@@ -83,6 +83,7 @@ export function resolvePreventiveMaintenanceNotificationSuppression(input: {
   recipientAddress: string | null;
   dryRun: boolean;
   emailDeliverySkipReason: string | null;
+  recipientHygieneBlockReason?: string | null;
 }) {
   if (!input.recipientAvailable) {
     return `${input.recipientRole}_unavailable`;
@@ -105,6 +106,10 @@ export function resolvePreventiveMaintenanceNotificationSuppression(input: {
 
   if (input.channel === "sms") {
     return "sms_delivery_unsupported";
+  }
+
+  if (input.recipientHygieneBlockReason) {
+    return input.recipientHygieneBlockReason;
   }
 
   if (input.dryRun) {

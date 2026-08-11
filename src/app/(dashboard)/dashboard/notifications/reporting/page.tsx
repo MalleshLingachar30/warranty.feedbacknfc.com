@@ -82,10 +82,12 @@ export default async function PmNotificationReportingPage({
   }
 
   const reporting = await getPmNotificationReporting({ audience, filters });
+  const { complianceRows, ...dashboardReporting } = reporting;
+  void complianceRows;
 
   return (
     <PmNotificationReportingDashboard
-      reporting={reporting}
+      reporting={dashboardReporting}
       filterError={filterError}
     />
   );

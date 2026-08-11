@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildPmNotificationComplianceCsv,
   countPmNotificationAttemptStatuses,
+  countPmNotificationProviderEventStatuses,
   durationMinutes,
   isPmNotificationReportingGlobalScope,
   parsePmNotificationReportingFilters,
@@ -83,6 +84,22 @@ assert.equal(attemptCounts.sms.skipped, 1);
 assert.equal(attemptCounts.sms.dead_letter, 1);
 assert.equal(attemptCounts.sms.sent, 0);
 
+const providerEventCounts = countPmNotificationProviderEventStatuses([
+  { providerEventStatus: "accepted" },
+  { providerEventStatus: "delivered" },
+  { providerEventStatus: "delivered" },
+  { providerEventStatus: "bounced" },
+  { providerEventStatus: "suppressed" },
+  { providerEventStatus: "delivery_delayed" },
+  { providerEventStatus: null },
+]);
+assert.equal(providerEventCounts.accepted, 1);
+assert.equal(providerEventCounts.delivered, 2);
+assert.equal(providerEventCounts.bounced, 1);
+assert.equal(providerEventCounts.suppressed, 1);
+assert.equal(providerEventCounts.delivery_delayed, 1);
+assert.equal(providerEventCounts.complained, 0);
+
 assert.equal(isPmNotificationReportingGlobalScope("platform_owner"), true);
 assert.equal(isPmNotificationReportingGlobalScope("manufacturer_admin"), false);
 assert.equal(
@@ -120,6 +137,15 @@ const csv = buildPmNotificationComplianceCsv([
     emailFailed: 0,
     emailSent: 1,
     emailDeadLetter: 0,
+    emailProviderAccepted: 0,
+    emailProviderSent: 0,
+    emailProviderDelivered: 1,
+    emailProviderBounced: 0,
+    emailProviderSuppressed: 0,
+    emailProviderDeliveryDelayed: 0,
+    emailProviderComplained: 0,
+    emailProviderFailed: 0,
+    emailProviderUnknown: 0,
     smsQueued: 0,
     smsSending: 0,
     smsSkipped: 1,
@@ -129,6 +155,7 @@ const csv = buildPmNotificationComplianceCsv([
   },
 ]);
 assert.match(csv, /"PM-000001, ""calibration"""/);
+assert.match(csv, /email_provider_delivered/);
 assert.doesNotMatch(csv, /recipient_address|phone|provider_response/i);
 assert.equal(csv.includes(rawRecipientFixture), false);
 

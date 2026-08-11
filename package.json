@@ -23,6 +23,7 @@
     "test:pm-notification-preferences": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-preference-check.mjs",
     "test:pm-notification-scheduler": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-scheduler-check.mjs",
     "test:pm-notification-reporting": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-reporting-check.mjs",
+    "test:pm-notification-provider-reconciliation": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-provider-reconciliation-check.mjs && vitest run src/lib/preventive-maintenance-notification-dispatch.test.ts",
     "test:pm-notification-ui": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-ui-check.mjs",
     "test:pm-notification-interaction": "vitest run src/components/notifications/pm-notification-center.test.tsx",
     "test:pm-notification-manual-pilot": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-manual-pilot-check.mjs && vitest run src/lib/preventive-maintenance-notification-dispatch.test.ts src/components/notifications/pm-notification-center.test.tsx",

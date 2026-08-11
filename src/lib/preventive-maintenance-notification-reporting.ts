@@ -7,6 +7,7 @@ import { canDispatchPreventiveMaintenanceNotifications } from "@/lib/preventive-
 import { isPreventiveMaintenancePreferenceSuppressionReason } from "@/lib/preventive-maintenance-notification-preference-policy";
 import {
   countPmNotificationAttemptStatuses,
+  countPmNotificationProviderEventStatuses,
   durationMinutes,
   emptyAttemptStatusCounts,
   emptyChannelStatusCounts,
@@ -17,6 +18,7 @@ import {
   type PmNotificationReportCsvRow,
   type PmNotificationReportingFilters,
 } from "@/lib/preventive-maintenance-notification-reporting-policy";
+import { emptyProviderEventStatusCounts } from "@/lib/preventive-maintenance-provider-reconciliation-policy";
 import {
   PreventiveMaintenanceNotificationApiError,
   resolvePreventiveMaintenanceNotificationAudience,
@@ -257,12 +259,24 @@ export async function getPmNotificationReporting(input: {
         ? {}
         : { channel: input.filters.channel }),
     };
+  const hygieneWhere: Prisma.PreventiveMaintenanceNotificationRecipientHygieneWhereInput =
+    isPmNotificationReportingGlobalScope(input.audience.role)
+      ? {}
+      : {
+          sourceAttempt: {
+            is: { notificationIntent: { is: scopeWhere } },
+          },
+        };
 
   const [
     notifications,
     attemptGroups,
+    providerEventGroups,
     recentAttempts,
     missingRecipientCount,
+    hygieneSuppressedAttemptCount,
+    hygieneStatusGroups,
+    recentHygieneRisks,
     preferenceSuppressedCount,
     scheduler,
     manualPilotAuditGroups,
@@ -301,6 +315,7 @@ export async function getPmNotificationReporting(input: {
           select: {
             channel: true,
             status: true,
+            providerEventStatus: true,
           },
         },
       },
@@ -308,6 +323,14 @@ export async function getPmNotificationReporting(input: {
     db.preventiveMaintenanceNotificationDeliveryAttempt.groupBy({
       by: ["channel", "status"],
       where: attemptWhere,
+      _count: { _all: true },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.groupBy({
+      by: ["providerEventStatus"],
+      where: {
+        ...attemptWhere,
+        providerEventStatus: { not: null },
+      },
       _count: { _all: true },
     }),
     db.preventiveMaintenanceNotificationDeliveryAttempt.findMany({
@@ -320,6 +343,9 @@ export async function getPmNotificationReporting(input: {
         status: true,
         dryRun: true,
         skipReason: true,
+        providerEventStatus: true,
+        providerEventAt: true,
+        providerReconciledAt: true,
         attemptNumber: true,
         nextRetryAt: true,
         deadLetteredAt: true,
@@ -345,6 +371,31 @@ export async function getPmNotificationReporting(input: {
           { skipReason: { contains: "_missing_" } },
           { skipReason: { endsWith: "_unavailable" } },
         ],
+      },
+    }),
+    db.preventiveMaintenanceNotificationDeliveryAttempt.count({
+      where: {
+        ...attemptWhere,
+        status: "skipped",
+        skipReason: { startsWith: "recipient_hygiene_blocked_" },
+      },
+    }),
+    db.preventiveMaintenanceNotificationRecipientHygiene.groupBy({
+      by: ["status"],
+      where: hygieneWhere,
+      _count: { _all: true },
+    }),
+    db.preventiveMaintenanceNotificationRecipientHygiene.findMany({
+      where: hygieneWhere,
+      orderBy: { lastSeenAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        channel: true,
+        recipientAddressMasked: true,
+        status: true,
+        firstSeenAt: true,
+        lastSeenAt: true,
       },
     }),
     db.preventiveMaintenanceNotificationDeliveryAttempt.count({
@@ -380,6 +431,7 @@ export async function getPmNotificationReporting(input: {
 
   const notificationStatusCounts = emptyNotificationStatusCounts();
   const attemptStatusCounts = emptyAttemptStatusCounts();
+  const providerEventStatusCounts = emptyProviderEventStatusCounts();
   const channelStatusCounts = emptyChannelStatusCounts();
   const manualPilotOutcomeCounts = {
     attempted: 0,
@@ -398,6 +450,12 @@ export async function getPmNotificationReporting(input: {
     channelStatusCounts[group.channel][group.status] += group._count._all;
   }
 
+  for (const group of providerEventGroups) {
+    if (group.providerEventStatus) {
+      providerEventStatusCounts[group.providerEventStatus] = group._count._all;
+    }
+  }
+
   for (const group of manualPilotAuditGroups) {
     manualPilotOutcomeCounts[group.outcome] = group._count._all;
   }
@@ -410,6 +468,9 @@ export async function getPmNotificationReporting(input: {
       const dismissedAt =
         notification.status === "dismissed" ? notification.updatedAt : null;
       const attempts = countPmNotificationAttemptStatuses(
+        notification.deliveryAttempts,
+      );
+      const providerEvents = countPmNotificationProviderEventStatuses(
         notification.deliveryAttempts,
       );
 
@@ -435,6 +496,15 @@ export async function getPmNotificationReporting(input: {
         emailFailed: attempts.email.failed,
         emailSent: attempts.email.sent,
         emailDeadLetter: attempts.email.dead_letter,
+        emailProviderAccepted: providerEvents.accepted,
+        emailProviderSent: providerEvents.sent,
+        emailProviderDelivered: providerEvents.delivered,
+        emailProviderBounced: providerEvents.bounced,
+        emailProviderSuppressed: providerEvents.suppressed,
+        emailProviderDeliveryDelayed: providerEvents.delivery_delayed,
+        emailProviderComplained: providerEvents.complained,
+        emailProviderFailed: providerEvents.failed,
+        emailProviderUnknown: providerEvents.unknown,
         smsQueued: attempts.sms.queued,
         smsSending: attempts.sms.sending,
         smsSkipped: attempts.sms.skipped,
@@ -475,6 +545,39 @@ export async function getPmNotificationReporting(input: {
       ),
       missingRecipientCount,
       preferenceSuppressedCount,
+      hygieneSuppressedAttemptCount,
+    },
+    provider: {
+      eventStatusCounts: providerEventStatusCounts,
+      reconciledAttemptCount: providerEventGroups.reduce(
+        (total, group) => total + group._count._all,
+        0,
+      ),
+    },
+    hygiene: {
+      blockedRecipientCount: hygieneStatusGroups.reduce(
+        (total, group) => total + group._count._all,
+        0,
+      ),
+      statusCounts: {
+        bounced:
+          hygieneStatusGroups.find((group) => group.status === "bounced")
+            ?._count._all ?? 0,
+        suppressed:
+          hygieneStatusGroups.find((group) => group.status === "suppressed")
+            ?._count._all ?? 0,
+        complained:
+          hygieneStatusGroups.find((group) => group.status === "complained")
+            ?._count._all ?? 0,
+      },
+      recentRisks: recentHygieneRisks.map((risk) => ({
+        id: risk.id,
+        channel: risk.channel,
+        recipientAddressMasked: risk.recipientAddressMasked,
+        status: risk.status,
+        firstSeenAt: risk.firstSeenAt.toISOString(),
+        lastSeenAt: risk.lastSeenAt.toISOString(),
+      })),
     },
     responsiveness: {
       dismissal,
@@ -506,6 +609,9 @@ export async function getPmNotificationReporting(input: {
       dryRun: attempt.dryRun,
       dispatchSource: dispatchSourceFromMetadata(attempt.metadata),
       skipReason: sanitizePmNotificationReportingDiagnostic(attempt.skipReason),
+      providerEventStatus: attempt.providerEventStatus,
+      providerEventAt: attempt.providerEventAt?.toISOString() ?? null,
+      providerReconciledAt: attempt.providerReconciledAt?.toISOString() ?? null,
       attemptNumber: attempt.attemptNumber,
       nextRetryAt: attempt.nextRetryAt?.toISOString() ?? null,
       deadLetteredAt: attempt.deadLetteredAt?.toISOString() ?? null,

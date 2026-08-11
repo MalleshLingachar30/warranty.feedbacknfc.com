@@ -8,6 +8,17 @@ export type PreventiveMaintenanceDeliveryAttemptStatus =
   | "dead_letter"
   | "skipped";
 
+export type PreventiveMaintenanceDeliveryProviderEventStatus =
+  | "accepted"
+  | "sent"
+  | "delivered"
+  | "bounced"
+  | "suppressed"
+  | "delivery_delayed"
+  | "complained"
+  | "failed"
+  | "unknown";
+
 export type PreventiveMaintenanceDeliveryAttemptForView = {
   id: string;
   channel: PreventiveMaintenanceDeliveryAttemptChannel;
@@ -15,6 +26,9 @@ export type PreventiveMaintenanceDeliveryAttemptForView = {
   dryRun: boolean;
   recipientAddress: string | null;
   providerMessageId: string | null;
+  providerEventStatus: PreventiveMaintenanceDeliveryProviderEventStatus | null;
+  providerEventAt: Date | null;
+  providerReconciledAt: Date | null;
   errorMessage: string | null;
   skipReason: string | null;
   attemptNumber: number;
@@ -32,6 +46,10 @@ export type SerializedPreventiveMaintenanceDeliveryAttemptForView = {
   recipientAddressMasked: string | null;
   hasRecipientAddress: boolean;
   providerMessageId: string | null;
+  providerEventStatus: PreventiveMaintenanceDeliveryProviderEventStatus | null;
+  providerEventAt: string | null;
+  providerReconciledAt: string | null;
+  recipientHygieneRisk: boolean;
   errorMessage: string | null;
   skipReason: string | null;
   attemptNumber: number;
@@ -99,6 +117,14 @@ export function serializePreventiveMaintenanceDeliveryAttemptForView(
     recipientAddressMasked,
     hasRecipientAddress: Boolean(attempt.recipientAddress),
     providerMessageId: attempt.providerMessageId,
+    providerEventStatus: attempt.providerEventStatus,
+    providerEventAt: attempt.providerEventAt?.toISOString() ?? null,
+    providerReconciledAt: attempt.providerReconciledAt?.toISOString() ?? null,
+    recipientHygieneRisk:
+      attempt.providerEventStatus === "bounced" ||
+      attempt.providerEventStatus === "suppressed" ||
+      attempt.providerEventStatus === "complained" ||
+      Boolean(attempt.skipReason?.startsWith("recipient_hygiene_blocked_")),
     errorMessage: redactRecipientFromDiagnostic({
       value: attempt.errorMessage,
       recipientAddress: attempt.recipientAddress,

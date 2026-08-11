@@ -40,6 +40,11 @@ import {
 } from "@/lib/preventive-maintenance-notification-preference-policy";
 import { getPreventiveMaintenanceNotificationPreferencesForOrganizations } from "@/lib/preventive-maintenance-notification-preferences";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
+import {
+  getBlockedPreventiveMaintenanceRecipients,
+  resolvePreventiveMaintenanceRecipientHygieneBlock,
+} from "@/lib/preventive-maintenance-provider-reconciliation";
+import type { PreventiveMaintenanceRecipientHygieneStatus } from "@/lib/preventive-maintenance-provider-reconciliation-policy";
 import type { AppRole } from "@/lib/roles";
 import {
   getPreventiveMaintenanceNextRetryAt,
@@ -189,6 +194,9 @@ const deliveryAttemptSelect =
       dryRun: true,
       recipientAddress: true,
       providerMessageId: true,
+      providerEventStatus: true,
+      providerEventAt: true,
+      providerReconciledAt: true,
       errorMessage: true,
       skipReason: true,
       attemptNumber: true,
@@ -640,7 +648,7 @@ async function executePreventiveMaintenanceNotificationDispatch(
   const emailConfiguration =
     getPreventiveMaintenanceEmailDeliveryConfiguration();
 
-  const candidates = buildDeliveryAttemptCandidates({
+  const candidates = await buildDeliveryAttemptCandidatesWithHygiene({
     channels: input.channels,
     dryRun: input.dryRun,
     intents,
@@ -803,6 +811,10 @@ function buildDeliveryAttemptCandidates(input: {
   recipientDirectory: DeliveryRecipientDirectory;
   emailDeliverySkipReason: string | null;
   scheduledRunId: string | null;
+  blockedRecipients: ReadonlyMap<
+    string,
+    PreventiveMaintenanceRecipientHygieneStatus
+  >;
 }): DeliveryAttemptCandidate[] {
   return input.intents.flatMap((intent) =>
     input.channels.map((channel) => {
@@ -827,6 +839,13 @@ function buildDeliveryAttemptCandidates(input: {
         recipientAvailable: recipient.available,
         recipientAddress: recipient.address,
         emailDeliverySkipReason: input.emailDeliverySkipReason,
+        recipientHygieneBlockReason:
+          resolvePreventiveMaintenanceRecipientHygieneBlock({
+            organizationId: intent.organizationId,
+            channel,
+            recipientAddress: recipient.address,
+            blockedRecipients: input.blockedRecipients,
+          }),
       });
 
       return {
@@ -863,6 +882,31 @@ function buildDeliveryAttemptCandidates(input: {
       };
     }),
   );
+}
+
+async function buildDeliveryAttemptCandidatesWithHygiene(
+  input: Omit<
+    Parameters<typeof buildDeliveryAttemptCandidates>[0],
+    "blockedRecipients"
+  >,
+) {
+  const provisionalCandidates = buildDeliveryAttemptCandidates({
+    ...input,
+    blockedRecipients: new Map(),
+  });
+  const blockedRecipients = await getBlockedPreventiveMaintenanceRecipients(
+    provisionalCandidates.map((candidate) => ({
+      organizationId: candidate.createInput.organizationId,
+      channel: candidate.createInput.channel,
+      recipientAddress: candidate.createInput.recipientAddress ?? null,
+    })),
+  );
+
+  if (blockedRecipients.size === 0) {
+    return provisionalCandidates;
+  }
+
+  return buildDeliveryAttemptCandidates({ ...input, blockedRecipients });
 }
 
 function resolveDeliveryRecipient(input: {
@@ -1294,6 +1338,9 @@ async function dispatchEligibleEmailAttempts(input: {
               status: "sent",
               providerMessageId: deliveryResult.providerMessageId,
               providerResponse: deliveryResult.providerResponse,
+              providerEventStatus: "accepted",
+              providerEventAt: new Date(),
+              providerReconciledAt: new Date(),
               errorMessage: null,
               skipReason: null,
               claimToken: null,
@@ -1314,6 +1361,9 @@ async function dispatchEligibleEmailAttempts(input: {
               status: shouldDeadLetter ? "dead_letter" : "failed",
               providerResponse:
                 deliveryResult.providerResponse ?? Prisma.JsonNull,
+              providerEventStatus: "failed",
+              providerEventAt: new Date(),
+              providerReconciledAt: new Date(),
               errorMessage: deliveryResult.errorMessage,
               skipReason: null,
               claimToken: null,
@@ -1430,6 +1480,9 @@ function claimEmailAttemptForDispatch(input: {
       errorMessage: null,
       skipReason: null,
       providerResponse: Prisma.JsonNull,
+      providerEventStatus: null,
+      providerEventAt: null,
+      providerReconciledAt: null,
       claimToken: input.claimToken,
       claimedAt: input.now,
       claimExpiresAt: new Date(

@@ -9,6 +9,7 @@ import {
   Inbox,
   MailCheck,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 
@@ -57,7 +58,7 @@ import type { SerializedPmNotificationReporting } from "@/lib/preventive-mainten
 import { serializePmNotificationReportingFilters } from "@/lib/preventive-maintenance-notification-reporting-policy";
 
 type PmNotificationReportingDashboardProps = {
-  reporting: SerializedPmNotificationReporting;
+  reporting: Omit<SerializedPmNotificationReporting, "complianceRows">;
   filterError?: string | null;
 };
 
@@ -95,7 +96,13 @@ function formatDuration(minutes: number | null) {
 }
 
 function statusBadgeVariant(status: string) {
-  if (status === "failed" || status === "dead_letter") {
+  if (
+    status === "failed" ||
+    status === "dead_letter" ||
+    status === "bounced" ||
+    status === "suppressed" ||
+    status === "complained"
+  ) {
     return "destructive" as const;
   }
 
@@ -103,7 +110,11 @@ function statusBadgeVariant(status: string) {
     return "default" as const;
   }
 
-  if (status === "skipped" || status === "completed_with_failures") {
+  if (
+    status === "skipped" ||
+    status === "completed_with_failures" ||
+    status === "delivery_delayed"
+  ) {
     return "secondary" as const;
   }
 
@@ -357,7 +368,7 @@ export function PmNotificationReportingDashboard({
           <MetricCard
             label="Skipped attempts"
             value={funnel.attemptStatusCounts.skipped}
-            detail={`${funnel.preferenceSuppressedCount.toLocaleString("en-IN")} preference · ${funnel.missingRecipientCount.toLocaleString("en-IN")} missing recipient`}
+            detail={`${funnel.preferenceSuppressedCount.toLocaleString("en-IN")} preference · ${funnel.hygieneSuppressedAttemptCount.toLocaleString("en-IN")} hygiene · ${funnel.missingRecipientCount.toLocaleString("en-IN")} missing`}
           />
           <MetricCard
             label="Failed attempts"
@@ -376,6 +387,106 @@ export function PmNotificationReportingDashboard({
           />
         </div>
       </section>
+
+      <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MailCheck />
+              Provider delivery reconciliation
+            </CardTitle>
+            <CardDescription>
+              App-side sent means the provider accepted the API request. These
+              downstream event counts are reconciled separately and do not
+              rewrite the canonical attempt outcome.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+              {[
+                ["Accepted", reporting.provider.eventStatusCounts.accepted],
+                ["Sent", reporting.provider.eventStatusCounts.sent],
+                ["Delivered", reporting.provider.eventStatusCounts.delivered],
+                [
+                  "Delayed",
+                  reporting.provider.eventStatusCounts.delivery_delayed,
+                ],
+                ["Bounced", reporting.provider.eventStatusCounts.bounced],
+                ["Suppressed", reporting.provider.eventStatusCounts.suppressed],
+                ["Complained", reporting.provider.eventStatusCounts.complained],
+                ["Failed", reporting.provider.eventStatusCounts.failed],
+                ["Unknown", reporting.provider.eventStatusCounts.unknown],
+              ].map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-1">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="font-mono text-lg font-semibold tabular-nums">
+                    {Number(value).toLocaleString("en-IN")}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+              {reporting.provider.reconciledAttemptCount.toLocaleString(
+                "en-IN",
+              )}{" "}
+              attempts have a current provider lifecycle state in this range;{" "}
+              {funnel.attemptStatusCounts.sent.toLocaleString("en-IN")} app
+              attempts are recorded as provider accepted/sent.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0 border-amber-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldAlert />
+              Recipient hygiene
+            </CardTitle>
+            <CardDescription>
+              Bounced, suppressed, and complained recipients are blocked from
+              future provider-capable PM email attempts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
+              {[
+                ["Blocked recipients", reporting.hygiene.blockedRecipientCount],
+                ["Bounced", reporting.hygiene.statusCounts.bounced],
+                ["Suppressed", reporting.hygiene.statusCounts.suppressed],
+                ["Complained", reporting.hygiene.statusCounts.complained],
+              ].map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-1">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="font-mono text-lg font-semibold tabular-nums">
+                    {Number(value).toLocaleString("en-IN")}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {reporting.hygiene.recentRisks.length > 0 ? (
+              <div className="space-y-2 border-t pt-3">
+                {reporting.hygiene.recentRisks.slice(0, 3).map((risk) => (
+                  <div
+                    key={risk.id}
+                    className="flex items-center justify-between gap-3 text-xs"
+                  >
+                    <span className="truncate font-mono">
+                      {risk.recipientAddressMasked}
+                    </span>
+                    <Badge variant={statusBadgeVariant(risk.status)}>
+                      {labelFromSnakeCase(risk.status)}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="border-t pt-3 text-xs text-muted-foreground">
+                No recipient hygiene risks are visible in this operator scope.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card className="min-w-0">
@@ -605,7 +716,8 @@ export function PmNotificationReportingDashboard({
                   <TableHead>PM event</TableHead>
                   <TableHead>Audience</TableHead>
                   <TableHead>Channel</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>App outcome</TableHead>
+                  <TableHead>Provider outcome</TableHead>
                   <TableHead>Mode</TableHead>
                   <TableHead>Attempt</TableHead>
                   <TableHead>Diagnostic</TableHead>
@@ -633,6 +745,21 @@ export function PmNotificationReportingDashboard({
                       <Badge variant={statusBadgeVariant(attempt.status)}>
                         {labelFromSnakeCase(attempt.status)}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {attempt.providerEventStatus ? (
+                        <Badge
+                          variant={statusBadgeVariant(
+                            attempt.providerEventStatus,
+                          )}
+                        >
+                          {labelFromSnakeCase(attempt.providerEventStatus)}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Not reconciled
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {attempt.dryRun

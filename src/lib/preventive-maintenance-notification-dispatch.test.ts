@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   emailConfiguration: vi.fn(),
   emailReadiness: vi.fn(),
   intentFindMany: vi.fn(),
+  hygieneFindMany: vi.fn(),
   organizationFindMany: vi.fn(),
   preferencesForOrganizations: vi.fn(),
   sendEmail: vi.fn(),
@@ -26,6 +27,9 @@ vi.mock("@/lib/db", () => ({
       createMany: mocks.deliveryAttemptCreateMany,
       findMany: mocks.deliveryAttemptFindMany,
       updateMany: mocks.deliveryAttemptUpdateMany,
+    },
+    preventiveMaintenanceNotificationRecipientHygiene: {
+      findMany: mocks.hygieneFindMany,
     },
     organization: {
       findMany: mocks.organizationFindMany,
@@ -59,6 +63,7 @@ vi.mock("@/lib/preventive-maintenance-notification-preferences", () => ({
 import { sendPreventiveMaintenanceManualEmailPilot } from "@/lib/preventive-maintenance-notification-dispatch";
 import { PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_CONFIRMATION } from "@/lib/preventive-maintenance-manual-email-pilot-policy";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
+import { hashPreventiveMaintenanceRecipientAddress } from "@/lib/preventive-maintenance-recipient-hygiene";
 
 const notificationId = "00000000-0000-4000-8000-000000000001";
 const organizationId = "00000000-0000-4000-8000-000000000010";
@@ -98,7 +103,7 @@ const dispatchableIntent = {
   },
 };
 
-function deliveryAttempt(status: "queued" | "sent") {
+function deliveryAttempt(status: "queued" | "sent" | "skipped") {
   return {
     id: "00000000-0000-4000-8000-000000000040",
     notificationIntentId: notificationId,
@@ -108,8 +113,12 @@ function deliveryAttempt(status: "queued" | "sent") {
     dryRun: false,
     recipientAddress: rawRecipient,
     providerMessageId: status === "sent" ? "provider-message-1" : null,
+    providerEventStatus: status === "sent" ? "accepted" : null,
+    providerEventAt: status === "sent" ? now : null,
+    providerReconciledAt: status === "sent" ? now : null,
     errorMessage: null,
-    skipReason: null,
+    skipReason:
+      status === "skipped" ? "recipient_hygiene_blocked_suppressed" : null,
     attemptNumber: 1,
     dedupeKey: `pm-delivery:${notificationId}:email:send:v1`,
     claimToken: null,
@@ -151,6 +160,7 @@ beforeEach(() => {
     from: "Warranty <notifications@example.com>",
   });
   mocks.preferencesForOrganizations.mockResolvedValue(new Map());
+  mocks.hygieneFindMany.mockResolvedValue([]);
   mocks.organizationFindMany.mockResolvedValue([
     { id: organizationId, contactEmail: null, contactPhone: null },
   ]);
@@ -238,5 +248,43 @@ describe("sendPreventiveMaintenanceManualEmailPilot", () => {
     expect(mocks.auditFinish).toHaveBeenLastCalledWith(
       expect.objectContaining({ outcome: "rejected" }),
     );
+  });
+
+  it("suppresses a reviewed live email when reconciliation marked its recipient as a hygiene risk", async () => {
+    mocks.intentFindMany
+      .mockResolvedValueOnce([
+        {
+          id: notificationId,
+          deliveryAttempts: [{ updatedAt: now }],
+        },
+      ])
+      .mockResolvedValueOnce([dispatchableIntent]);
+    mocks.hygieneFindMany.mockResolvedValue([
+      {
+        organizationId,
+        channel: "email",
+        recipientAddressHash: hashPreventiveMaintenanceRecipientAddress(
+          rawRecipient,
+          "email",
+        ),
+        status: "suppressed",
+      },
+    ]);
+    mocks.deliveryAttemptFindMany
+      .mockResolvedValueOnce([deliveryAttempt("skipped")])
+      .mockResolvedValueOnce([deliveryAttempt("skipped")]);
+
+    const result = await sendPreventiveMaintenanceManualEmailPilot({
+      audience,
+      request,
+    });
+
+    expect(result.sentAttemptCount).toBe(0);
+    expect(result.skippedAttemptCount).toBe(1);
+    expect(result.providerCallCount).toBe(0);
+    expect(result.attempts[0]?.skipReason).toBe(
+      "recipient_hygiene_blocked_suppressed",
+    );
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
 });

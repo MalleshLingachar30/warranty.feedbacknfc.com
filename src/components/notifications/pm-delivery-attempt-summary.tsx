@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type {
   PreventiveMaintenanceDeliveryAttemptChannel,
+  PreventiveMaintenanceDeliveryProviderEventStatus,
   PreventiveMaintenanceDeliveryAttemptStatus,
   SerializedPreventiveMaintenanceDeliveryAttemptForView,
 } from "@/lib/preventive-maintenance-delivery-attempts";
@@ -43,6 +44,24 @@ function channelIcon(channel: PreventiveMaintenanceDeliveryAttemptChannel) {
   return <Mail className="h-3 w-3" />;
 }
 
+function providerStatusTone(
+  status: PreventiveMaintenanceDeliveryProviderEventStatus,
+) {
+  switch (status) {
+    case "delivered":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "bounced":
+    case "suppressed":
+    case "complained":
+    case "failed":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "delivery_delayed":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-blue-200 bg-blue-50 text-blue-700";
+  }
+}
+
 function labelFromSnakeCase(value: string) {
   return value
     .split("_")
@@ -72,6 +91,13 @@ function deliveryDetail(attempt: PmDeliveryAttempt) {
     return labelFromSnakeCase(attempt.skipReason);
   }
 
+  if (attempt.providerEventStatus) {
+    const providerDetail = `Provider ${labelFromSnakeCase(attempt.providerEventStatus).toLowerCase()}`;
+    return attempt.recipientHygieneRisk
+      ? `${providerDetail}; recipient blocked by hygiene controls`
+      : providerDetail;
+  }
+
   if (attempt.providerMessageId) {
     return `Provider id ${attempt.providerMessageId}`;
   }
@@ -93,6 +119,17 @@ function DeliveryAttemptBadge({ attempt }: { attempt: PmDeliveryAttempt }) {
         {channelIcon(attempt.channel)}
         {labelFromSnakeCase(attempt.status)}
       </Badge>
+      {attempt.providerEventStatus ? (
+        <Badge
+          variant="outline"
+          className={cn(
+            "gap-1",
+            providerStatusTone(attempt.providerEventStatus),
+          )}
+        >
+          Provider {labelFromSnakeCase(attempt.providerEventStatus)}
+        </Badge>
+      ) : null}
       {attempt.dryRun ? (
         <Badge
           variant="outline"
@@ -193,6 +230,26 @@ export function PmDeliveryAttemptSummary({
                     </span>{" "}
                     <span className="truncate">
                       {attempt.recipientAddressMasked ?? "Missing"}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-medium text-slate-600">
+                      Provider outcome:
+                    </span>{" "}
+                    <span className="truncate">
+                      {attempt.providerEventStatus
+                        ? labelFromSnakeCase(attempt.providerEventStatus)
+                        : "Awaiting reconciliation"}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-medium text-slate-600">
+                      Provider event:
+                    </span>{" "}
+                    <span className="truncate">
+                      {attempt.providerEventAt
+                        ? formatDateTime(attempt.providerEventAt)
+                        : "Not observed"}
                     </span>
                   </div>
                   <div className="min-w-0">

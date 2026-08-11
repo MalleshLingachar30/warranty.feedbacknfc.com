@@ -1,6 +1,7 @@
 import type {
   PreventiveMaintenanceNotificationDeliveryChannel,
   PreventiveMaintenanceNotificationDeliveryStatus,
+  PreventiveMaintenanceNotificationProviderEventStatus,
   PreventiveMaintenanceNotificationStatus,
 } from "@prisma/client";
 
@@ -57,6 +58,15 @@ export type PmNotificationReportCsvRow = {
   emailFailed: number;
   emailSent: number;
   emailDeadLetter: number;
+  emailProviderAccepted: number;
+  emailProviderSent: number;
+  emailProviderDelivered: number;
+  emailProviderBounced: number;
+  emailProviderSuppressed: number;
+  emailProviderDeliveryDelayed: number;
+  emailProviderComplained: number;
+  emailProviderFailed: number;
+  emailProviderUnknown: number;
   smsQueued: number;
   smsSending: number;
   smsSkipped: number;
@@ -260,6 +270,35 @@ export function countPmNotificationAttemptStatuses(
   return counts;
 }
 
+export function countPmNotificationProviderEventStatuses(
+  attempts: Array<{
+    providerEventStatus: PreventiveMaintenanceNotificationProviderEventStatus | null;
+  }>,
+) {
+  const counts: Record<
+    PreventiveMaintenanceNotificationProviderEventStatus,
+    number
+  > = {
+    accepted: 0,
+    sent: 0,
+    delivered: 0,
+    bounced: 0,
+    suppressed: 0,
+    delivery_delayed: 0,
+    complained: 0,
+    failed: 0,
+    unknown: 0,
+  };
+
+  for (const attempt of attempts) {
+    if (attempt.providerEventStatus) {
+      counts[attempt.providerEventStatus] += 1;
+    }
+  }
+
+  return counts;
+}
+
 export function isPmNotificationReportingGlobalScope(role: string) {
   return role === "platform_owner";
 }
@@ -316,6 +355,39 @@ export function buildPmNotificationComplianceCsv(
     { header: "email_failed", value: (row) => row.emailFailed },
     { header: "email_sent", value: (row) => row.emailSent },
     { header: "email_dead_letter", value: (row) => row.emailDeadLetter },
+    {
+      header: "email_provider_accepted",
+      value: (row) => row.emailProviderAccepted,
+    },
+    { header: "email_provider_sent", value: (row) => row.emailProviderSent },
+    {
+      header: "email_provider_delivered",
+      value: (row) => row.emailProviderDelivered,
+    },
+    {
+      header: "email_provider_bounced",
+      value: (row) => row.emailProviderBounced,
+    },
+    {
+      header: "email_provider_suppressed",
+      value: (row) => row.emailProviderSuppressed,
+    },
+    {
+      header: "email_provider_delivery_delayed",
+      value: (row) => row.emailProviderDeliveryDelayed,
+    },
+    {
+      header: "email_provider_complained",
+      value: (row) => row.emailProviderComplained,
+    },
+    {
+      header: "email_provider_failed",
+      value: (row) => row.emailProviderFailed,
+    },
+    {
+      header: "email_provider_unknown",
+      value: (row) => row.emailProviderUnknown,
+    },
     { header: "sms_queued", value: (row) => row.smsQueued },
     { header: "sms_sending", value: (row) => row.smsSending },
     { header: "sms_skipped", value: (row) => row.smsSkipped },
