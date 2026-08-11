@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 
 import { serializePreventiveMaintenanceDeliveryAttemptForView } from "../src/lib/preventive-maintenance-delivery-attempts.ts";
 import {
@@ -23,26 +22,12 @@ const expectedPhase5cCounts = {
   suppressed: 4,
   delivery_delayed: 2,
 };
-const evidencePath = resolve(
-  process.cwd(),
-  "../warranty.feedbacknfc.com/gg/phase5c-scheduled-live-pilot-2026-08-11/evidence/resend-provider-status-sanitized.json",
+const evidence = JSON.parse(
+  await readFile(
+    "scripts/fixtures/pm-phase5c-resend-provider-status-sanitized.json",
+    "utf8",
+  ),
 );
-const fallbackResults = Object.entries(expectedPhase5cCounts).flatMap(
-  ([resendLastEvent, count]) =>
-    Array.from({ length: count }, (_, index) => ({
-      providerMessageId: `${resendLastEvent}-${index}`,
-      resendLastEvent,
-      resendCreatedAt: "2026-08-11T04:46:00.000Z",
-    })),
-);
-
-let evidence = { results: fallbackResults };
-try {
-  await access(evidencePath);
-  evidence = JSON.parse(await readFile(evidencePath, "utf8"));
-} catch {
-  // The committed check remains deterministic outside the prepared workspace.
-}
 
 const parsedEvidence =
   parsePreventiveMaintenanceProviderReconciliationRequest(evidence);
@@ -111,6 +96,15 @@ assert.equal(
   }),
   false,
 );
+assert.equal(
+  shouldApplyPreventiveMaintenanceProviderEvent({
+    currentStatus: "delivered",
+    currentOccurredAt: new Date("2026-08-11T04:47:00.000Z"),
+    nextStatus: "delivered",
+    nextOccurredAt: new Date("2026-08-11T04:47:00.000Z"),
+  }),
+  false,
+);
 
 const rawRecipient = "private.recipient@example.com";
 const serializedAttempt = serializePreventiveMaintenanceDeliveryAttemptForView({
@@ -136,24 +130,38 @@ assert.equal(serializedAttempt.recipientHygieneRisk, true);
 assert.equal(JSON.stringify(serializedAttempt).includes(rawRecipient), false);
 assert.equal("providerResponse" in serializedAttempt, false);
 
-const [dispatchSource, schedulerSource, preferencePolicySource, routeSource] =
-  await Promise.all([
-    readFile("src/lib/preventive-maintenance-notification-dispatch.ts", "utf8"),
-    readFile("src/lib/preventive-maintenance-scheduled-dispatcher.ts", "utf8"),
-    readFile(
-      "src/lib/preventive-maintenance-notification-preference-policy.ts",
-      "utf8",
-    ),
-    readFile(
-      "src/app/api/preventive-maintenance/notifications/provider-reconciliation/route.ts",
-      "utf8",
-    ),
-  ]);
+const [
+  dispatchSource,
+  schedulerSource,
+  preferencePolicySource,
+  reconciliationSource,
+  routeSource,
+] = await Promise.all([
+  readFile("src/lib/preventive-maintenance-notification-dispatch.ts", "utf8"),
+  readFile("src/lib/preventive-maintenance-scheduled-dispatcher.ts", "utf8"),
+  readFile(
+    "src/lib/preventive-maintenance-notification-preference-policy.ts",
+    "utf8",
+  ),
+  readFile("src/lib/preventive-maintenance-provider-reconciliation.ts", "utf8"),
+  readFile(
+    "src/app/api/preventive-maintenance/notifications/provider-reconciliation/route.ts",
+    "utf8",
+  ),
+]);
 
 assert.match(dispatchSource, /providerEventStatus: "accepted"/);
 assert.match(dispatchSource, /getBlockedPreventiveMaintenanceRecipients/);
 assert.match(preferencePolicySource, /recipientHygieneBlockReason/);
 assert.match(preferencePolicySource, /sms_delivery_unsupported/);
+assert.match(
+  reconciliationSource,
+  /audience\.organizationId[\s\S]*organizationId: audience\.organizationId/,
+);
+assert.match(
+  reconciliationSource,
+  /notificationIntent: \{ is: audience\.where \}/,
+);
 assert.match(
   schedulerSource,
   /PM_NOTIFICATION_SCHEDULED_LIVE_DELIVERY_ENABLED === "true"/,

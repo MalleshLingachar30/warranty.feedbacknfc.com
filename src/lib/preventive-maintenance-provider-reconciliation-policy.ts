@@ -110,6 +110,10 @@ export function shouldApplyPreventiveMaintenanceProviderEvent(input: {
     return timestampDifference > 0;
   }
 
+  if (input.nextStatus === input.currentStatus) {
+    return false;
+  }
+
   return (
     PROVIDER_STATUS_PRECEDENCE[input.nextStatus] >=
     PROVIDER_STATUS_PRECEDENCE[input.currentStatus]

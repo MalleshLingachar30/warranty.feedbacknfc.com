@@ -34,6 +34,23 @@ function recipientHygieneLookupKey(input: {
   return `${input.organizationId}:${input.channel}:${input.recipientAddressHash}`;
 }
 
+export function buildPreventiveMaintenanceProviderReconciliationScopeWhere(
+  audience: PreventiveMaintenanceNotificationAudience,
+): Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput {
+  if (audience.role === "platform_owner") {
+    return {};
+  }
+
+  return {
+    OR: [
+      ...(audience.organizationId
+        ? [{ organizationId: audience.organizationId }]
+        : []),
+      { notificationIntent: { is: audience.where } },
+    ],
+  };
+}
+
 export async function getBlockedPreventiveMaintenanceRecipients(
   inputs: RecipientHygieneLookupInput[],
 ) {
@@ -140,11 +157,15 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
       await db.preventiveMaintenanceNotificationDeliveryAttempt.findMany({
         where: {
           providerMessageId: {
-            in: [...new Set(input.events.map((event) => event.providerMessageId))],
+            in: [
+              ...new Set(input.events.map((event) => event.providerMessageId)),
+            ],
           },
           dryRun: false,
           channel: "email",
-          notificationIntent: { is: input.audience.where },
+          ...buildPreventiveMaintenanceProviderReconciliationScopeWhere(
+            input.audience,
+          ),
         },
         select: {
           id: true,

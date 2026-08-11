@@ -1,0 +1,87 @@
+{
+  "count": 15,
+  "eventCounts": {
+    "delivered": 7,
+    "bounced": 1,
+    "sent": 1,
+    "suppressed": 4,
+    "delivery_delayed": 2
+  },
+  "results": [
+    {
+      "providerMessageId": "a97e0009-f97f-4e39-8b6b-a54a129986ed",
+      "resendCreatedAt": "2026-08-11 04:46:31.626000+00",
+      "resendLastEvent": "delivered"
+    },
+    {
+      "providerMessageId": "58fd8c6f-04a3-44f4-ab02-36e98a3bb543",
+      "resendCreatedAt": "2026-08-11 04:46:04.896000+00",
+      "resendLastEvent": "delivered"
+    },
+    {
+      "providerMessageId": "9d363187-7802-4a3c-9dd6-83a0f249113f",
+      "resendCreatedAt": "2026-08-11 04:46:07.204000+00",
+      "resendLastEvent": "bounced"
+    },
+    {
+      "providerMessageId": "2aacb1da-b1d2-4a11-8516-7e67b4c58221",
+      "resendCreatedAt": "2026-08-11 04:46:09.030000+00",
+      "resendLastEvent": "sent"
+    },
+    {
+      "providerMessageId": "49b81888-05f5-4cce-8582-d53858d2d483",
+      "resendCreatedAt": "2026-08-11 04:46:10.909000+00",
+      "resendLastEvent": "suppressed"
+    },
+    {
+      "providerMessageId": "a4fe03f4-da3f-4082-8a8f-3f4310f1d25d",
+      "resendCreatedAt": "2026-08-11 04:46:12.752000+00",
+      "resendLastEvent": "delivery_delayed"
+    },
+    {
+      "providerMessageId": "8bd4a113-354e-4632-9dc1-9e0aaead8d6d",
+      "resendCreatedAt": "2026-08-11 04:46:14.842000+00",
+      "resendLastEvent": "suppressed"
+    },
+    {
+      "providerMessageId": "e4b5095f-fa71-4497-82c7-1137a553781e",
+      "resendCreatedAt": "2026-08-11 04:46:16.688000+00",
+      "resendLastEvent": "delivery_delayed"
+    },
+    {
+      "providerMessageId": "33783dd7-02d1-4442-ab31-f6de3e2dcfaa",
+      "resendCreatedAt": "2026-08-11 04:46:18.584000+00",
+      "resendLastEvent": "delivered"
+    },
+    {
+      "providerMessageId": "dc546031-c299-4fe0-a962-65bd0c96cd2d",
+      "resendCreatedAt": "2026-08-11 04:46:20.386000+00",
+      "resendLastEvent": "suppressed"
+    },
+    {
+      "providerMessageId": "418c51dc-ef4e-4b45-bb05-608bbe047ed1",
+      "resendCreatedAt": "2026-08-11 04:46:22.224000+00",
+      "resendLastEvent": "delivered"
+    },
+    {
+      "providerMessageId": "f31a98fd-94f4-4266-8c4d-483b7f2e72d9",
+      "resendCreatedAt": "2026-08-11 04:46:24.067000+00",
+      "resendLastEvent": "delivered"
+    },
+    {
+      "providerMessageId": "fff90b06-7f32-4eb9-9b6c-b434e35ab13c",
+      "resendCreatedAt": "2026-08-11 04:46:25.912000+00",
+      "resendLastEvent": "suppressed"
+    },
+    {
+      "providerMessageId": "f9fd8f71-1dd2-4863-9a1d-5d70cd269807",
+      "resendCreatedAt": "2026-08-11 04:46:27.761000+00",
+      "resendLastEvent": "delivered"
+    },
+    {
+      "providerMessageId": "037c6382-5d9a-4fa6-b693-c3428c221bd8",
+      "resendCreatedAt": "2026-08-11 04:46:29.845000+00",
+      "resendLastEvent": "delivered"
+    }
+  ]
+}
