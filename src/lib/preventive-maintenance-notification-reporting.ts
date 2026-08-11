@@ -91,6 +91,17 @@ function numberFromMetadata(metadata: Prisma.JsonValue, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function stringArrayFromMetadata(metadata: Prisma.JsonValue, key: string) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return [];
+  }
+
+  const value = metadata[key];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
 function dispatchSourceFromMetadata(metadata: Prisma.JsonValue) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return null;
@@ -280,6 +291,8 @@ export async function getPmNotificationReporting(input: {
     preferenceSuppressedCount,
     scheduler,
     manualPilotAuditGroups,
+    resendWebhookAuditGroups,
+    latestResendWebhookAudit,
   ] = await Promise.all([
     db.preventiveMaintenanceNotificationIntent.findMany({
       where: notificationWhere,
@@ -427,6 +440,46 @@ export async function getPmNotificationReporting(input: {
         providerCallCount: true,
       },
     }),
+    db.preventiveMaintenanceNotificationAuditLog.groupBy({
+      by: ["outcome"],
+      where: {
+        operation: "provider_reconciliation",
+        createdAt: {
+          gte: input.filters.startAt,
+          lt: input.filters.endAtExclusive,
+        },
+        metadata: {
+          path: ["reconciliationSource"],
+          equals: "resend_webhook",
+        },
+        ...(isPmNotificationReportingGlobalScope(input.audience.role)
+          ? {}
+          : { organizationId: input.audience.organizationId }),
+      },
+      _count: { _all: true },
+    }),
+    db.preventiveMaintenanceNotificationAuditLog.findFirst({
+      where: {
+        operation: "provider_reconciliation",
+        createdAt: {
+          gte: input.filters.startAt,
+          lt: input.filters.endAtExclusive,
+        },
+        metadata: {
+          path: ["reconciliationSource"],
+          equals: "resend_webhook",
+        },
+        ...(isPmNotificationReportingGlobalScope(input.audience.role)
+          ? {}
+          : { organizationId: input.audience.organizationId }),
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        outcome: true,
+        metadata: true,
+        createdAt: true,
+      },
+    }),
   ]);
 
   const notificationStatusCounts = emptyNotificationStatusCounts();
@@ -434,6 +487,13 @@ export async function getPmNotificationReporting(input: {
   const providerEventStatusCounts = emptyProviderEventStatusCounts();
   const channelStatusCounts = emptyChannelStatusCounts();
   const manualPilotOutcomeCounts = {
+    attempted: 0,
+    succeeded: 0,
+    completed_with_failures: 0,
+    rejected: 0,
+    failed: 0,
+  };
+  const resendWebhookOutcomeCounts = {
     attempted: 0,
     succeeded: 0,
     completed_with_failures: 0,
@@ -458,6 +518,10 @@ export async function getPmNotificationReporting(input: {
 
   for (const group of manualPilotAuditGroups) {
     manualPilotOutcomeCounts[group.outcome] = group._count._all;
+  }
+
+  for (const group of resendWebhookAuditGroups) {
+    resendWebhookOutcomeCounts[group.outcome] = group._count._all;
   }
 
   const complianceRows: PmNotificationReportCsvRow[] = notifications.map(
@@ -553,6 +617,51 @@ export async function getPmNotificationReporting(input: {
         (total, group) => total + group._count._all,
         0,
       ),
+      webhook: {
+        batchCount: resendWebhookAuditGroups.reduce(
+          (total, group) => total + group._count._all,
+          0,
+        ),
+        outcomeCounts: resendWebhookOutcomeCounts,
+        latest: latestResendWebhookAudit
+          ? {
+              receivedAt: latestResendWebhookAudit.createdAt.toISOString(),
+              outcome: latestResendWebhookAudit.outcome,
+              submittedEventCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "submittedEventCount",
+              ),
+              matchedAttemptCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "matchedAttemptCount",
+              ),
+              updatedAttemptCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "updatedAttemptCount",
+              ),
+              staleEventCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "staleEventCount",
+              ),
+              notFoundCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "notFoundCount",
+              ),
+              ambiguousMatchCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "ambiguousMatchCount",
+              ),
+              hygieneSignalCount: numberFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "hygieneSignalCount",
+              ),
+              eventTypes: stringArrayFromMetadata(
+                latestResendWebhookAudit.metadata,
+                "sourceEventTypes",
+              ),
+            }
+          : null,
+      },
     },
     hygiene: {
       blockedRecipientCount: hygieneStatusGroups.reduce(

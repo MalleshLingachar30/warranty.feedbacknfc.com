@@ -433,6 +433,41 @@ export function PmNotificationReportingDashboard({
               {funnel.attemptStatusCounts.sent.toLocaleString("en-IN")} app
               attempts are recorded as provider accepted/sent.
             </p>
+            <div className="mt-3 border-t pt-3 text-xs text-muted-foreground">
+              <p>
+                Resend webhook reconciliation:{" "}
+                {reporting.provider.webhook.batchCount.toLocaleString("en-IN")}{" "}
+                received ·{" "}
+                {reporting.provider.webhook.outcomeCounts.succeeded.toLocaleString(
+                  "en-IN",
+                )}{" "}
+                succeeded ·{" "}
+                {(
+                  reporting.provider.webhook.outcomeCounts.rejected +
+                  reporting.provider.webhook.outcomeCounts.failed
+                ).toLocaleString("en-IN")}{" "}
+                rejected/failed.
+              </p>
+              {reporting.provider.webhook.latest ? (
+                <p className="mt-1">
+                  Latest{" "}
+                  {formatDateTime(reporting.provider.webhook.latest.receivedAt)}
+                  :{" "}
+                  {reporting.provider.webhook.latest.updatedAttemptCount.toLocaleString(
+                    "en-IN",
+                  )}{" "}
+                  updated ·{" "}
+                  {reporting.provider.webhook.latest.staleEventCount.toLocaleString(
+                    "en-IN",
+                  )}{" "}
+                  duplicate/stale ·{" "}
+                  {reporting.provider.webhook.latest.notFoundCount.toLocaleString(
+                    "en-IN",
+                  )}{" "}
+                  not found.
+                </p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
 

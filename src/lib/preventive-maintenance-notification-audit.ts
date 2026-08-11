@@ -20,6 +20,7 @@ type StartAuditInput = {
 
 type StartSystemAuditInput = {
   organizationId?: string | null;
+  actorRole?: string;
   operation: PreventiveMaintenanceNotificationAuditOperation;
   channel?: PreventiveMaintenanceNotificationDeliveryChannel | null;
   recipientAddressMasked?: string | null;
@@ -28,6 +29,7 @@ type StartSystemAuditInput = {
 
 type FinishAuditInput = {
   auditId: string;
+  organizationId?: string | null;
   outcome: Exclude<PreventiveMaintenanceNotificationAuditOutcome, "attempted">;
   notificationIntentCount?: number;
   deliveryAttemptCount?: number;
@@ -65,7 +67,7 @@ export async function startPreventiveMaintenanceNotificationSystemAudit(
     data: {
       organizationId: input.organizationId ?? null,
       actorUserId: null,
-      actorRole: "system_scheduler",
+      actorRole: input.actorRole ?? "system_scheduler",
       operation: input.operation,
       outcome: "attempted",
       channel: input.channel ?? null,
@@ -87,6 +89,7 @@ export async function finishPreventiveMaintenanceNotificationAudit(
       id: input.auditId,
     },
     data: {
+      organizationId: input.organizationId,
       outcome: input.outcome,
       notificationIntentCount: input.notificationIntentCount,
       deliveryAttemptCount: input.deliveryAttemptCount,

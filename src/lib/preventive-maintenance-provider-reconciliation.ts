@@ -8,6 +8,7 @@ import {
   finishPreventiveMaintenanceNotificationAuditSafely,
   preventiveMaintenanceAuditErrorMessage,
   startPreventiveMaintenanceNotificationAudit,
+  startPreventiveMaintenanceNotificationSystemAudit,
 } from "@/lib/preventive-maintenance-notification-audit";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 import {
@@ -139,10 +140,89 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
     },
   });
 
+  return reconcilePreventiveMaintenanceProviderEventsWithAudit({
+    events: input.events,
+    scopeWhere: buildPreventiveMaintenanceProviderReconciliationScopeWhere(
+      input.audience,
+    ),
+    auditId: audit.id,
+    reconciliationSource: "operator",
+  });
+}
+
+export async function startPreventiveMaintenanceResendWebhookAudit() {
+  return startPreventiveMaintenanceNotificationSystemAudit({
+    actorRole: "system_webhook",
+    operation: "provider_reconciliation",
+    channel: "email",
+    metadata: {
+      provider: "resend",
+      reconciliationSource: "resend_webhook",
+      webhookOutcome: "received",
+      submittedEventCount: 0,
+    },
+  });
+}
+
+export async function rejectPreventiveMaintenanceResendWebhookAudit(input: {
+  auditId: string;
+  rejectionReason: string;
+}) {
+  await finishPreventiveMaintenanceNotificationAuditSafely({
+    auditId: input.auditId,
+    outcome: "rejected",
+    deliveryAttemptCount: 0,
+    providerCallCount: 0,
+    metadata: {
+      provider: "resend",
+      reconciliationSource: "resend_webhook",
+      webhookOutcome: "rejected",
+      rejectionReason: input.rejectionReason,
+      submittedEventCount: 0,
+      matchedAttemptCount: 0,
+      updatedAttemptCount: 0,
+      staleEventCount: 0,
+      notFoundCount: 0,
+      ambiguousMatchCount: 0,
+      hygieneSignalCount: 0,
+      sourceEventTypes: [],
+      providerEventCounts: emptyProviderEventStatusCounts(),
+    },
+  });
+}
+
+export async function reconcilePreventiveMaintenanceResendWebhookEvent(input: {
+  auditId: string;
+  event: PreventiveMaintenanceProviderReconciliationEvent;
+}) {
+  return reconcilePreventiveMaintenanceProviderEventsWithAudit({
+    events: [input.event],
+    scopeWhere: {},
+    auditId: input.auditId,
+    reconciliationSource: "resend_webhook",
+  });
+}
+
+async function reconcilePreventiveMaintenanceProviderEventsWithAudit(input: {
+  events: PreventiveMaintenanceProviderReconciliationEvent[];
+  scopeWhere: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput;
+  auditId: string;
+  reconciliationSource: "operator" | "resend_webhook";
+}) {
+  const auditId = input.auditId;
+
   const providerEventCounts = emptyProviderEventStatusCounts();
+  const matchedOrganizationIds = new Set<string>();
+  const sourceEventTypes = [
+    ...new Set(
+      input.events.flatMap((event) =>
+        event.sourceEventType ? [event.sourceEventType] : [],
+      ),
+    ),
+  ];
   const results: Array<{
     providerMessageId: string;
-    disposition: "updated" | "stale" | "not_found";
+    disposition: "updated" | "stale" | "not_found" | "ambiguous";
     providerEventStatus: string;
     providerEventAt: string;
     hygieneBlocked: boolean;
@@ -150,6 +230,7 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
   let updatedAttemptCount = 0;
   let staleEventCount = 0;
   let notFoundCount = 0;
+  let ambiguousMatchCount = 0;
   let hygieneSignalCount = 0;
 
   try {
@@ -163,9 +244,7 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
           },
           dryRun: false,
           channel: "email",
-          ...buildPreventiveMaintenanceProviderReconciliationScopeWhere(
-            input.audience,
-          ),
+          ...input.scopeWhere,
         },
         select: {
           id: true,
@@ -176,23 +255,46 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
           providerEventAt: true,
         },
       });
-    const attemptsByProviderMessageId = new Map(
-      attempts.flatMap((attempt) =>
-        attempt.providerMessageId
-          ? [[attempt.providerMessageId, attempt] as const]
-          : [],
-      ),
-    );
+    const attemptsByProviderMessageId = new Map<
+      string,
+      (typeof attempts)[number][]
+    >();
+    for (const attempt of attempts) {
+      if (attempt.providerMessageId) {
+        const matchingAttempts =
+          attemptsByProviderMessageId.get(attempt.providerMessageId) ?? [];
+        matchingAttempts.push(attempt);
+        attemptsByProviderMessageId.set(
+          attempt.providerMessageId,
+          matchingAttempts,
+        );
+      }
+    }
 
     for (const event of input.events) {
       providerEventCounts[event.status] += 1;
-      const attempt = attemptsByProviderMessageId.get(event.providerMessageId);
+      const matchingAttempts = attemptsByProviderMessageId.get(
+        event.providerMessageId,
+      );
+      const attempt = matchingAttempts?.[0];
 
       if (!attempt) {
         notFoundCount += 1;
         results.push({
           providerMessageId: event.providerMessageId,
           disposition: "not_found",
+          providerEventStatus: event.status,
+          providerEventAt: event.occurredAt.toISOString(),
+          hygieneBlocked: false,
+        });
+        continue;
+      }
+
+      if (matchingAttempts.length > 1) {
+        ambiguousMatchCount += 1;
+        results.push({
+          providerMessageId: event.providerMessageId,
+          disposition: "ambiguous",
           providerEventStatus: event.status,
           providerEventAt: event.occurredAt.toISOString(),
           hygieneBlocked: false,
@@ -208,6 +310,7 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
           nextOccurredAt: event.occurredAt,
         })
       ) {
+        matchedOrganizationIds.add(attempt.organizationId);
         staleEventCount += 1;
         results.push({
           providerMessageId: event.providerMessageId,
@@ -225,6 +328,7 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
       }
 
       const reconciledAt = new Date();
+      matchedOrganizationIds.add(attempt.organizationId);
       const hygieneStatus = hygieneStatusForProviderEvent(event.status);
       const operations: Prisma.PrismaPromise<unknown>[] = [
         db.preventiveMaintenanceNotificationDeliveryAttempt.update({
@@ -294,46 +398,76 @@ export async function reconcilePreventiveMaintenanceProviderEvents(input: {
     }
 
     await finishPreventiveMaintenanceNotificationAuditSafely({
-      auditId: audit.id,
-      outcome: notFoundCount > 0 ? "completed_with_failures" : "succeeded",
+      auditId,
+      organizationId:
+        input.reconciliationSource === "resend_webhook" &&
+        matchedOrganizationIds.size === 1
+          ? [...matchedOrganizationIds][0]
+          : undefined,
+      outcome:
+        notFoundCount > 0 || ambiguousMatchCount > 0
+          ? "completed_with_failures"
+          : "succeeded",
       deliveryAttemptCount: updatedAttemptCount,
       providerCallCount: 0,
       metadata: {
         provider: "resend",
+        reconciliationSource: input.reconciliationSource,
+        ...(input.reconciliationSource === "resend_webhook"
+          ? { webhookOutcome: "processed" }
+          : {}),
         submittedEventCount: input.events.length,
+        matchedAttemptCount: updatedAttemptCount + staleEventCount,
         updatedAttemptCount,
         staleEventCount,
         notFoundCount,
+        ambiguousMatchCount,
         hygieneSignalCount,
+        sourceEventTypes,
         providerEventCounts,
       },
     });
 
     return {
       ok: true as const,
-      auditId: audit.id,
+      auditId,
       submittedEventCount: input.events.length,
+      matchedAttemptCount: updatedAttemptCount + staleEventCount,
       updatedAttemptCount,
       staleEventCount,
       notFoundCount,
+      ambiguousMatchCount,
       hygieneSignalCount,
       providerEventCounts,
       results,
     };
   } catch (error) {
     await finishPreventiveMaintenanceNotificationAuditSafely({
-      auditId: audit.id,
+      auditId,
+      organizationId:
+        input.reconciliationSource === "resend_webhook" &&
+        matchedOrganizationIds.size === 1
+          ? [...matchedOrganizationIds][0]
+          : undefined,
       outcome: "failed",
       deliveryAttemptCount: updatedAttemptCount,
       providerCallCount: 0,
       errorMessage: preventiveMaintenanceAuditErrorMessage(error),
       metadata: {
         provider: "resend",
+        reconciliationSource: input.reconciliationSource,
+        ...(input.reconciliationSource === "resend_webhook"
+          ? { webhookOutcome: "failed" }
+          : {}),
         submittedEventCount: input.events.length,
+        matchedAttemptCount: updatedAttemptCount + staleEventCount,
         updatedAttemptCount,
         staleEventCount,
         notFoundCount,
+        ambiguousMatchCount,
         hygieneSignalCount,
+        sourceEventTypes,
+        providerEventCounts,
       },
     });
     throw error;

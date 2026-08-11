@@ -37,6 +37,7 @@ import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive
 import {
   buildPreventiveMaintenanceProviderReconciliationScopeWhere,
   reconcilePreventiveMaintenanceProviderEvents,
+  reconcilePreventiveMaintenanceResendWebhookEvent,
 } from "@/lib/preventive-maintenance-provider-reconciliation";
 import { parsePreventiveMaintenanceProviderReconciliationRequest } from "@/lib/preventive-maintenance-provider-reconciliation-policy";
 
@@ -157,6 +158,110 @@ describe("reconcilePreventiveMaintenanceProviderEvents", () => {
     expect(result.staleEventCount).toBe(1);
     expect(result.notFoundCount).toBe(0);
     expect(mocks.attemptUpdate).not.toHaveBeenCalled();
+  });
+
+  it("reconciles an authenticated webhook globally while deriving hygiene ownership from the matched attempt", async () => {
+    mocks.attemptFindMany.mockResolvedValue([
+      {
+        id: "00000000-0000-4000-8000-000000000001",
+        organizationId,
+        recipientAddress: "private-recipient@example.com",
+        providerMessageId: "provider-webhook-message-1",
+        providerEventStatus: "sent",
+        providerEventAt: new Date("2026-08-11T17:59:00.000Z"),
+      },
+    ]);
+
+    const result = await reconcilePreventiveMaintenanceResendWebhookEvent({
+      auditId: "00000000-0000-4000-8000-000000000099",
+      event: {
+        providerMessageId: "provider-webhook-message-1",
+        status: "complained",
+        occurredAt: new Date("2026-08-11T18:00:00.000Z"),
+        sourceEventType: "email.complained",
+      },
+    });
+
+    expect(result).toMatchObject({
+      matchedAttemptCount: 1,
+      updatedAttemptCount: 1,
+      staleEventCount: 0,
+      hygieneSignalCount: 1,
+    });
+    expect(mocks.attemptFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          providerMessageId: { in: ["provider-webhook-message-1"] },
+          dryRun: false,
+          channel: "email",
+        },
+      }),
+    );
+    expect(mocks.hygieneUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          organizationId,
+          status: "complained",
+        }),
+      }),
+    );
+    expect(mocks.auditFinish).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        auditId: "00000000-0000-4000-8000-000000000099",
+        outcome: "succeeded",
+        metadata: expect.objectContaining({
+          reconciliationSource: "resend_webhook",
+          webhookOutcome: "processed",
+          matchedAttemptCount: 1,
+          sourceEventTypes: ["email.complained"],
+          hygieneSignalCount: 1,
+        }),
+      }),
+    );
+    expect(JSON.stringify(mocks.auditFinish.mock.calls)).not.toContain(
+      "private-recipient@example.com",
+    );
+  });
+
+  it("refuses to mutate an ambiguous provider ID across organizations", async () => {
+    mocks.attemptFindMany.mockResolvedValue(
+      [organizationId, "95ba109f-b777-4eb7-9e38-26b4bb5c4a39"].map(
+        (attemptOrganizationId, index) => ({
+          id: `00000000-0000-4000-8000-00000000000${index + 1}`,
+          organizationId: attemptOrganizationId,
+          recipientAddress: `private-${index}@example.com`,
+          providerMessageId: "duplicate-provider-id",
+          providerEventStatus: "sent",
+          providerEventAt: new Date("2026-08-11T17:59:00.000Z"),
+        }),
+      ),
+    );
+
+    const result = await reconcilePreventiveMaintenanceResendWebhookEvent({
+      auditId: "00000000-0000-4000-8000-000000000099",
+      event: {
+        providerMessageId: "duplicate-provider-id",
+        status: "bounced",
+        occurredAt: new Date("2026-08-11T18:00:00.000Z"),
+        sourceEventType: "email.bounced",
+      },
+    });
+
+    expect(result).toMatchObject({
+      matchedAttemptCount: 0,
+      updatedAttemptCount: 0,
+      ambiguousMatchCount: 1,
+      hygieneSignalCount: 0,
+    });
+    expect(mocks.attemptUpdate).not.toHaveBeenCalled();
+    expect(mocks.hygieneUpsert).not.toHaveBeenCalled();
+    expect(mocks.auditFinish).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        organizationId: undefined,
+        outcome: "completed_with_failures",
+        metadata: expect.objectContaining({ ambiguousMatchCount: 1 }),
+      }),
+    );
   });
 });
 

@@ -26,6 +26,7 @@ export type PreventiveMaintenanceProviderReconciliationEvent = {
   providerMessageId: string;
   status: PreventiveMaintenanceProviderEventStatus;
   occurredAt: Date;
+  sourceEventType?: string;
 };
 
 const MAX_RECONCILIATION_EVENTS = 100;
