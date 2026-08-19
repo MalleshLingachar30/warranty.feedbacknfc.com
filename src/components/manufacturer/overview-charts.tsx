@@ -47,16 +47,16 @@ export function OverviewCharts({
 }: OverviewChartsProps) {
   return (
     <>
-      <Card className="xl:col-span-2">
+      <Card className="min-w-0 xl:col-span-2">
         <CardHeader>
           <CardTitle>Monthly Warranty Cost Trend</CardTitle>
           <CardDescription>
             Claim spend and volume over the past months.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="h-80 w-full">
-            <ResponsiveContainer>
+        <CardContent className="min-w-0">
+          <div className="h-80 min-w-0 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <LineChart data={monthlyTrend}>
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -89,16 +89,16 @@ export function OverviewCharts({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Top Issues by Model</CardTitle>
           <CardDescription>
             Highest recurring issue categories by product model.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="h-80 w-full">
-            <ResponsiveContainer>
+        <CardContent className="min-w-0">
+          <div className="h-80 min-w-0 overflow-hidden">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart
                 data={topIssues}
                 layout="vertical"
