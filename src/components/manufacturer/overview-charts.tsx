@@ -28,6 +28,12 @@ const money = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+const CHART_HEIGHT = 320;
+const CHART_INITIAL_DIMENSION = {
+  width: 1,
+  height: CHART_HEIGHT,
+} as const;
+
 type OverviewChartsProps = {
   monthlyTrend: MonthlyWarrantyCostPoint[];
   topIssues: TopIssueRow[];
@@ -56,7 +62,13 @@ export function OverviewCharts({
         </CardHeader>
         <CardContent className="min-w-0">
           <div className="h-80 min-w-0 overflow-hidden">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={1}
+              minHeight={CHART_HEIGHT}
+              initialDimension={CHART_INITIAL_DIMENSION}
+            >
               <LineChart data={monthlyTrend}>
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -98,7 +110,13 @@ export function OverviewCharts({
         </CardHeader>
         <CardContent className="min-w-0">
           <div className="h-80 min-w-0 overflow-hidden">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+            <ResponsiveContainer
+              width="100%"
+              height="100%"
+              minWidth={1}
+              minHeight={CHART_HEIGHT}
+              initialDimension={CHART_INITIAL_DIMENSION}
+            >
               <BarChart
                 data={topIssues}
                 layout="vertical"
