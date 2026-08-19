@@ -29,7 +29,8 @@
     "test:pm-notification-interaction": "vitest run src/components/notifications/pm-notification-center.test.tsx",
     "test:pm-notification-manual-pilot": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-manual-pilot-check.mjs && vitest run src/lib/preventive-maintenance-notification-dispatch.test.ts src/components/notifications/pm-notification-center.test.tsx",
     "maintenance:pm-notification-smoke": "node scripts/run-pm-notification-operator-smoke.js --cleanup=archive",
-    "seed:medcore-pm-demo": "node --no-warnings --experimental-strip-types scripts/seed-medcore-pm-demo.mjs"
+    "seed:medcore-pm-demo": "node --no-warnings --experimental-strip-types scripts/seed-medcore-pm-demo.mjs",
+    "check:medcore-pm-demo-readiness": "node --no-warnings --experimental-strip-types scripts/run-medcore-pm-demo-readiness-check.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.1",
