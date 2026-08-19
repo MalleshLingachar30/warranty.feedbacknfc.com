@@ -15,11 +15,12 @@ import {
 import {
   buildPreventiveMaintenanceScheduledRunKey,
   buildPreventiveMaintenanceScheduledRunWindow,
-  PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_BATCH_LIMIT,
   PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_LEASE_MS,
   PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MAX_ATTEMPTS,
   PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_WINDOW_MINUTES,
+  resolvePreventiveMaintenanceScheduledDispatchBatchLimit,
   resolvePreventiveMaintenanceScheduledDispatcherMode,
+  resolvePreventiveMaintenanceScheduledOrganizationScope,
 } from "@/lib/preventive-maintenance-scheduled-dispatch-policy";
 
 const SCHEDULER_LEASE_ID = "pm-scheduled-dispatcher";
@@ -57,6 +58,9 @@ type ScheduledRun =
 export function getPreventiveMaintenanceScheduledDispatcherConfiguration() {
   const emailReadiness =
     getPreventiveMaintenanceEmailDeliveryReadiness().liveEmail;
+  const batchLimit = resolvePreventiveMaintenanceScheduledDispatchBatchLimit();
+  const organizationScope =
+    resolvePreventiveMaintenanceScheduledOrganizationScope();
   const mode = resolvePreventiveMaintenanceScheduledDispatcherMode({
     schedulerEnabled:
       process.env.PM_NOTIFICATION_SCHEDULED_DISPATCH_ENABLED === "true",
@@ -64,6 +68,10 @@ export function getPreventiveMaintenanceScheduledDispatcherConfiguration() {
       process.env.PM_NOTIFICATION_SCHEDULED_LIVE_DELIVERY_ENABLED === "true",
     liveEmailStatus: emailReadiness.status,
     liveEmailMissingConfiguration: emailReadiness.missingConfiguration,
+    rolloutControlBlockingReasons: [
+      ...batchLimit.blockingReasons,
+      ...organizationScope.blockingReasons,
+    ],
   });
 
   return {
@@ -73,7 +81,18 @@ export function getPreventiveMaintenanceScheduledDispatcherConfiguration() {
       process.env.CRON_SECRET?.trim(),
     ),
     schedule: `Every ${PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_WINDOW_MINUTES} minutes`,
-    batchLimit: PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_BATCH_LIMIT,
+    batchLimit: batchLimit.batchLimit,
+    batchLimitControl: {
+      source: batchLimit.source,
+      configuredValue: batchLimit.configuredValue,
+      clamped: batchLimit.clamped,
+    },
+    organizationScope: {
+      mode: organizationScope.mode,
+      organizationIds: organizationScope.organizationIds,
+      organizationCount: organizationScope.organizationIds.length,
+      invalidOrganizationIds: organizationScope.invalidOrganizationIds,
+    },
     maxAttempts: PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MAX_ATTEMPTS,
   };
 }
@@ -108,6 +127,8 @@ export async function runPreventiveMaintenanceScheduledDispatcher(input?: {
           mode: configuration.mode,
           blockingReasons: configuration.blockingReasons,
           batchLimit: configuration.batchLimit,
+          batchLimitControl: configuration.batchLimitControl,
+          organizationScope: configuration.organizationScope,
           maxAttempts: configuration.maxAttempts,
         },
       },
@@ -186,6 +207,9 @@ export async function runPreventiveMaintenanceScheduledDispatcher(input?: {
           runKey,
           mode: configuration.mode,
           blockingReasons: configuration.blockingReasons,
+          batchLimit: configuration.batchLimit,
+          batchLimitControl: configuration.batchLimitControl,
+          organizationScope: configuration.organizationScope,
           leaseAcquired: false,
         },
       });
@@ -215,6 +239,9 @@ export async function runPreventiveMaintenanceScheduledDispatcher(input?: {
         runKey,
         mode: configuration.mode,
         blockingReasons: configuration.blockingReasons,
+        batchLimit: configuration.batchLimit,
+        batchLimitControl: configuration.batchLimitControl,
+        organizationScope: configuration.organizationScope,
         leaseAcquired: true,
       },
     });
@@ -228,6 +255,8 @@ export async function runPreventiveMaintenanceScheduledDispatcher(input?: {
         confirmLiveDelivery: !configuration.dryRun,
         retryFailed: true,
         triggerType: null,
+        scheduledOrganizationIds:
+          configuration.organizationScope.organizationIds,
       });
     const completedWithFailures =
       result.failedAttemptCount > 0 ||
@@ -254,6 +283,9 @@ export async function runPreventiveMaintenanceScheduledDispatcher(input?: {
           metadata: {
             mode: configuration.mode,
             blockingReasons: configuration.blockingReasons,
+            batchLimit: configuration.batchLimit,
+            batchLimitControl: configuration.batchLimitControl,
+            organizationScope: configuration.organizationScope,
             missingRecipientCount: result.missingRecipientCount,
             reclaimedAttemptCount: result.reclaimedAttemptCount,
             skippedAttemptCount: result.skippedAttemptCount,
@@ -271,6 +303,9 @@ export async function runPreventiveMaintenanceScheduledDispatcher(input?: {
       metadata: {
         scheduledRunId: run.id,
         mode: configuration.mode,
+        batchLimit: configuration.batchLimit,
+        batchLimitControl: configuration.batchLimitControl,
+        organizationScope: configuration.organizationScope,
         preferenceSuppressedCount: result.preferenceSuppressedCount,
         suppressionReasonCounts: result.suppressionReasonCounts,
         retriedAttemptCount: result.retriedAttemptCount,

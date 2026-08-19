@@ -229,6 +229,8 @@ async function getSchedulerHealth(input: {
       mode: configuration.mode,
       schedule: configuration.schedule,
       batchLimit: configuration.batchLimit,
+      batchLimitControl: configuration.batchLimitControl,
+      organizationScope: configuration.organizationScope,
       maxAttempts: configuration.maxAttempts,
     },
     latestRun: serializeRunTimestamp(latestRun),

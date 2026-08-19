@@ -21,7 +21,7 @@
     "test:pm-notification-operator": "node scripts/run-pm-notification-operator-smoke.js",
     "test:pm-notification-live-readiness": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-live-readiness-check.mjs",
     "test:pm-notification-preferences": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-preference-check.mjs",
-    "test:pm-notification-scheduler": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-scheduler-check.mjs",
+    "test:pm-notification-scheduler": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-scheduler-check.mjs && vitest run src/lib/preventive-maintenance-scheduled-dispatch-policy.test.ts src/lib/preventive-maintenance-scheduled-dispatcher.test.ts",
     "test:pm-notification-reporting": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-reporting-check.mjs",
     "test:pm-notification-provider-reconciliation": "node --no-warnings --experimental-strip-types scripts/run-pm-notification-provider-reconciliation-check.mjs && vitest run src/lib/preventive-maintenance-notification-dispatch.test.ts src/lib/preventive-maintenance-provider-reconciliation.test.ts",
     "test:pm-notification-resend-webhook": "vitest run src/lib/preventive-maintenance-resend-webhook.test.ts src/app/api/preventive-maintenance/notifications/provider-webhooks/resend/route.test.ts src/lib/preventive-maintenance-provider-reconciliation.test.ts",

@@ -323,6 +323,7 @@ export async function dispatchPreventiveMaintenanceNotifications(
 export async function dispatchPreventiveMaintenanceNotificationsForScheduledRun(
   input: Omit<DispatchPreventiveMaintenanceNotificationsInput, "audience"> & {
     scheduledRunId: string;
+    scheduledOrganizationIds?: readonly string[];
   },
 ) {
   const now = new Date();
@@ -336,6 +337,7 @@ export async function dispatchPreventiveMaintenanceNotificationsForScheduledRun(
     scopeWhere: buildScheduledDispatchScopeWhere({
       dryRun: input.dryRun,
       now,
+      organizationIds: input.scheduledOrganizationIds ?? [],
     }),
     executionContext: {
       source: "scheduled",
@@ -535,15 +537,25 @@ export async function sendPreventiveMaintenanceManualEmailPilot(input: {
 function buildScheduledDispatchScopeWhere(input: {
   dryRun: boolean;
   now: Date;
+  organizationIds: readonly string[];
 }): Prisma.PreventiveMaintenanceNotificationIntentWhereInput {
   const modeAttemptWhere: Prisma.PreventiveMaintenanceNotificationDeliveryAttemptWhereInput =
     {
       channel: "email",
       dryRun: input.dryRun,
     };
+  const organizationWhere: Prisma.PreventiveMaintenanceNotificationIntentWhereInput =
+    input.organizationIds.length > 0
+      ? {
+          organizationId: {
+            in: [...input.organizationIds],
+          },
+        }
+      : {};
 
   if (input.dryRun) {
     return {
+      ...organizationWhere,
       deliveryAttempts: {
         none: modeAttemptWhere,
       },
@@ -551,6 +563,7 @@ function buildScheduledDispatchScopeWhere(input: {
   }
 
   return {
+    ...organizationWhere,
     OR: [
       {
         deliveryAttempts: {

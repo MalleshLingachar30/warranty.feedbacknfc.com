@@ -578,6 +578,24 @@ export function PmNotificationReportingDashboard({
                   {reporting.scheduler.configuration.schedule}
                 </dd>
               </div>
+              <div className="flex flex-col gap-1">
+                <dt className="text-xs text-muted-foreground">Batch cap</dt>
+                <dd className="text-sm font-medium">
+                  {reporting.scheduler.configuration.batchLimit} per run ·{" "}
+                  {reporting.scheduler.configuration.batchLimitControl.source}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-1">
+                <dt className="text-xs text-muted-foreground">
+                  Organization scope
+                </dt>
+                <dd className="text-sm font-medium">
+                  {reporting.scheduler.configuration.organizationScope.mode ===
+                  "allowlist"
+                    ? `${reporting.scheduler.configuration.organizationScope.organizationCount} allowed`
+                    : "All organizations"}
+                </dd>
+              </div>
             </dl>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-4 sm:grid-cols-4">
               {[

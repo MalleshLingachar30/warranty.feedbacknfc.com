@@ -141,6 +141,17 @@ type PmNotificationSchedulerStatus = {
     authorizationConfigured: boolean;
     schedule: string;
     batchLimit: number;
+    batchLimitControl: {
+      source: "default" | "environment";
+      configuredValue: string | null;
+      clamped: boolean;
+    };
+    organizationScope: {
+      mode: "all" | "allowlist";
+      organizationIds: string[];
+      organizationCount: number;
+      invalidOrganizationIds: string[];
+    };
     maxAttempts: number;
   };
   deadLetterCount: number;
@@ -1107,6 +1118,19 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   ? `${schedulerStatus.configuration.schedule}; up to ${schedulerStatus.configuration.batchLimit} pending intents per run with ${schedulerStatus.configuration.maxAttempts} total email attempts.`
                   : "Automation is disabled. Cron requests cannot prepare attempts or call the email provider until PM_NOTIFICATION_SCHEDULED_DISPATCH_ENABLED=true."}
               </p>
+              {schedulerStatus.configuration.enabled ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Scheduled scope:{" "}
+                  {schedulerStatus.configuration.organizationScope.mode ===
+                  "allowlist"
+                    ? `${schedulerStatus.configuration.organizationScope.organizationCount} allowed organization${schedulerStatus.configuration.organizationScope.organizationCount === 1 ? "" : "s"}`
+                    : "all organizations"}
+                  {schedulerStatus.configuration.batchLimitControl.source ===
+                  "environment"
+                    ? `; batch cap set by environment${schedulerStatus.configuration.batchLimitControl.clamped ? " and clamped" : ""}.`
+                    : "; default batch cap."}
+                </p>
+              ) : null}
               {schedulerStatus.configuration.liveDeliveryRequested &&
               schedulerStatus.configuration.mode !== "live" ? (
                 <p className="mt-1 text-xs text-amber-700">

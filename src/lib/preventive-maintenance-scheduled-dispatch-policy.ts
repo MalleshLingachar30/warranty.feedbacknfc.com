@@ -1,6 +1,7 @@
 export const PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_WINDOW_MINUTES = 15;
 export const PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MAX_ATTEMPTS = 3;
 export const PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_BATCH_LIMIT = 50;
+export const PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MIN_BATCH_LIMIT = 1;
 export const PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_LEASE_MS = 14 * 60_000;
 export const PREVENTIVE_MAINTENANCE_DELIVERY_CLAIM_LEASE_MS = 5 * 60_000;
 
@@ -9,6 +10,7 @@ type ScheduledDispatcherModeInput = {
   liveDeliveryRequested: boolean;
   liveEmailStatus: "disabled" | "incomplete" | "ready";
   liveEmailMissingConfiguration: readonly string[];
+  rolloutControlBlockingReasons?: readonly string[];
 };
 
 export type PreventiveMaintenanceScheduledDispatcherMode = {
@@ -55,6 +57,16 @@ export function resolvePreventiveMaintenanceScheduledDispatcherMode(
     };
   }
 
+  if (input.rolloutControlBlockingReasons?.length) {
+    return {
+      enabled: true,
+      mode: "dry_run",
+      dryRun: true,
+      liveDeliveryRequested: true,
+      blockingReasons: [...input.rolloutControlBlockingReasons],
+    };
+  }
+
   return {
     enabled: true,
     mode: "live",
@@ -74,6 +86,103 @@ export function buildPreventiveMaintenanceScheduledRunWindow(
 
 export function buildPreventiveMaintenanceScheduledRunKey(now: Date) {
   return `pm-scheduled-dispatch:${buildPreventiveMaintenanceScheduledRunWindow(now).toISOString()}`;
+}
+
+export type PreventiveMaintenanceScheduledBatchLimitConfiguration = {
+  batchLimit: number;
+  configuredValue: string | null;
+  source: "default" | "environment";
+  clamped: boolean;
+  blockingReasons: string[];
+};
+
+export type PreventiveMaintenanceScheduledOrganizationScopeConfiguration = {
+  mode: "all" | "allowlist";
+  organizationIds: string[];
+  configuredValue: string | null;
+  invalidOrganizationIds: string[];
+  blockingReasons: string[];
+};
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function resolvePreventiveMaintenanceScheduledDispatchBatchLimit(
+  rawValue = process.env.PM_NOTIFICATION_SCHEDULED_DISPATCH_BATCH_LIMIT,
+): PreventiveMaintenanceScheduledBatchLimitConfiguration {
+  const configuredValue = rawValue?.trim() || null;
+
+  if (!configuredValue) {
+    return {
+      batchLimit: PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_BATCH_LIMIT,
+      configuredValue,
+      source: "default",
+      clamped: false,
+      blockingReasons: [],
+    };
+  }
+
+  const parsed = Number(configuredValue);
+  if (!Number.isInteger(parsed)) {
+    return {
+      batchLimit: PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MIN_BATCH_LIMIT,
+      configuredValue,
+      source: "environment",
+      clamped: false,
+      blockingReasons: ["PM_NOTIFICATION_SCHEDULED_DISPATCH_BATCH_LIMIT"],
+    };
+  }
+
+  const batchLimit = Math.min(
+    PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_BATCH_LIMIT,
+    Math.max(PREVENTIVE_MAINTENANCE_SCHEDULED_DISPATCH_MIN_BATCH_LIMIT, parsed),
+  );
+
+  return {
+    batchLimit,
+    configuredValue,
+    source: "environment",
+    clamped: batchLimit !== parsed,
+    blockingReasons: [],
+  };
+}
+
+export function resolvePreventiveMaintenanceScheduledOrganizationScope(
+  rawValue = process.env.PM_NOTIFICATION_SCHEDULED_DISPATCH_ORGANIZATION_IDS,
+): PreventiveMaintenanceScheduledOrganizationScopeConfiguration {
+  const configuredValue = rawValue?.trim() || null;
+
+  if (!configuredValue) {
+    return {
+      mode: "all",
+      organizationIds: [],
+      configuredValue,
+      invalidOrganizationIds: [],
+      blockingReasons: [],
+    };
+  }
+
+  const entries = configuredValue
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const organizationIds = [
+    ...new Set(entries.filter((entry) => UUID_PATTERN.test(entry))),
+  ];
+  const invalidOrganizationIds = entries.filter(
+    (entry) => !UUID_PATTERN.test(entry),
+  );
+
+  return {
+    mode: organizationIds.length > 0 ? "allowlist" : "all",
+    organizationIds,
+    configuredValue,
+    invalidOrganizationIds,
+    blockingReasons:
+      invalidOrganizationIds.length > 0 || organizationIds.length === 0
+        ? ["PM_NOTIFICATION_SCHEDULED_DISPATCH_ORGANIZATION_IDS"]
+        : [],
+  };
 }
 
 type ScheduledAttemptStatus =

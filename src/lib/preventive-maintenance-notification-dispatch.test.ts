@@ -60,7 +60,10 @@ vi.mock("@/lib/preventive-maintenance-notification-preferences", () => ({
     mocks.preferencesForOrganizations,
 }));
 
-import { sendPreventiveMaintenanceManualEmailPilot } from "@/lib/preventive-maintenance-notification-dispatch";
+import {
+  dispatchPreventiveMaintenanceNotificationsForScheduledRun,
+  sendPreventiveMaintenanceManualEmailPilot,
+} from "@/lib/preventive-maintenance-notification-dispatch";
 import { PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_CONFIRMATION } from "@/lib/preventive-maintenance-manual-email-pilot-policy";
 import type { PreventiveMaintenanceNotificationAudience } from "@/lib/preventive-maintenance-notifications";
 import { hashPreventiveMaintenanceRecipientAddress } from "@/lib/preventive-maintenance-recipient-hygiene";
@@ -284,6 +287,42 @@ describe("sendPreventiveMaintenanceManualEmailPilot", () => {
     expect(result.providerCallCount).toBe(0);
     expect(result.attempts[0]?.skipReason).toBe(
       "recipient_hygiene_blocked_suppressed",
+    );
+    expect(mocks.sendEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("dispatchPreventiveMaintenanceNotificationsForScheduledRun", () => {
+  it("scopes scheduled dispatches to the configured organization allowlist", async () => {
+    mocks.intentFindMany.mockResolvedValueOnce([]);
+
+    await dispatchPreventiveMaintenanceNotificationsForScheduledRun({
+      scheduledRunId: "00000000-0000-4000-8000-000000000050",
+      channels: ["email"],
+      limit: 5,
+      dryRun: true,
+      retryFailed: true,
+      triggerType: null,
+      scheduledOrganizationIds: [organizationId],
+    });
+
+    expect(mocks.intentFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          channel: "in_app",
+          status: "pending",
+          organizationId: {
+            in: [organizationId],
+          },
+          deliveryAttempts: {
+            none: {
+              channel: "email",
+              dryRun: true,
+            },
+          },
+        }),
+        take: 5,
+      }),
     );
     expect(mocks.sendEmail).not.toHaveBeenCalled();
   });
