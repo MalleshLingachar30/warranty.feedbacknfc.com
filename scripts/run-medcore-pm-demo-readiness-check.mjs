@@ -55,17 +55,17 @@ function printHelp() {
   npm run check:medcore-pm-demo-readiness -- --json
 
 Options:
-  --organization-id=<uuid>  MedCore manufacturer id. Defaults to ${MEDCORE_PM_DEMO_ORG_ID}.
-  --json                    Print machine-readable readiness details.
+  --organization-id=<uuid>  MedCore account id. Defaults to ${MEDCORE_PM_DEMO_ORG_ID}.
+  --json                    Print detailed readiness results.
 
 Checks:
-  - MedCore manufacturer tenant exists and matches expected demo identity.
-  - Phase 5H demo seed records exist for scheduled, in-progress, and completed PM events.
-  - Notification and dry-run delivery evidence is present for reporting/export.
-  - Scheduled live dispatch is not enabled.
-  - Scheduler batch cap is 5 and organization allowlist contains only MedCore.
-  - Legacy PM smoke-test rows are absent.
-  - Prisma migration table is reachable and has no failed migrations.
+  - MedCore customer account is available.
+  - The maintenance walkthrough has upcoming, active, and completed visits.
+  - Inbox and reporting activity is available.
+  - Automatic live emails are closed for the walkthrough.
+  - Reminder settings are limited to the MedCore account.
+  - Old test records are not visible in the walkthrough.
+  - Production database health is good.
 `);
 }
 
@@ -371,7 +371,7 @@ async function getReadiness(organizationId) {
           ? `batch ${scheduler.batchLimit}, allowed orgs ${scheduler.organizationScope.organizationCount}`
           : localSchedulerScopeConfigured
             ? `batch ${scheduler.batchLimit}, allowed orgs ${scheduler.organizationScope.organizationCount}`
-            : "local scheduler scope env is unavailable; verify production runtime from Demo Ops page/API",
+            : "local automatic-reminder settings are unavailable; verify production from the readiness page/API",
     },
     {
       id: "legacy_smoke_data",

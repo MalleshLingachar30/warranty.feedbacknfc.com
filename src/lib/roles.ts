@@ -84,11 +84,6 @@ export const NAVIGATION_BY_ROLE: Record<AppRole, NavigationItem[]> = {
   ],
   manufacturer_admin: [
     { label: "Dashboard", href: "/dashboard/manufacturer", icon: Gauge },
-    {
-      label: "Demo Ops",
-      href: "/dashboard/manufacturer/demo-ops",
-      icon: ShieldCheck,
-    },
     { label: "Products", href: "/dashboard/manufacturer/products", icon: Package },
     {
       label: "Installations",

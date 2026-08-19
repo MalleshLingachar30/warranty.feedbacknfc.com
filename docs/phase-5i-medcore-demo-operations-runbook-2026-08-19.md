@@ -12,7 +12,7 @@ Demo seed marker: `phase5h-medcore-pm-cycle`
 
 ## Demo Position
 
-This is a controlled MedCore preventive-maintenance cycle demo. The flow is ready for a client walkthrough when the Demo Ops page reports no blocked checks and scheduled live delivery remains disabled or dry-run only.
+This is a controlled MedCore preventive-maintenance cycle demo. The flow is ready for a client walkthrough when the Walkthrough Health page reports no blocked checks and scheduled live delivery remains disabled or dry-run only.
 
 Clerk development keys are accepted for this demo by product direction. Do not treat the Clerk development-key browser warning as a demo blocker for this phase.
 
@@ -21,7 +21,7 @@ Clerk development keys are accepted for this demo by product direction. Do not t
 Open:
 
 ```text
-https://warranty.feedbacknfc.com/dashboard/manufacturer/demo-ops
+https://warranty.feedbacknfc.com/dashboard/manufacturer/readiness
 ```
 
 Expected state:
@@ -52,11 +52,11 @@ Machine-readable output:
 npm run check:medcore-pm-demo-readiness -- --json
 ```
 
-The Demo Ops page and authenticated readiness API are the authoritative source for deployed runtime environment posture. Vercel-pulled encrypted production variables can appear as empty quoted values in a local env file, so the CLI treats missing local scheduler scope env as a warning and reports that production runtime should be verified from the deployed page/API.
+The Walkthrough Health page and authenticated readiness API are the authoritative source for deployed runtime environment posture. Vercel-pulled encrypted production variables can appear as empty quoted values in a local env file, so the CLI treats missing local scheduler scope env as a warning and reports that production runtime should be verified from the deployed page/API.
 
 ## Safe Demo Reset
 
-Use the guarded seed command from the Demo Ops page. Current command:
+Use the guarded reset command from this runbook. Current command:
 
 ```bash
 npm run seed:medcore-pm-demo -- --reset --confirm-medcore-demo-reset --cleanup-old-smoke --confirm-cleanup-old-smoke --allow-production --organization-id=95ba109f-b777-4eb7-9e38-26b4bb5c4a38
@@ -85,10 +85,10 @@ npm run check:medcore-pm-demo-readiness
 
    Show the MedCore manufacturer workspace and high-level operational counters.
 
-2. Open Demo Ops.
+2. Open Walkthrough Health.
 
    ```text
-   https://warranty.feedbacknfc.com/dashboard/manufacturer/demo-ops
+   https://warranty.feedbacknfc.com/dashboard/manufacturer/readiness
    ```
 
    Show that the demo is safe, scoped, and ready.
@@ -131,14 +131,14 @@ npm run check:medcore-pm-demo-readiness
 
 ## Recovery
 
-If Demo Ops reports missing records or old smoke data:
+If Walkthrough Health reports missing records or old smoke data:
 
 1. Run the guarded reset command.
 2. Run `npm run check:medcore-pm-demo-readiness`.
-3. Re-open the Demo Ops page.
+3. Re-open the Walkthrough Health page.
 4. Verify the Maintenance, Inbox, and Reporting routes.
 
-If Demo Ops reports scheduler live mode:
+If Walkthrough Health reports scheduled live mode:
 
 1. Set `PM_NOTIFICATION_SCHEDULED_LIVE_DELIVERY_ENABLED` to disabled/false in production.
 2. Redeploy production.
@@ -154,7 +154,7 @@ If migration state reports failed migrations:
 
 ## Phase 5I Exit Criteria
 
-- Demo Ops page exists and is available to the MedCore manufacturer admin.
+- Walkthrough Health page exists by direct URL for the MedCore manufacturer admin.
 - Read-only CLI readiness check exists and returns nonzero on blocked demo state.
 - The runbook documents the exact demo path and recovery commands.
 - Production scheduler safety posture is visible before the demo.
