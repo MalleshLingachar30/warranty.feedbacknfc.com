@@ -52,6 +52,8 @@ Machine-readable output:
 npm run check:medcore-pm-demo-readiness -- --json
 ```
 
+The Demo Ops page and authenticated readiness API are the authoritative source for deployed runtime environment posture. Vercel-pulled encrypted production variables can appear as empty quoted values in a local env file, so the CLI treats missing local scheduler scope env as a warning and reports that production runtime should be verified from the deployed page/API.
+
 ## Safe Demo Reset
 
 Use the guarded seed command from the Demo Ops page. Current command:

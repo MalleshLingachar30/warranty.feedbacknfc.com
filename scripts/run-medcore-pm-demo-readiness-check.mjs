@@ -133,6 +133,13 @@ function buildSchedulerConfiguration() {
   };
 }
 
+function hasLocalSchedulerScopeConfiguration() {
+  return Boolean(
+    process.env.PM_NOTIFICATION_SCHEDULED_DISPATCH_BATCH_LIMIT?.trim() ||
+      process.env.PM_NOTIFICATION_SCHEDULED_DISPATCH_ORGANIZATION_IDS?.trim(),
+  );
+}
+
 async function getMigrationSummary() {
   try {
     const rows = await prisma.$queryRaw`
@@ -322,6 +329,7 @@ async function getReadiness(organizationId) {
     scheduler.organizationScope.mode === "allowlist" &&
     scheduler.organizationScope.organizationIds.length === 1 &&
     scheduler.organizationScope.organizationIds[0] === MEDCORE_PM_DEMO_ORG_ID;
+  const localSchedulerScopeConfigured = hasLocalSchedulerScopeConfiguration();
   const storyComplete =
     MEDCORE_PM_DEMO_EVENT_NUMBERS.every((eventNumber) =>
       serializedStoryEvents.some((event) => event.eventNumber === eventNumber),
@@ -355,8 +363,15 @@ async function getReadiness(organizationId) {
         schedulerScopedToMedCore &&
         scheduler.organizationScope.invalidOrganizationIds.length === 0
           ? "pass"
-          : "fail",
-      detail: `batch ${scheduler.batchLimit}, allowed orgs ${scheduler.organizationScope.organizationCount}`,
+          : localSchedulerScopeConfigured
+            ? "fail"
+            : "warn",
+      detail:
+        scheduler.batchLimit === 5 && schedulerScopedToMedCore
+          ? `batch ${scheduler.batchLimit}, allowed orgs ${scheduler.organizationScope.organizationCount}`
+          : localSchedulerScopeConfigured
+            ? `batch ${scheduler.batchLimit}, allowed orgs ${scheduler.organizationScope.organizationCount}`
+            : "local scheduler scope env is unavailable; verify production runtime from Demo Ops page/API",
     },
     {
       id: "legacy_smoke_data",
