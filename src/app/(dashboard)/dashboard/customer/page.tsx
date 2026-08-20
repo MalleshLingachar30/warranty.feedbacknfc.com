@@ -114,10 +114,80 @@ function formatDate(date: Date) {
   }).format(date);
 }
 
+function formatMonth(date: Date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
 function daysUntil(date: Date) {
   const now = Date.now();
   const then = date.getTime();
   return Math.max(0, Math.ceil((then - now) / (1000 * 60 * 60 * 24)));
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function getCalendarStart(month: Date) {
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
+  const mondayOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+  return addDays(firstDay, -mondayOffset);
+}
+
+function getVisitDate(event: {
+  dueDate: Date;
+  scheduledFor: Date | null;
+  completedAt: Date | null;
+}) {
+  return event.scheduledFor ?? event.completedAt ?? event.dueDate;
+}
+
+function visitTimingLabel(event: {
+  dueDate: Date;
+  scheduledFor: Date | null;
+  completedAt: Date | null;
+}) {
+  if (event.completedAt) {
+    return `Completed ${formatDate(event.completedAt)}`;
+  }
+
+  if (event.scheduledFor) {
+    return `Scheduled ${formatDate(event.scheduledFor)}`;
+  }
+
+  return `Due ${formatDate(event.dueDate)}`;
+}
+
+function maintenanceStatusLabel(status: PreventiveMaintenanceEventStatus) {
+  switch (status) {
+    case "due":
+      return "Due";
+    case "scheduled":
+      return "Scheduled";
+    case "in_progress":
+      return "In progress";
+    case "completed":
+      return "Completed";
+    case "cancelled":
+      return "Cancelled";
+    case "overdue":
+      return "Overdue";
+    default:
+      return "Visit status";
+  }
 }
 
 export default async function CustomerDashboardPage() {
@@ -267,7 +337,7 @@ export default async function CustomerDashboardPage() {
         eventNumber: "asc",
       },
     ],
-    take: 5,
+    take: 200,
     select: {
       id: true,
       eventNumber: true,
@@ -300,6 +370,33 @@ export default async function CustomerDashboardPage() {
       },
     },
   });
+
+  const upcomingPmEvents = pmEvents
+    .filter((event) => event.status !== "completed")
+    .sort(
+      (left, right) =>
+        getVisitDate(left).getTime() - getVisitDate(right).getTime(),
+    );
+  const calendarAnchor = getVisitDate(upcomingPmEvents[0] ?? pmEvents[0] ?? {
+    dueDate: new Date(),
+    scheduledFor: null,
+    completedAt: null,
+  });
+  const calendarStart = getCalendarStart(
+    new Date(calendarAnchor.getFullYear(), calendarAnchor.getMonth(), 1),
+  );
+  const customerCalendarDays = Array.from({ length: 42 }, (_, index) => {
+    const date = addDays(calendarStart, index);
+
+    return {
+      date,
+      isCurrentMonth: date.getMonth() === calendarAnchor.getMonth(),
+      visits: pmEvents.filter((event) =>
+        isSameDay(getVisitDate(event), date),
+      ),
+    };
+  });
+  const nextPmVisit = upcomingPmEvents[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -482,53 +579,154 @@ export default async function CustomerDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200">
+        <Card className="border-slate-200 md:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Maintenance</CardTitle>
+            <CardTitle className="text-base">My Maintenance Calendar</CardTitle>
             <CardDescription>
-              Upcoming and recent preventive maintenance visits.
+              Upcoming service visits for your registered products.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {pmEvents.length === 0 ? (
               <p className="text-sm text-slate-600">
-                No preventive maintenance visits are scheduled yet.
+                No maintenance visits are scheduled yet.
               </p>
             ) : (
-              pmEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="rounded-md border border-slate-200 p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        {event.asset.productModel.name}
+              <>
+                {nextPmVisit ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-950">
+                          Next service visit
+                        </p>
+                        <p className="mt-1 text-lg font-semibold text-slate-950">
+                          {nextPmVisit.asset.productModel.name}
+                        </p>
+                        <p className="text-sm text-slate-700">
+                          {visitTimingLabel(nextPmVisit)}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={pmStatusBadgeClass(nextPmVisit.status)}
+                      >
+                        {maintenanceStatusLabel(nextPmVisit.status)}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                      <p>
+                        Product code:{" "}
+                        <span className="font-medium text-slate-900">
+                          {nextPmVisit.asset.publicCode}
+                        </span>
                       </p>
-                      <p className="text-xs text-slate-500">
-                        {event.eventNumber} / {event.asset.publicCode}
+                      <p>
+                        Service team:{" "}
+                        <span className="font-medium text-slate-900">
+                          {nextPmVisit.assignedTechnician?.name ??
+                            nextPmVisit.assignedServiceCenter?.name ??
+                            "Will be assigned soon"}
+                        </span>
                       </p>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className={pmStatusBadgeClass(event.status)}
-                    >
-                      {event.status.replace(/_/g, " ")}
-                    </Badge>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">
-                    Due {formatDate(event.dueDate)}
-                    {event.scheduledFor
-                      ? ` / scheduled ${formatDate(event.scheduledFor)}`
-                      : ""}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {event.assignedTechnician?.name ??
-                      event.assignedServiceCenter?.name ??
-                      "Service assignment pending"}
-                  </p>
+                ) : null}
+
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {formatMonth(calendarAnchor)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Calendar shows only your registered products.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-7 gap-1 text-[11px] font-semibold uppercase text-slate-500">
+                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
+                      (day) => (
+                        <div key={day} className="px-1">
+                          {day}
+                        </div>
+                      ),
+                    )}
+                  </div>
+
+                  <div className="mt-1 grid grid-cols-7 gap-1">
+                    {customerCalendarDays.map((day) => (
+                      <div
+                        key={day.date.toISOString()}
+                        className={`min-h-24 rounded-md border p-1 ${
+                          day.isCurrentMonth
+                            ? "border-slate-200 bg-white"
+                            : "border-slate-100 bg-slate-50 text-slate-400"
+                        }`}
+                      >
+                        <p className="text-xs font-medium">
+                          {day.date.getDate()}
+                        </p>
+                        <div className="mt-1 space-y-1">
+                          {day.visits.slice(0, 2).map((event) => (
+                            <div
+                              key={event.id}
+                              className="rounded border border-blue-100 bg-blue-50 px-1.5 py-1 text-[10px] leading-tight text-blue-950"
+                            >
+                              <p className="truncate font-medium">
+                                {event.asset.productModel.name}
+                              </p>
+                              <p className="truncate">
+                                {maintenanceStatusLabel(event.status)}
+                              </p>
+                            </div>
+                          ))}
+                          {day.visits.length > 2 ? (
+                            <p className="text-[10px] text-slate-500">
+                              +{day.visits.length - 2} more
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))
+
+                <div className="grid gap-2 md:grid-cols-2">
+                  {pmEvents.slice(0, 4).map((event) => (
+                    <div
+                      key={event.id}
+                      className="rounded-md border border-slate-200 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-slate-900">
+                            {event.asset.productModel.name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {event.asset.publicCode}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={pmStatusBadgeClass(event.status)}
+                        >
+                          {maintenanceStatusLabel(event.status)}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-600">
+                        {visitTimingLabel(event)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {event.assignedTechnician?.name ??
+                          event.assignedServiceCenter?.name ??
+                          "Service team will be assigned soon"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             <Button variant="outline" asChild>
               <Link href="/dashboard/my-products">Open My Products</Link>
