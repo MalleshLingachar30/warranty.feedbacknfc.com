@@ -47,7 +47,7 @@ export function PmNotificationDryRunAction({
         <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[310px]">
           <div className="rounded-md border border-slate-200 px-2 py-1.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              New
+              Checked now
             </p>
             <p className="text-sm font-semibold text-slate-950">
               {result.createdAttemptCount}
@@ -55,7 +55,7 @@ export function PmNotificationDryRunAction({
           </div>
           <div className="rounded-md border border-slate-200 px-2 py-1.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Existing
+              Already checked
             </p>
             <p className="text-sm font-semibold text-slate-950">
               {result.existingAttemptCount}
@@ -63,7 +63,7 @@ export function PmNotificationDryRunAction({
           </div>
           <div className="rounded-md border border-slate-200 px-2 py-1.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Skipped
+              Not sent
             </p>
             <p className="text-sm font-semibold text-slate-950">
               {result.skippedAttemptCount}

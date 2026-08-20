@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Loader2, MailCheck, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Loader2, MailCheck, Send } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ function resultStatusLabel(status: string) {
     case "dead_letter":
       return "Needs review";
     case "skipped":
-      return "Skipped";
+      return "Not sent";
     default:
       return labelFromSnakeCase(status);
   }
@@ -92,36 +92,35 @@ export function PmNotificationManualEmailPilotPanel({
 
   return (
     <section
-      className="overflow-hidden rounded-lg border border-rose-300 bg-white"
+      className="overflow-hidden rounded-lg border border-slate-200 bg-white"
       aria-labelledby="pm-manual-pilot-title"
       data-testid="pm-manual-email-pilot-panel"
     >
-      <div className="border-b border-rose-200 bg-rose-50 px-4 py-3">
+      <div className="border-b border-slate-200 bg-white px-4 py-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-rose-700" />
+              <Send className="h-4 w-4 text-slate-600" />
               <h2
                 id="pm-manual-pilot-title"
-                className="text-xs font-semibold uppercase tracking-wide text-rose-950"
+                className="text-xs font-semibold uppercase tracking-wide text-slate-700"
               >
-                Reviewed email sending
+                Send selected emails
               </h2>
               <Badge
                 variant="outline"
-                className="border-rose-300 bg-white text-rose-800"
+                className="border-slate-200 bg-slate-50 text-slate-700"
               >
                 Email only · up to{" "}
                 {PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP}
               </Badge>
             </div>
-            <p className="mt-1 max-w-3xl text-sm text-rose-900/80">
-              Select the exact pending updates below, review the message
-              preview, then confirm this one email batch. This does not turn on
-              automatic reminders and cannot send SMS.
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">
+              Select pending updates from the list on this page. Only selected
+              updates will be emailed after you confirm.
             </p>
           </div>
-          <div className="shrink-0 rounded-md border border-rose-200 bg-white px-3 py-2 text-right">
+          <div className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-right">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
               Selected updates
             </p>
@@ -167,10 +166,10 @@ export function PmNotificationManualEmailPilotPanel({
             </div>
           ) : null}
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 px-3 py-2.5 text-sm text-slate-700 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-rose-500 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 px-3 py-2.5 text-sm text-slate-700 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-slate-500 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 accent-rose-700"
+              className="mt-0.5 h-4 w-4 accent-slate-900"
               checked={confirmationChecked}
               onChange={(event) => onConfirmationChange(event.target.checked)}
               disabled={
@@ -191,7 +190,7 @@ export function PmNotificationManualEmailPilotPanel({
 
         <Button
           type="button"
-          className="min-w-48 bg-rose-700 text-white hover:bg-rose-800"
+          className="min-w-48"
           onClick={onSend}
           disabled={!canSend}
         >

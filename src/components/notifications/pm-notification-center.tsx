@@ -909,7 +909,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                   <Clock3 className="h-3.5 w-3.5 text-slate-500" />
                   <span className="font-semibold text-slate-700">
-                    Last preview
+                    Previous preview
                   </span>
                   {lastDryRun ? (
                     <>
@@ -919,7 +919,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                     </>
                   ) : (
                     <span>
-                      No preview has been run for this filter.
+                      No earlier preview is saved for this filter.
                     </span>
                   )}
                 </div>
@@ -962,24 +962,17 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
 
       {showCommunicationSettings && canDispatchDryRun && deliveryReadiness ? (
         <div
-          className={cn(
-            "rounded-lg border p-3",
-            deliveryReadiness.liveEmail.status === "ready"
-              ? "border-rose-300 bg-rose-50"
-              : deliveryReadiness.liveEmail.status === "incomplete"
-                ? "border-amber-300 bg-amber-50"
-                : "border-emerald-200 bg-emerald-50/60",
-          )}
+          className="rounded-lg border border-slate-200 bg-white p-3"
         >
           <div className="flex items-start gap-3">
             {deliveryReadiness.liveEmail.status === "disabled" ? (
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
             ) : (
               <AlertTriangle
                 className={cn(
                   "mt-0.5 h-4 w-4 shrink-0",
                   deliveryReadiness.liveEmail.status === "ready"
-                    ? "text-rose-700"
+                    ? "text-slate-500"
                     : "text-amber-700",
                 )}
               />
@@ -987,17 +980,17 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  Email sending status
+                  Email service status
                 </p>
                 <Badge
                   variant="outline"
                   className={cn(
                     "uppercase",
                     deliveryReadiness.liveEmail.status === "ready"
-                      ? "border-rose-300 bg-rose-100 text-rose-800"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                       : deliveryReadiness.liveEmail.status === "incomplete"
                         ? "border-amber-300 bg-amber-100 text-amber-800"
-                        : "border-emerald-300 bg-emerald-100 text-emerald-800",
+                        : "border-slate-200 bg-slate-50 text-slate-600",
                   )}
                 >
                   {deliveryReadiness.liveEmail.status === "ready"
@@ -1121,7 +1114,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                 <Button
                   type="button"
                   size="sm"
-                  variant="destructive"
+                  variant="outline"
                   onClick={() => void sendLiveCanary()}
                   disabled={
                     deliveryReadiness.canary.status !== "ready" ||
@@ -1301,6 +1294,18 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         </div>
       ) : null}
 
+      {showCommunicationSettings ? (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <p className="text-sm font-semibold text-slate-950">
+            Updates available for email
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Select the pending updates that should be included in the reviewed
+            email send. Updates that are closed or cancelled cannot be selected.
+          </p>
+        </div>
+      ) : null}
+
       <div className="space-y-3">
         {isLoading ? (
           <Card className="border-slate-200">
@@ -1402,10 +1407,10 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       {showCommunicationSettings &&
                       canDispatchDryRun &&
                       notification.status === "pending" ? (
-                        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-800 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
                           <input
                             type="checkbox"
-                            className="h-4 w-4 accent-rose-700"
+                            className="h-4 w-4 accent-slate-900"
                             checked={selectedPilotIds.has(notification.id)}
                             onChange={(event) =>
                               togglePilotSelection(
@@ -1421,7 +1426,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                             }
                             aria-label={`Select ${notification.title} for reviewed email sending`}
                           />
-                          Select
+                          Select for email
                         </label>
                       ) : null}
                       <Button asChild size="sm" variant="outline">
