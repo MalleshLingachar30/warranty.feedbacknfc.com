@@ -245,7 +245,9 @@ export function ManufacturerPmWorkbench({
   const [isSavingEvent, setIsSavingEvent] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
-  const activePlanCount = plans.filter((plan) => plan.status === "active").length;
+  const activePlanCount = plans.filter(
+    (plan) => plan.status === "active",
+  ).length;
   const dueCount = events.filter((event) =>
     ["due", "due_soon", "overdue"].includes(event.displayStatus),
   ).length;
@@ -272,7 +274,7 @@ export function ManufacturerPmWorkbench({
   );
 
   const plannerEvent = eventPlanner
-    ? events.find((event) => event.id === eventPlanner.eventId) ?? null
+    ? (events.find((event) => event.id === eventPlanner.eventId) ?? null)
     : null;
 
   const availableTechnicians = technicians.filter((technician) => {
@@ -445,7 +447,9 @@ export function ManufacturerPmWorkbench({
       }
 
       setEvents((current) =>
-        current.map((event) => (event.id === body.event!.id ? body.event! : event)),
+        current.map((event) =>
+          event.id === body.event!.id ? body.event! : event,
+        ),
       );
       setEventPlanner(null);
     } catch (requestError) {
@@ -460,7 +464,7 @@ export function ManufacturerPmWorkbench({
   };
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full overflow-x-hidden">
       <PageHeader
         title="Preventive Maintenance"
         description="Create product-model schedules, regenerate events, and dispatch upcoming PM visits."
@@ -623,8 +627,7 @@ export function ManufacturerPmWorkbench({
                       onChange={(event) =>
                         setPlanForm((current) => ({
                           ...current,
-                          customerAcknowledgementRequired:
-                            event.target.checked,
+                          customerAcknowledgementRequired: event.target.checked,
                         }))
                       }
                     />
@@ -691,7 +694,7 @@ export function ManufacturerPmWorkbench({
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Active Plans"
           value={activePlanCount.toLocaleString()}
@@ -718,8 +721,8 @@ export function ManufacturerPmWorkbench({
         />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[0.9fr_1.5fr]">
-        <Card>
+      <div className="mt-4 grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)]">
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Plans</CardTitle>
             <CardDescription>
@@ -727,62 +730,64 @@ export function ManufacturerPmWorkbench({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Cadence</TableHead>
-                  <TableHead className="text-right">Events</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {plans.length === 0 ? (
+            <div className="max-w-full overflow-x-auto">
+              <Table className="min-w-[560px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={3} className="text-muted-foreground">
-                      No preventive maintenance plans created yet.
-                    </TableCell>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Cadence</TableHead>
+                    <TableHead className="text-right">Events</TableHead>
                   </TableRow>
-                ) : (
-                  plans.map((plan) => (
-                    <TableRow key={plan.id}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium">{plan.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {plan.productModel.name}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className={
-                              plan.status === "active"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-slate-200 bg-slate-50 text-slate-700"
-                            }
-                          >
-                            {plan.statusLabel}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-sm">
-                          <p>{plan.eventTypeLabel}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {plan.cadenceTypeLabel}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {plan.eventCount.toLocaleString()}
+                </TableHeader>
+                <TableBody>
+                  {plans.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-muted-foreground">
+                        No preventive maintenance plans created yet.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    plans.map((plan) => (
+                      <TableRow key={plan.id}>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">{plan.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {plan.productModel.name}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={
+                                plan.status === "active"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-slate-200 bg-slate-50 text-slate-700"
+                              }
+                            >
+                              {plan.statusLabel}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 text-sm">
+                            <p>{plan.eventTypeLabel}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {plan.cadenceTypeLabel}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {plan.eventCount.toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Event Queue</CardTitle>
             <CardDescription>
@@ -790,83 +795,87 @@ export function ManufacturerPmWorkbench({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Assignment</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedEvents.length === 0 ? (
+            <div className="max-w-full overflow-x-auto">
+              <Table className="min-w-[820px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground">
-                      No generated PM events yet.
-                    </TableCell>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Due</TableHead>
+                    <TableHead>Assignment</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                ) : (
-                  sortedEvents.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium">{event.eventNumber}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {event.asset.productModel.name} /{" "}
-                            {event.asset.publicCode}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {event.asset.customer?.name ?? "Customer unavailable"}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-sm">
-                          <p>{formatDate(event.dueDate)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Scheduled {formatDateTime(event.scheduledFor)}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-sm">
-                          <p>
-                            {event.assignedServiceCenter?.name ??
-                              "No service center"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {event.assignedTechnician?.name ?? "No technician"}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={statusClass(event.displayStatus)}
-                        >
-                          {event.statusLabel}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEventPlanner(event)}
-                          disabled={
-                            event.status === "completed" ||
-                            event.status === "cancelled"
-                          }
-                        >
-                          Plan
-                        </Button>
+                </TableHeader>
+                <TableBody>
+                  {sortedEvents.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-muted-foreground">
+                        No generated PM events yet.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    sortedEvents.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">{event.eventNumber}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {event.asset.productModel.name} /{" "}
+                              {event.asset.publicCode}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {event.asset.customer?.name ??
+                                "Customer unavailable"}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 text-sm">
+                            <p>{formatDate(event.dueDate)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Scheduled {formatDateTime(event.scheduledFor)}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 text-sm">
+                            <p>
+                              {event.assignedServiceCenter?.name ??
+                                "No service center"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {event.assignedTechnician?.name ??
+                                "No technician"}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={statusClass(event.displayStatus)}
+                          >
+                            {event.statusLabel}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEventPlanner(event)}
+                            disabled={
+                              event.status === "completed" ||
+                              event.status === "cancelled"
+                            }
+                          >
+                            Plan
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
