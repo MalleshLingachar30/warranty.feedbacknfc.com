@@ -69,6 +69,62 @@ function labelFromSnakeCase(value: string) {
     .join(" ");
 }
 
+function messageStatusLabel(
+  status: PreventiveMaintenanceDeliveryAttemptStatus,
+) {
+  switch (status) {
+    case "queued":
+      return "Ready";
+    case "sending":
+      return "Sending";
+    case "sent":
+      return "Sent";
+    case "failed":
+      return "Failed";
+    case "dead_letter":
+      return "Needs review";
+    case "skipped":
+      return "Not sent";
+    default:
+      return labelFromSnakeCase(status);
+  }
+}
+
+function emailServiceStatusLabel(
+  status: PreventiveMaintenanceDeliveryProviderEventStatus,
+) {
+  switch (status) {
+    case "delivery_delayed":
+      return "Delayed";
+    case "suppressed":
+      return "Blocked";
+    case "complained":
+      return "Complaint reported";
+    default:
+      return labelFromSnakeCase(status);
+  }
+}
+
+function skipReasonLabel(reason: string) {
+  if (reason === "dry_run") {
+    return "Preview only";
+  }
+
+  if (reason.includes("missing") || reason.endsWith("_unavailable")) {
+    return "Missing contact details";
+  }
+
+  if (reason.endsWith("_email_disabled")) {
+    return "Blocked by communication preferences";
+  }
+
+  if (reason.includes("sms")) {
+    return "SMS is not enabled";
+  }
+
+  return labelFromSnakeCase(reason);
+}
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
@@ -83,27 +139,29 @@ function deliveryDetail(attempt: PmDeliveryAttempt) {
     attempt.errorMessage
   ) {
     return attempt.status === "dead_letter"
-      ? `Dead letter: ${attempt.errorMessage}`
+      ? `Needs review: ${attempt.errorMessage}`
       : attempt.errorMessage;
   }
 
   if (attempt.status === "skipped" && attempt.skipReason) {
-    return labelFromSnakeCase(attempt.skipReason);
+    return skipReasonLabel(attempt.skipReason);
   }
 
   if (attempt.providerEventStatus) {
-    const providerDetail = `Provider ${labelFromSnakeCase(attempt.providerEventStatus).toLowerCase()}`;
+    const deliveryStatus = `Email service ${emailServiceStatusLabel(
+      attempt.providerEventStatus,
+    ).toLowerCase()}`;
     return attempt.recipientHygieneRisk
-      ? `${providerDetail}; recipient blocked by hygiene controls`
-      : providerDetail;
+      ? `${deliveryStatus}; contact blocked after a delivery issue`
+      : deliveryStatus;
   }
 
   if (attempt.providerMessageId) {
-    return `Provider id ${attempt.providerMessageId}`;
+    return "Email service accepted this message";
   }
 
   if (!attempt.hasRecipientAddress) {
-    return "No recipient address";
+    return "Missing contact details";
   }
 
   return null;
@@ -117,7 +175,7 @@ function DeliveryAttemptBadge({ attempt }: { attempt: PmDeliveryAttempt }) {
         className={cn("gap-1 capitalize", statusTone(attempt.status))}
       >
         {channelIcon(attempt.channel)}
-        {labelFromSnakeCase(attempt.status)}
+        {messageStatusLabel(attempt.status)}
       </Badge>
       {attempt.providerEventStatus ? (
         <Badge
@@ -127,7 +185,7 @@ function DeliveryAttemptBadge({ attempt }: { attempt: PmDeliveryAttempt }) {
             providerStatusTone(attempt.providerEventStatus),
           )}
         >
-          Provider {labelFromSnakeCase(attempt.providerEventStatus)}
+          Email {emailServiceStatusLabel(attempt.providerEventStatus)}
         </Badge>
       ) : null}
       {attempt.dryRun ? (
@@ -135,11 +193,11 @@ function DeliveryAttemptBadge({ attempt }: { attempt: PmDeliveryAttempt }) {
           variant="outline"
           className="border-slate-200 bg-white text-slate-600"
         >
-          Dry run
+          Preview only
         </Badge>
       ) : null}
       <span className="text-[11px] font-medium text-slate-500">
-        Attempt #{attempt.attemptNumber}
+        Check #{attempt.attemptNumber}
       </span>
       {attempt.recipientAddressMasked ? (
         <span className="truncate text-[11px] text-slate-500">
@@ -164,7 +222,7 @@ export function PmDeliveryAttemptSummary({
 
     return (
       <div className="mt-3 rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
-        No delivery attempts yet
+        No communication record yet
       </div>
     );
   }
@@ -186,11 +244,11 @@ export function PmDeliveryAttemptSummary({
     <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Delivery
+          Communication record
         </p>
         <p className="text-[11px] text-slate-500">
           {attempts.length} recent{" "}
-          {attempts.length === 1 ? "attempt" : "attempts"}
+          {attempts.length === 1 ? "message check" : "message checks"}
         </p>
       </div>
       <div className="mt-2 space-y-2">
@@ -226,7 +284,7 @@ export function PmDeliveryAttemptSummary({
                   </div>
                   <div className="min-w-0">
                     <span className="font-medium text-slate-600">
-                      Recipient:
+                      Contact:
                     </span>{" "}
                     <span className="truncate">
                       {attempt.recipientAddressMasked ?? "Missing"}
@@ -234,38 +292,38 @@ export function PmDeliveryAttemptSummary({
                   </div>
                   <div className="min-w-0">
                     <span className="font-medium text-slate-600">
-                      Provider outcome:
+                      Email status:
                     </span>{" "}
                     <span className="truncate">
                       {attempt.providerEventStatus
-                        ? labelFromSnakeCase(attempt.providerEventStatus)
-                        : "Awaiting reconciliation"}
+                        ? emailServiceStatusLabel(attempt.providerEventStatus)
+                        : "Waiting for update"}
                     </span>
                   </div>
                   <div className="min-w-0">
                     <span className="font-medium text-slate-600">
-                      Provider event:
+                      Last service update:
                     </span>{" "}
                     <span className="truncate">
                       {attempt.providerEventAt
                         ? formatDateTime(attempt.providerEventAt)
-                        : "Not observed"}
+                        : "Not reported"}
                     </span>
                   </div>
                   <div className="min-w-0">
                     <span className="font-medium text-slate-600">
-                      Provider:
+                      Message record:
                     </span>{" "}
                     <span className="truncate">
-                      {attempt.providerMessageId ?? "Not assigned"}
+                      {attempt.providerMessageId ? "Available" : "Not used"}
                     </span>
                   </div>
                   <div className="min-w-0 md:col-span-2">
                     <span className="font-medium text-slate-600">
-                      Diagnostic:
+                      Reason:
                     </span>{" "}
                     <span className="break-words">
-                      {detail ?? "No provider error or skip reason recorded"}
+                      {detail ?? "No issue recorded"}
                     </span>
                   </div>
                   {attempt.nextRetryAt ? (

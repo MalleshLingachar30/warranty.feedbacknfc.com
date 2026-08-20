@@ -14,8 +14,8 @@ import {
   Loader2,
   MailCheck,
   RefreshCw,
-  ServerCog,
   Send,
+  Settings2,
   ShieldCheck,
 } from "lucide-react";
 
@@ -52,6 +52,7 @@ type PmNotificationStatus = "pending" | "delivered" | "dismissed" | "cancelled";
 
 type StatusFilter = PmNotificationStatus | "all";
 type TriggerFilter = PmNotificationTrigger | "all";
+type NotificationCenterView = "updates" | "communication";
 
 type PmNotification = {
   id: string;
@@ -187,7 +188,7 @@ interface PmNotificationCenterProps {
 
 const statusFilters = [
   { value: "pending", label: "Pending" },
-  { value: "dismissed", label: "Dismissed" },
+  { value: "dismissed", label: "Closed" },
   { value: "delivered", label: "Delivered" },
   { value: "cancelled", label: "Cancelled" },
   { value: "all", label: "All" },
@@ -257,6 +258,14 @@ function labelFromSnakeCase(value: string) {
     .join(" ");
 }
 
+function notificationStatusLabel(status: PmNotificationStatus) {
+  if (status === "dismissed") {
+    return "Closed";
+  }
+
+  return labelFromSnakeCase(status);
+}
+
 function triggerTone(triggerType: PmNotificationTrigger) {
   switch (triggerType) {
     case "scheduled":
@@ -322,14 +331,27 @@ function lastDryRunResultLabel(summary: PmNotificationLastDryRun) {
     summary.statusCounts.failed;
 
   if (summary.attemptCount === 0) {
-    return "No attempts prepared";
+    return "No updates checked";
   }
 
   if (issueCount > 0) {
-    return `${readyCount} prepared, ${issueCount} need operator review`;
+    return `${readyCount} ready, ${issueCount} need review`;
   }
 
-  return `${readyCount} prepared with no recipient gaps`;
+  return `${readyCount} ready with contact details available`;
+}
+
+function schedulerModeLabel(mode: PmNotificationSchedulerStatus["configuration"]["mode"]) {
+  switch (mode) {
+    case "live":
+      return "Sending";
+    case "dry_run":
+      return "Preview mode";
+    case "disabled":
+      return "Paused";
+    default:
+      return labelFromSnakeCase(mode);
+  }
 }
 
 function canRunPmDeliveryDryRun(role: AppRole) {
@@ -344,6 +366,8 @@ function canRunPmDeliveryDryRun(role: AppRole) {
 }
 
 export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
+  const [activeView, setActiveView] =
+    useState<NotificationCenterView>("updates");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
   const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>("all");
   const [notifications, setNotifications] = useState<PmNotification[]>([]);
@@ -424,8 +448,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         if (!response.ok || !("notifications" in body)) {
           throw new Error(
             "error" in body
-              ? (body.error ?? "Unable to load PM notifications.")
-              : "Unable to load PM notifications.",
+              ? (body.error ?? "Unable to load maintenance updates.")
+              : "Unable to load maintenance updates.",
           );
         }
 
@@ -461,7 +485,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Unable to load PM notifications.",
+            : "Unable to load maintenance updates.",
         );
       } finally {
         if (requestId === notificationRequestIdRef.current) {
@@ -496,7 +520,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         const body = (await response.json()) as { error?: string };
 
         if (!response.ok) {
-          throw new Error(body.error ?? "Unable to dismiss notification.");
+          throw new Error(body.error ?? "Unable to close this update.");
         }
 
         await fetchNotifications({ silent: true });
@@ -504,7 +528,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Unable to dismiss notification.",
+            : "Unable to close this update.",
         );
       } finally {
         setDismissingIds((current) => {
@@ -543,8 +567,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
       if (!response.ok || !("dismissedCount" in body)) {
         throw new Error(
           "error" in body
-            ? (body.error ?? "Unable to dismiss notifications.")
-            : "Unable to dismiss notifications.",
+            ? (body.error ?? "Unable to close the selected updates.")
+            : "Unable to close the selected updates.",
         );
       }
 
@@ -553,7 +577,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to dismiss notifications.",
+          : "Unable to close the selected updates.",
       );
     } finally {
       setIsBulkDismissing(false);
@@ -594,8 +618,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
       if (!response.ok || !("ok" in body)) {
         throw new Error(
           "error" in body
-            ? (body.error ?? "Unable to send the live email canary.")
-            : "Unable to send the live email canary.",
+            ? (body.error ?? "Unable to send the internal test email.")
+            : "Unable to send the internal test email.",
         );
       }
 
@@ -605,7 +629,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to send the live email canary.",
+          : "Unable to send the internal test email.",
       );
     } finally {
       setIsSendingCanary(false);
@@ -657,7 +681,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to complete the manual live email pilot.",
+          : "Unable to send the selected emails.",
       );
     } finally {
       setIsSendingPilot(false);
@@ -711,9 +735,50 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
     (statusFilter === "pending" || statusFilter === "all");
   const preferencesBlockCanary =
     deliveryReadiness?.preferences?.emailEnabledRoleCount === 0;
+  const showCommunicationSettings = activeView === "communication";
 
   return (
     <div className="space-y-5">
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-950">
+            {activeView === "updates"
+              ? "Service update review"
+              : "Communication settings"}
+          </p>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {activeView === "updates"
+              ? "Use this view during the walkthrough to review maintenance work and close handled updates."
+              : "Review message previews, controlled email sending, and account communication preferences."}
+          </p>
+        </div>
+        <div className="inline-flex rounded-lg bg-slate-100 p-1">
+          {[
+            { value: "updates", label: "Updates" },
+            { value: "communication", label: "Communication settings" },
+          ].map((view) => (
+            <Button
+              key={view.value}
+              type="button"
+              size="sm"
+              variant={activeView === view.value ? "default" : "ghost"}
+              className={cn(
+                "rounded-md",
+                activeView !== view.value && "text-slate-600",
+              )}
+              onClick={() => {
+                setActiveView(view.value as NotificationCenterView);
+                if (view.value === "updates") {
+                  resetPilotSelection();
+                }
+              }}
+            >
+              {view.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-3 md:grid-cols-4">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -731,7 +796,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           >
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <ClipboardList className="h-3.5 w-3.5" />
-              {labelFromSnakeCase(status)}
+              {notificationStatusLabel(status)}
             </div>
             <p className="mt-2 text-2xl font-semibold text-slate-950">
               {statusCounts[status]}
@@ -818,13 +883,13 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
               ) : (
                 <CheckCheck className="h-4 w-4" />
               )}
-              Dismiss all
+              Close shown
             </Button>
           </div>
         </div>
       </div>
 
-      {canDispatchDryRun ? (
+      {showCommunicationSettings && canDispatchDryRun ? (
         <div
           className="rounded-lg border border-slate-200 bg-white p-3"
           data-testid="pm-delivery-dry-run-panel"
@@ -833,18 +898,18 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
                 <Send className="h-3.5 w-3.5" />
-                Delivery dry run
+                Message preview
               </div>
               <p className="mt-1 text-sm text-slate-600">
                 {triggerFilter === "all"
-                  ? "Scan pending notifications for email and SMS attempts."
-                  : `Scan pending ${labelFromSnakeCase(triggerFilter).toLowerCase()} notifications for email and SMS attempts.`}
+                  ? "Check pending updates before any email is sent."
+                  : `Check pending ${labelFromSnakeCase(triggerFilter).toLowerCase()} updates before any email is sent.`}
               </p>
               <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                   <Clock3 className="h-3.5 w-3.5 text-slate-500" />
                   <span className="font-semibold text-slate-700">
-                    Last dry run
+                    Last preview
                   </span>
                   {lastDryRun ? (
                     <>
@@ -854,21 +919,21 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                     </>
                   ) : (
                     <span>
-                      No dry-run state has been prepared for this filter.
+                      No preview has been run for this filter.
                     </span>
                   )}
                 </div>
                 {lastDryRun ? (
                   <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-5">
-                    <span>{lastDryRun.attemptCount} total attempts</span>
-                    <span>{lastDryRun.statusCounts.queued} queued</span>
-                    <span>{lastDryRun.statusCounts.skipped} skipped</span>
+                    <span>{lastDryRun.attemptCount} updates checked</span>
+                    <span>{lastDryRun.statusCounts.queued} ready to send</span>
+                    <span>{lastDryRun.statusCounts.skipped} held back</span>
                     <span>
-                      {lastDryRun.missingRecipientCount} missing recipients
+                      {lastDryRun.missingRecipientCount} missing contacts
                     </span>
                     <span>
-                      {lastDryRun.preferenceSuppressedCount} preference
-                      suppressed
+                      {lastDryRun.preferenceSuppressedCount} blocked by
+                      preferences
                     </span>
                   </div>
                 ) : null}
@@ -882,7 +947,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         </div>
       ) : null}
 
-      {canDispatchDryRun && deliveryReadiness ? (
+      {showCommunicationSettings && canDispatchDryRun && deliveryReadiness ? (
         <PmNotificationManualEmailPilotPanel
           selectedCount={selectedPilotIds.size}
           diagnostics={selectedPilotDiagnostics}
@@ -895,7 +960,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         />
       ) : null}
 
-      {canDispatchDryRun && deliveryReadiness ? (
+      {showCommunicationSettings && canDispatchDryRun && deliveryReadiness ? (
         <div
           className={cn(
             "rounded-lg border p-3",
@@ -922,7 +987,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  Live delivery readiness
+                  Email sending status
                 </p>
                 <Badge
                   variant="outline"
@@ -936,53 +1001,63 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   )}
                 >
                   {deliveryReadiness.liveEmail.status === "ready"
-                    ? "Live email enabled"
-                    : deliveryReadiness.liveEmail.status}
+                    ? "Email sending available"
+                    : deliveryReadiness.liveEmail.status === "incomplete"
+                      ? "Needs setup"
+                      : "Email sending paused"}
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-slate-700">
                 {deliveryReadiness.liveEmail.status === "ready"
-                  ? "Warning: confirmed live email dispatches can call Resend. Normal notification sends are not initiated from this panel."
+                  ? "Confirmed emails can be sent from this settings view only after review."
                   : deliveryReadiness.liveEmail.status === "incomplete"
-                    ? `Live email is enabled but blocked by incomplete configuration: ${deliveryReadiness.liveEmail.missingConfiguration.join(", ")}.`
-                    : "The PM_NOTIFICATION_EMAIL_DELIVERY_ENABLED hard gate is off. Live PM email dispatch is blocked by default."}
+                    ? "Email sending is turned on but the account setup is incomplete."
+                    : "Email sending is paused. No maintenance emails will be sent from this account."}
               </p>
 
               <div className="mt-3 grid gap-2 lg:grid-cols-3">
                 <div className="rounded-md border border-slate-200 bg-white/80 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-slate-800">
-                      Email via Resend
+                      Email service
                     </span>
                     <span className="text-[11px] font-medium uppercase text-slate-500">
-                      {deliveryReadiness.liveEmail.status}
+                      {deliveryReadiness.liveEmail.status === "ready"
+                        ? "Ready"
+                        : deliveryReadiness.liveEmail.status === "incomplete"
+                          ? "Needs setup"
+                          : "Paused"}
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-600">
-                    API key:{" "}
+                    Account connection:{" "}
                     {deliveryReadiness.liveEmail.apiKeyConfigured
-                      ? "configured"
+                      ? "ready"
                       : "missing"}
                     {" | "}
                     Sender:{" "}
                     {deliveryReadiness.liveEmail.fromEmailConfigured
-                      ? "configured"
+                      ? "ready"
                       : "missing"}
                   </p>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-white/80 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-slate-800">
-                      Internal email canary
+                      Internal test email
                     </span>
                     <span className="text-[11px] font-medium uppercase text-slate-500">
-                      {deliveryReadiness.canary.status}
+                      {deliveryReadiness.canary.status === "ready"
+                        ? "Ready"
+                        : deliveryReadiness.canary.status === "incomplete"
+                          ? "Needs setup"
+                          : "Paused"}
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-600">
-                    Fixed recipient:{" "}
+                    Internal test mailbox:{" "}
                     {deliveryReadiness.canary.recipientAddressMasked ??
-                      "not configured"}
+                      "not set"}
                   </p>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-white/80 px-3 py-2">
@@ -991,11 +1066,11 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       SMS delivery
                     </span>
                     <span className="text-[11px] font-medium uppercase text-slate-500">
-                      Unsupported
+                      Not enabled
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-600">
-                    Live PM SMS sends remain blocked in this dispatcher.
+                    SMS is not enabled for maintenance messages.
                   </p>
                 </div>
               </div>
@@ -1021,27 +1096,25 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-rose-700"
                     />
                     <span>
-                      I confirm this sends one real email only to{" "}
+                      I confirm this sends one internal test email only to{" "}
                       {deliveryReadiness.canary.recipientAddressMasked ??
-                        "the configured internal mailbox"}
+                        "the internal mailbox"}
                       .
                     </span>
                   </label>
                   {deliveryReadiness.canary.status === "incomplete" ? (
                     <p className="mt-1 pl-6 text-[11px] text-amber-800">
-                      Canary blocked by:{" "}
-                      {deliveryReadiness.canary.missingConfiguration.join(", ")}
-                      .
+                      Internal test email needs account setup before it can be
+                      sent.
                     </p>
                   ) : deliveryReadiness.canary.status === "disabled" ? (
                     <p className="mt-1 pl-6 text-[11px] text-slate-500">
-                      Canary sending requires
-                      PM_NOTIFICATION_EMAIL_CANARY_ENABLED=true.
+                      Internal test email is paused.
                     </p>
                   ) : preferencesBlockCanary ? (
                     <p className="mt-1 pl-6 text-[11px] text-amber-800">
-                      Canary suppressed because email is disabled for every PM
-                      audience in this organization.
+                      Internal test email is blocked because email is disabled
+                      for every recipient group in this account.
                     </p>
                   ) : null}
                 </div>
@@ -1062,13 +1135,14 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   ) : (
                     <MailCheck className="h-4 w-4" />
                   )}
-                  Send live canary
+                  Send internal test
                 </Button>
               </div>
               {canaryResult ? (
                 <p className="mt-2 text-xs text-emerald-800">
-                  Canary sent to {canaryResult.recipientAddressMasked} at{" "}
-                  {formatDateTime(canaryResult.sentAt)}. Audit ID:{" "}
+                  Internal test email sent to{" "}
+                  {canaryResult.recipientAddressMasked} at{" "}
+                  {formatDateTime(canaryResult.sentAt)}. Record ID:{" "}
                   {canaryResult.auditId}.
                 </p>
               ) : null}
@@ -1077,14 +1151,14 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
         </div>
       ) : null}
 
-      {canDispatchDryRun && schedulerStatus ? (
+      {showCommunicationSettings && canDispatchDryRun && schedulerStatus ? (
         <div className="rounded-lg border border-slate-200 bg-white p-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                  <ServerCog className="h-3.5 w-3.5" />
-                  Scheduled dispatcher
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Automatic reminders
                 </div>
                 <Badge
                   variant="outline"
@@ -1097,7 +1171,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                         : "border-slate-200 bg-slate-50 text-slate-600",
                   )}
                 >
-                  {labelFromSnakeCase(schedulerStatus.configuration.mode)}
+                  {schedulerModeLabel(schedulerStatus.configuration.mode)}
                 </Badge>
                 <Badge
                   variant="outline"
@@ -1107,35 +1181,34 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                       : "border-amber-200 bg-amber-50 text-amber-700",
                   )}
                 >
-                  Cron auth{" "}
                   {schedulerStatus.configuration.authorizationConfigured
-                    ? "configured"
-                    : "missing"}
+                    ? "Protected"
+                    : "Needs setup"}
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-slate-600">
                 {schedulerStatus.configuration.enabled
-                  ? `${schedulerStatus.configuration.schedule}; up to ${schedulerStatus.configuration.batchLimit} pending intents per run with ${schedulerStatus.configuration.maxAttempts} total email attempts.`
-                  : "Automation is disabled. Cron requests cannot prepare attempts or call the email provider until PM_NOTIFICATION_SCHEDULED_DISPATCH_ENABLED=true."}
+                  ? `${schedulerStatus.configuration.schedule}; reviews up to ${schedulerStatus.configuration.batchLimit} pending updates each run.`
+                  : "Automatic reminders are paused. No scheduled maintenance messages will be sent automatically."}
               </p>
               {schedulerStatus.configuration.enabled ? (
                 <p className="mt-1 text-xs text-slate-500">
-                  Scheduled scope:{" "}
+                  Account coverage:{" "}
                   {schedulerStatus.configuration.organizationScope.mode ===
                   "allowlist"
-                    ? `${schedulerStatus.configuration.organizationScope.organizationCount} allowed organization${schedulerStatus.configuration.organizationScope.organizationCount === 1 ? "" : "s"}`
-                    : "all organizations"}
+                    ? `${schedulerStatus.configuration.organizationScope.organizationCount} selected account${schedulerStatus.configuration.organizationScope.organizationCount === 1 ? "" : "s"}`
+                    : "all accounts"}
                   {schedulerStatus.configuration.batchLimitControl.source ===
                   "environment"
-                    ? `; batch cap set by environment${schedulerStatus.configuration.batchLimitControl.clamped ? " and clamped" : ""}.`
-                    : "; default batch cap."}
+                    ? ". Limit set by account configuration."
+                    : "."}
                 </p>
               ) : null}
               {schedulerStatus.configuration.liveDeliveryRequested &&
               schedulerStatus.configuration.mode !== "live" ? (
                 <p className="mt-1 text-xs text-amber-700">
-                  Requested live automation is held in dry-run mode by:{" "}
-                  {schedulerStatus.configuration.blockingReasons.join(", ")}.
+                  Automatic sending is currently kept in preview mode until all
+                  account safeguards are satisfied.
                 </p>
               ) : null}
             </div>
@@ -1148,33 +1221,38 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
               )}
             >
               <span className="font-semibold">
-                {schedulerStatus.deadLetterCount} dead-letter
+                {schedulerStatus.deadLetterCount} failed
               </span>{" "}
-              {schedulerStatus.deadLetterCount === 1 ? "attempt" : "attempts"}
+              {schedulerStatus.deadLetterCount === 1 ? "message" : "messages"}{" "}
+              needing review
             </div>
           </div>
 
           {schedulerStatus.lastRun ? (
             <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span className="font-semibold text-slate-800">Last run</span>
+                <span className="font-semibold text-slate-800">
+                  Last reminder check
+                </span>
                 <span>{formatDateTime(schedulerStatus.lastRun.startedAt)}</span>
                 <Badge variant="outline" className="capitalize">
                   {labelFromSnakeCase(schedulerStatus.lastRun.status)}
                 </Badge>
                 <span>
-                  {schedulerStatus.lastRun.dryRun ? "Dry run" : "Live email"}
+                  {schedulerStatus.lastRun.dryRun
+                    ? "Preview only"
+                    : "Email sending"}
                 </span>
               </div>
               <div className="mt-2 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-6">
                 <span>
-                  {schedulerStatus.lastRun.scannedIntentCount} scanned
+                  {schedulerStatus.lastRun.scannedIntentCount} checked
                 </span>
                 <span>
-                  {schedulerStatus.lastRun.candidateAttemptCount} candidates
+                  {schedulerStatus.lastRun.candidateAttemptCount} ready updates
                 </span>
                 <span>
-                  {schedulerStatus.lastRun.providerCallCount} provider calls
+                  {schedulerStatus.lastRun.providerCallCount} email sends
                 </span>
                 <span>
                   {schedulerStatus.lastRun.retriedAttemptCount} retries
@@ -1183,7 +1261,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                   {schedulerStatus.lastRun.deferredRetryCount} deferred
                 </span>
                 <span>
-                  {schedulerStatus.lastRun.preferenceSuppressedCount} suppressed
+                  {schedulerStatus.lastRun.preferenceSuppressedCount} held back
                 </span>
               </div>
               {schedulerStatus.lastRun.errorMessage ? (
@@ -1194,22 +1272,23 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             </div>
           ) : (
             <p className="mt-3 rounded-md border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
-              No scheduled dispatcher run has been recorded yet.
+              No automatic reminder check has been recorded yet.
             </p>
           )}
 
           {schedulerStatus.deadLetterCount > 0 ? (
             <p className="mt-2 text-xs text-rose-700">
-              Review the delivery diagnostics below and correct recipient,
-              preference, or provider issues. The scheduler will not retry
-              dead-letter attempts automatically; escalate for a controlled
-              operator requeue after remediation.
+              Review the communication records below, correct missing contact
+              details or preference settings, then retry only after the issue is
+              resolved.
             </p>
           ) : null}
         </div>
       ) : null}
 
-      {canDispatchDryRun && deliveryReadiness?.preferences ? (
+      {showCommunicationSettings &&
+      canDispatchDryRun &&
+      deliveryReadiness?.preferences ? (
         <PmNotificationPreferencesPanel
           key={deliveryReadiness.preferences.organizationId}
           preferences={deliveryReadiness.preferences}
@@ -1227,7 +1306,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
           <Card className="border-slate-200">
             <CardContent className="flex items-center gap-2 p-5 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading PM notification inbox
+              Loading maintenance updates
             </CardContent>
           </Card>
         ) : notifications.length === 0 ? (
@@ -1235,11 +1314,11 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
             <CardContent className="px-4 py-12 text-center">
               <Inbox className="mx-auto h-8 w-8 text-slate-400" />
               <p className="mt-3 text-sm font-semibold text-slate-900">
-                No notifications match these filters
+                No updates match these filters
               </p>
               <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-                PM schedule, reassignment, start, completion, and cancellation
-                updates will appear here as in-app notifications.
+                Service reminders, assignment changes, start updates,
+                completion notes, and cancellations will appear here.
               </p>
             </CardContent>
           </Card>
@@ -1285,16 +1364,18 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                             statusTone(notification.status),
                           )}
                         >
-                          {labelFromSnakeCase(notification.status)}
+                          {notificationStatusLabel(notification.status)}
                         </Badge>
                       </div>
                       <p className="mt-3 text-sm leading-6 text-slate-700">
                         {notification.message}
                       </p>
-                      <PmDeliveryAttemptSummary
-                        attempts={notification.deliveryAttempts}
-                        diagnostics
-                      />
+                      {showCommunicationSettings ? (
+                        <PmDeliveryAttemptSummary
+                          attempts={notification.deliveryAttempts}
+                          diagnostics
+                        />
+                      ) : null}
                       <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-3">
                         <div>
                           <span className="font-medium text-slate-700">
@@ -1310,7 +1391,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                         </div>
                         <div>
                           <span className="font-medium text-slate-700">
-                            PM status:
+                            Visit status:
                           </span>{" "}
                           {labelFromSnakeCase(notification.event.status)}
                         </div>
@@ -1318,7 +1399,8 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                     </div>
 
                     <div className="flex min-w-[150px] shrink-0 items-center gap-2 lg:justify-end">
-                      {canDispatchDryRun &&
+                      {showCommunicationSettings &&
+                      canDispatchDryRun &&
                       notification.status === "pending" ? (
                         <label className="flex cursor-pointer items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-800 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
                           <input
@@ -1337,13 +1419,13 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                                 selectedPilotIds.size >=
                                   PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP)
                             }
-                            aria-label={`Select ${notification.title} for manual live email pilot`}
+                            aria-label={`Select ${notification.title} for reviewed email sending`}
                           />
-                          Pilot
+                          Select
                         </label>
                       ) : null}
                       <Button asChild size="sm" variant="outline">
-                        <Link href={workspaceHref}>Open PM</Link>
+                        <Link href={workspaceHref}>Open visit</Link>
                       </Button>
                       {notification.status === "pending" ? (
                         <Button
@@ -1354,7 +1436,7 @@ export function PmNotificationCenter({ role }: PmNotificationCenterProps) {
                             void dismissNotification(notification.id)
                           }
                           disabled={isDismissing}
-                          aria-label={`Dismiss ${notification.title}`}
+                          aria-label={`Close ${notification.title}`}
                         >
                           {isDismissing ? (
                             <Loader2 className="h-4 w-4 animate-spin" />

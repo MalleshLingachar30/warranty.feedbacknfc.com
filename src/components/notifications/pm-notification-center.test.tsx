@@ -146,7 +146,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("PmNotificationCenter dry-run interaction", () => {
+describe("PmNotificationCenter message preview interaction", () => {
   it("posts from the rendered button, shows progress, and refreshes the inbox", async () => {
     let resolveDispatch!: (response: Response) => void;
     const dispatchResponse = new Promise<Response>((resolve) => {
@@ -174,15 +174,21 @@ describe("PmNotificationCenter dry-run interaction", () => {
 
     render(<PmNotificationCenter role="manufacturer_admin" />);
 
+    expect(screen.queryByTestId("pm-delivery-dry-run-panel")).toBeNull();
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Communication settings",
+      }),
+    );
+
     const button = await screen.findByRole("button", {
-      name: "Run dry run",
+      name: "Preview updates",
     });
     const filterPanel = screen.getByTestId("pm-notification-filter-panel");
     const dryRunPanel = screen.getByTestId("pm-delivery-dry-run-panel");
 
-    // Keep the production-facing action directly after the compact filters.
-    // Long readiness, scheduler, and preferences diagnostics follow this panel,
-    // so moving it below them can put the clickable target outside the viewport.
+    // Keep the communication action directly after the compact filters within
+    // the settings view so the reviewed sending flow remains easy to operate.
     expect(filterPanel.nextElementSibling).toBe(dryRunPanel);
     expect(button.closest("[data-testid='pm-delivery-dry-run-panel']")).toBe(
       dryRunPanel,
@@ -200,9 +206,9 @@ describe("PmNotificationCenter dry-run interaction", () => {
     await userEvent.click(button);
 
     expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.textContent).toContain("Running dry run");
+    expect(button.textContent).toContain("Previewing");
     expect(screen.getByRole("status").textContent).toContain(
-      "Preparing non-live email and SMS attempts",
+      "Checking which updates are ready to send",
     );
 
     const dispatchCall = fetchMock.mock.calls.find(
@@ -221,11 +227,11 @@ describe("PmNotificationCenter dry-run interaction", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
-        "Scanned 3 pending notifications and prepared 6 channel attempts",
+        "Checked 3 pending updates and found 6 messages to review",
       );
     });
     expect((button as HTMLButtonElement).disabled).toBe(false);
-    expect(button.textContent).toContain("Run dry run");
+    expect(button.textContent).toContain("Preview updates");
     expect(
       fetchMock.mock.calls.filter(([input]: FetchCall) =>
         String(input).startsWith("/api/preventive-maintenance/notifications?"),
@@ -243,7 +249,7 @@ describe("PmNotificationCenter dry-run interaction", () => {
           init?.method === "POST"
         ) {
           return Response.json(
-            { error: "Dry run is temporarily unavailable." },
+            { error: "Message preview is temporarily unavailable." },
             { status: 503 },
           );
         }
@@ -259,14 +265,20 @@ describe("PmNotificationCenter dry-run interaction", () => {
 
     render(<PmNotificationCenter role="manufacturer_admin" />);
 
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Communication settings",
+      }),
+    );
+
     const button = await screen.findByRole("button", {
-      name: "Run dry run",
+      name: "Preview updates",
     });
     await userEvent.click(button);
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
-        "Dry run is temporarily unavailable.",
+        "Message preview is temporarily unavailable.",
       );
     });
     expect((button as HTMLButtonElement).disabled).toBe(false);
@@ -280,7 +292,7 @@ describe("PmNotificationCenter dry-run interaction", () => {
     ).toBe(true);
   });
 
-  it("requires reviewed selection and explicit confirmation before a successful manual live email pilot", async () => {
+  it("requires reviewed selection and explicit confirmation before a successful email send", async () => {
     const fetchMock = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input.toString();
@@ -304,14 +316,21 @@ describe("PmNotificationCenter dry-run interaction", () => {
 
     render(<PmNotificationCenter role="manufacturer_admin" />);
 
+    expect(screen.queryByTestId("pm-manual-email-pilot-panel")).toBeNull();
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Communication settings",
+      }),
+    );
+
     const selectPilot = await screen.findByRole("checkbox", {
-      name: "Select Preventive maintenance due for manual live email pilot",
+      name: "Select Preventive maintenance due for reviewed email sending",
     });
     const confirmation = screen.getByRole("checkbox", {
-      name: /I reviewed these selected notifications/i,
+      name: /I reviewed these selected updates/i,
     });
     const sendButton = screen.getByRole("button", {
-      name: "Send selected live emails",
+      name: "Send selected emails",
     });
 
     expect((confirmation as HTMLInputElement).disabled).toBe(true);
@@ -324,23 +343,23 @@ describe("PmNotificationCenter dry-run interaction", () => {
     expect(
       (
         screen.getByRole("button", {
-          name: "Send 1 live email",
+          name: "Send 1 email",
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
 
     await userEvent.click(confirmation);
     const confirmedSendButton = screen.getByRole("button", {
-      name: "Send 1 live email",
+      name: "Send 1 email",
     });
     expect((confirmedSendButton as HTMLButtonElement).disabled).toBe(false);
     await userEvent.click(confirmedSendButton);
 
     await waitFor(() => {
       expect(
-        screen.getByText("Manual pilot recorded").closest("[role='status']")
+        screen.getByText("Email batch recorded").closest("[role='status']")
           ?.textContent,
-      ).toContain("1 sent · 0 skipped · 0 failed · 1 provider calls");
+      ).toContain("1 sent · 0 skipped · 0 failed");
     });
 
     const pilotCall = fetchMock.mock.calls.find(

@@ -34,7 +34,7 @@ export function PmNotificationDryRunAction({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to run delivery dry run.",
+          : "Unable to preview messages.",
       );
     } finally {
       setIsRunning(false);
@@ -86,7 +86,7 @@ export function PmNotificationDryRunAction({
           ) : (
             <Send className="h-4 w-4" />
           )}
-          {isRunning ? "Running dry run…" : "Run dry run"}
+          {isRunning ? "Previewing…" : "Preview updates"}
         </Button>
 
         <div
@@ -98,27 +98,26 @@ export function PmNotificationDryRunAction({
         >
           {isRunning ? (
             <p className="text-slate-600">
-              Preparing non-live email and SMS attempts…
+              Checking which updates are ready to send…
             </p>
           ) : error ? (
             <p className="text-rose-700">{error}</p>
           ) : result ? (
             <p className="text-emerald-700">
-              Scanned {result.scannedIntentCount} pending notification
-              {result.scannedIntentCount === 1 ? "" : "s"} and prepared{" "}
-              {result.candidateAttemptCount} channel attempt
-              {result.candidateAttemptCount === 1 ? "" : "s"}.
+              Checked {result.scannedIntentCount} pending update
+              {result.scannedIntentCount === 1 ? "" : "s"} and found{" "}
+              {result.candidateAttemptCount} message
+              {result.candidateAttemptCount === 1 ? "" : "s"} to review.
               {result.missingRecipientCount > 0
-                ? ` ${result.missingRecipientCount} missing recipient ${result.missingRecipientCount === 1 ? "address was" : "addresses were"} skipped.`
+                ? ` ${result.missingRecipientCount} missing contact ${result.missingRecipientCount === 1 ? "was" : "s were"} held back.`
                 : ""}
               {result.preferenceSuppressedCount > 0
-                ? ` ${result.preferenceSuppressedCount} attempt${result.preferenceSuppressedCount === 1 ? " was" : "s were"} suppressed by organization rules.`
+                ? ` ${result.preferenceSuppressedCount} message${result.preferenceSuppressedCount === 1 ? " was" : "s were"} blocked by communication preferences.`
                 : ""}
             </p>
           ) : (
             <p className="text-slate-500">
-              This control prepares attempts only; it never sends live email or
-              SMS.
+              This only checks readiness; it does not send email or SMS.
             </p>
           )}
         </div>

@@ -33,20 +33,19 @@ const roleCopy: Record<RecipientRole, { label: string; description: string }> =
   {
     manufacturer: {
       label: "Manufacturer",
-      description:
-        "Manufacturer workspace recipients and organization contact.",
+      description: "Manufacturer team members and the account contact.",
     },
     service_center: {
       label: "Service center",
-      description: "Assigned center address, then its organization contact.",
+      description: "Assigned service center and its account contact.",
     },
     technician: {
       label: "Technician",
-      description: "The assigned technician user contact only.",
+      description: "Assigned technician contact.",
     },
     customer: {
       label: "Customer",
-      description: "The asset customer user contact only.",
+      description: "Customer contact linked to the asset.",
     },
   };
 
@@ -103,20 +102,20 @@ export function PmNotificationPreferencesPanel({
       if (!response.ok || !("preferences" in body)) {
         throw new Error(
           "error" in body
-            ? (body.error ?? "Unable to save PM notification preferences.")
-            : "Unable to save PM notification preferences.",
+            ? (body.error ?? "Unable to save communication preferences.")
+            : "Unable to save communication preferences.",
         );
       }
 
       setRules(body.preferences.roles);
       setMessage(
-        "Preferences saved. New dispatch evaluations will use these rules.",
+        "Preferences saved. New maintenance messages will use these settings.",
       );
     } catch (requestError) {
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to save PM notification preferences.",
+          : "Unable to save communication preferences.",
       );
     } finally {
       setIsSaving(false);
@@ -130,15 +129,15 @@ export function PmNotificationPreferencesPanel({
           <div className="flex flex-wrap items-center gap-2">
             <Settings2 className="h-4 w-4 text-slate-600" />
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
-              Organization channel rules
+              Communication preferences
             </p>
             <Badge variant="outline" className="text-[10px] uppercase">
-              {preferences.canManage ? "Editable" : "Read only"}
+              {preferences.canManage ? "Can edit" : "Read only"}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-slate-600">
-            Rules are resolved by recipient role before an address becomes a
-            live-capable attempt.
+            Choose which groups should receive maintenance emails. SMS choices
+            are saved for future use.
           </p>
         </div>
         {preferences.canManage ? (
@@ -153,7 +152,7 @@ export function PmNotificationPreferencesPanel({
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Save rules
+            Save preferences
           </Button>
         ) : null}
       </div>
@@ -162,10 +161,10 @@ export function PmNotificationPreferencesPanel({
         <table className="w-full min-w-[680px] text-left text-xs">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-3 py-2 font-semibold">Audience</th>
+              <th className="px-3 py-2 font-semibold">Recipient group</th>
               <th className="w-28 px-3 py-2 font-semibold">Email</th>
-              <th className="w-32 px-3 py-2 font-semibold">SMS desired</th>
-              <th className="w-28 px-3 py-2 font-semibold">Rule source</th>
+              <th className="w-32 px-3 py-2 font-semibold">SMS preference</th>
+              <th className="w-28 px-3 py-2 font-semibold">Setting type</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
@@ -213,15 +212,15 @@ export function PmNotificationPreferencesPanel({
                         }
                         disabled={!preferences.canManage || isSaving}
                         className="h-4 w-4 rounded border-slate-300 accent-slate-900"
-                        aria-label={`${copy.label} SMS desired`}
+                        aria-label={`${copy.label} SMS preference`}
                       />
                       {rule.smsEnabled ? "Desired" : "Disabled"}
                     </label>
                   </td>
                   <td className="px-3 py-2.5 text-[11px] text-slate-500">
                     {rule.source === "organization_override"
-                      ? "Organization"
-                      : "Role default"}
+                      ? "Account setting"
+                      : "Default"}
                   </td>
                 </tr>
               );
@@ -233,9 +232,9 @@ export function PmNotificationPreferencesPanel({
       <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <p>
-          SMS delivery is unsupported. Enabling “SMS desired” records future
-          routing intent only; every SMS attempt remains suppressed until an
-          approved provider route is implemented.
+          SMS is not enabled yet. Turning on SMS preference only saves the
+          choice for future use; no SMS will be sent until SMS sending is
+          approved and connected.
         </p>
       </div>
       {message ? (

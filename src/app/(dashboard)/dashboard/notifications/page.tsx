@@ -34,7 +34,7 @@ export default async function NotificationsPage() {
         <CardHeader>
           <CardTitle className="text-amber-900">Sign-in required</CardTitle>
           <CardDescription className="text-amber-800">
-            Sign in to view your PM notification inbox.
+            Sign in to view your maintenance updates.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -49,14 +49,14 @@ export default async function NotificationsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Inbox"
-        description="Review preventive maintenance schedule, assignment, start, completion, and cancellation updates."
+        title="Maintenance Updates"
+        description="Review service reminders, assignment changes, and visit progress in one place."
         actions={
           canDispatchPreventiveMaintenanceNotifications(role) ? (
             <Button asChild variant="outline" size="sm">
               <Link href="/dashboard/notifications/reporting">
                 <BarChart3 data-icon="inline-start" />
-                Reporting
+                Reports
               </Link>
             </Button>
           ) : null

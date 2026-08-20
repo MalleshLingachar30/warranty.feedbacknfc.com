@@ -37,6 +37,41 @@ function labelFromSnakeCase(value: string) {
     .join(" ");
 }
 
+function resultStatusLabel(status: string) {
+  switch (status) {
+    case "sent":
+      return "Sent";
+    case "failed":
+      return "Failed";
+    case "dead_letter":
+      return "Needs review";
+    case "skipped":
+      return "Skipped";
+    default:
+      return labelFromSnakeCase(status);
+  }
+}
+
+function resultReasonLabel(reason: string) {
+  if (reason === "dry_run") {
+    return "Preview only";
+  }
+
+  if (reason.includes("missing") || reason.endsWith("_unavailable")) {
+    return "Missing contact";
+  }
+
+  if (reason.endsWith("_email_disabled")) {
+    return "Blocked by preferences";
+  }
+
+  if (reason.includes("sms")) {
+    return "SMS not enabled";
+  }
+
+  return labelFromSnakeCase(reason);
+}
+
 export function PmNotificationManualEmailPilotPanel({
   selectedCount,
   diagnostics,
@@ -70,26 +105,25 @@ export function PmNotificationManualEmailPilotPanel({
                 id="pm-manual-pilot-title"
                 className="text-xs font-semibold uppercase tracking-wide text-rose-950"
               >
-                Manual live email pilot
+                Reviewed email sending
               </h2>
               <Badge
                 variant="outline"
                 className="border-rose-300 bg-white text-rose-800"
               >
-                Email only · max{" "}
+                Email only · up to{" "}
                 {PREVENTIVE_MAINTENANCE_MANUAL_EMAIL_PILOT_BATCH_CAP}
               </Badge>
             </div>
             <p className="mt-1 max-w-3xl text-sm text-rose-900/80">
-              Select exact pending notifications below, review their email
-              dry-run diagnostics, then explicitly confirm this one manual
-              batch. This action never enables the scheduler and cannot send
-              SMS.
+              Select the exact pending updates below, review the message
+              preview, then confirm this one email batch. This does not turn on
+              automatic reminders and cannot send SMS.
             </p>
           </div>
           <div className="shrink-0 rounded-md border border-rose-200 bg-white px-3 py-2 text-right">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Reviewed batch
+              Selected updates
             </p>
             <p className="font-mono text-xl font-semibold tabular-nums text-slate-950">
               {selectedCount}/
@@ -103,11 +137,11 @@ export function PmNotificationManualEmailPilotPanel({
         <div className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-5">
             {[
-              ["Dry-run reviewed", diagnostics.reviewedCount],
+              ["Preview reviewed", diagnostics.reviewedCount],
               ["Ready", diagnostics.readyCount],
-              ["Missing recipient", diagnostics.missingRecipientCount],
-              ["Preference suppressed", diagnostics.preferenceSuppressedCount],
-              ["Other suppressed", diagnostics.otherSuppressedCount],
+              ["Missing contact", diagnostics.missingRecipientCount],
+              ["Blocked by preferences", diagnostics.preferenceSuppressedCount],
+              ["Other hold", diagnostics.otherSuppressedCount],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -125,11 +159,10 @@ export function PmNotificationManualEmailPilotPanel({
             <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
-                Live email pilot is {liveEmailReadiness.status}. Blocking gate:{" "}
+                Email sending is{" "}
                 {liveEmailReadiness.status === "disabled"
-                  ? "PM_NOTIFICATION_EMAIL_DELIVERY_ENABLED"
-                  : liveEmailReadiness.missingConfiguration.join(", ")}
-                .
+                  ? "paused."
+                  : "waiting for account setup."}
               </span>
             </div>
           ) : null}
@@ -148,10 +181,10 @@ export function PmNotificationManualEmailPilotPanel({
               }
             />
             <span>
-              I reviewed these {selectedCount || "selected"} notification
-              {selectedCount === 1 ? "" : "s"} and confirm a live Resend email
-              pilot now. I understand suppressed or missing recipients will be
-              skipped and no SMS will be sent.
+              I reviewed these {selectedCount || "selected"} update
+              {selectedCount === 1 ? "" : "s"} and confirm sending real email
+              now. I understand blocked or missing contacts will be skipped and
+              no SMS will be sent.
             </span>
           </label>
         </div>
@@ -168,8 +201,8 @@ export function PmNotificationManualEmailPilotPanel({
             <MailCheck className="h-4 w-4" />
           )}
           {isSending
-            ? "Sending reviewed batch"
-            : `Send ${selectedCount || "selected"} live email${selectedCount === 1 ? "" : "s"}`}
+            ? "Sending selected emails"
+            : `Send ${selectedCount || "selected"} email${selectedCount === 1 ? "" : "s"}`}
         </Button>
       </div>
 
@@ -180,15 +213,15 @@ export function PmNotificationManualEmailPilotPanel({
         >
           <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-950">
             <MailCheck className="h-4 w-4 text-emerald-700" />
-            <span className="font-semibold">Manual pilot recorded</span>
+            <span className="font-semibold">Email batch recorded</span>
             <span>
               {result.sentAttemptCount} sent · {result.skippedAttemptCount}{" "}
-              skipped · {result.failedAttemptCount} failed ·{" "}
-              {result.providerCallCount} provider calls
+              skipped · {result.failedAttemptCount} failed
             </span>
           </div>
           <p className="mt-1 text-xs text-emerald-800">
-            Audit {result.auditId}. Recipients remain masked in this result.
+            Record {result.auditId}. Contact details remain masked in this
+            result.
           </p>
           {result.attempts.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-2">
@@ -206,10 +239,10 @@ export function PmNotificationManualEmailPilotPanel({
                         : "border-slate-300 text-slate-700",
                   )}
                 >
-                  {attempt.recipientAddressMasked ?? "Recipient unavailable"} ·{" "}
-                  {labelFromSnakeCase(attempt.status)}
+                  {attempt.recipientAddressMasked ?? "Contact unavailable"} ·{" "}
+                  {resultStatusLabel(attempt.status)}
                   {attempt.skipReason
-                    ? ` · ${labelFromSnakeCase(attempt.skipReason)}`
+                    ? ` · ${resultReasonLabel(attempt.skipReason)}`
                     : ""}
                 </Badge>
               ))}
