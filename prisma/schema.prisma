@@ -1195,6 +1195,7 @@ model InstallationJob {
   partUsages            JobPartUsage[]
 
   @@index([manufacturerOrgId, status], map: "idx_installation_jobs_manufacturer_status")
+  @@index([manufacturerOrgId, createdAt(sort: Desc)], map: "idx_installation_jobs_manufacturer_created")
   @@index([assignedServiceCenterId, status], map: "idx_installation_jobs_service_center_status")
   @@index([assetId], map: "idx_installation_jobs_asset")
   @@map("installation_jobs")

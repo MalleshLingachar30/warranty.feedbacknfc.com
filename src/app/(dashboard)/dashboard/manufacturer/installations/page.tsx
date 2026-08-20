@@ -21,6 +21,8 @@ const InstallationJobsClient = dynamic(
   },
 );
 
+const INITIAL_INSTALLATION_JOB_LIMIT = 75;
+
 export default async function ManufacturerInstallationsPage() {
   const { organizationId } = await resolveManufacturerPageContext();
 
@@ -33,7 +35,7 @@ export default async function ManufacturerInstallationsPage() {
           orderBy: {
             createdAt: "desc",
           },
-          take: 200,
+          take: INITIAL_INSTALLATION_JOB_LIMIT,
           select: installationJobSelect,
         }),
         db.serviceCenter.findMany({
@@ -91,6 +93,7 @@ export default async function ManufacturerInstallationsPage() {
   return (
     <InstallationJobsClient
       initialJobs={jobs.map(serializeInstallationJobRow)}
+      initialJobLimit={INITIAL_INSTALLATION_JOB_LIMIT}
       serviceCenters={serviceCenters.map(serializeServiceCenterOption)}
       technicians={technicians.map((technician) =>
         serializeTechnicianOption({

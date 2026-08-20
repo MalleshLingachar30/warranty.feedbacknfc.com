@@ -41,6 +41,7 @@ import type {
 
 type InstallationJobsClientProps = {
   initialJobs: InstallationJobRow[];
+  initialJobLimit: number;
   serviceCenters: ServiceCenterOption[];
   technicians: TechnicianOption[];
 };
@@ -169,6 +170,7 @@ function toPlanValues(job: InstallationJobRow): JobPlanValues {
 
 export function InstallationJobsClient({
   initialJobs,
+  initialJobLimit,
   serviceCenters,
   technicians,
 }: InstallationJobsClientProps) {
@@ -273,9 +275,9 @@ export function InstallationJobsClient({
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
         <MetricCard
-          title="Open Jobs"
+          title="Recent Jobs"
           value={jobs.length.toLocaleString()}
-          description="All installation jobs in planning or execution"
+          description={`Latest ${initialJobLimit.toLocaleString()} installation jobs`}
           icon={WrenchIcon}
         />
         <MetricCard
@@ -305,8 +307,8 @@ export function InstallationJobsClient({
         <CardHeader>
           <CardTitle>Manufacturer Installation Queue</CardTitle>
           <CardDescription>
-            Plan assignments, monitor installer execution, and verify
-            report-driven activation for installation-driven assets.
+            Showing the latest installation jobs for fast planning, execution,
+            and report review.
           </CardDescription>
         </CardHeader>
         <CardContent>
