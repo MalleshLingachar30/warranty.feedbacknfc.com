@@ -89,6 +89,14 @@ type EventPlannerState = {
 };
 
 type WorkbenchView = "schedules" | "calendar" | "visits";
+type VisitFilterValue = string;
+type VisitStatusFilter =
+  | "all"
+  | "needs_scheduling"
+  | "scheduled"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
 
 const EMPTY_PLAN_FORM: PlanFormState = {
   productModelId: "",
@@ -431,6 +439,34 @@ function VisitDetailPanel({
   );
 }
 
+function matchesVisitStatusFilter(
+  event: PreventiveMaintenanceEventView,
+  statusFilter: VisitStatusFilter,
+) {
+  switch (statusFilter) {
+    case "all":
+      return true;
+    case "needs_scheduling":
+      return (
+        event.status !== "completed" &&
+        event.status !== "cancelled" &&
+        (["due", "due_soon", "overdue"].includes(event.displayStatus) ||
+          !event.assignedServiceCenter ||
+          !event.assignedTechnician)
+      );
+    case "scheduled":
+      return event.status === "scheduled";
+    case "in_progress":
+      return event.status === "in_progress";
+    case "completed":
+      return event.status === "completed";
+    case "cancelled":
+      return event.status === "cancelled";
+    default:
+      return true;
+  }
+}
+
 export function ManufacturerPmWorkbench({
   initialPlans,
   initialEvents,
@@ -459,6 +495,13 @@ export function ManufacturerPmWorkbench({
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(
     initialEvents[0]?.id ?? null,
   );
+  const [productFilter, setProductFilter] = useState<VisitFilterValue>("all");
+  const [serviceCenterFilter, setServiceCenterFilter] =
+    useState<VisitFilterValue>("all");
+  const [technicianFilter, setTechnicianFilter] =
+    useState<VisitFilterValue>("all");
+  const [statusFilter, setStatusFilter] =
+    useState<VisitStatusFilter>("all");
 
   const activePlanCount = plans.filter(
     (plan) => plan.status === "active",
@@ -488,14 +531,53 @@ export function ManufacturerPmWorkbench({
     [events],
   );
 
+  const filteredEvents = useMemo(
+    () =>
+      sortedEvents.filter((event) => {
+        const productMatches =
+          productFilter === "all" ||
+          event.asset.productModel.id === productFilter;
+        const serviceCenterMatches =
+          serviceCenterFilter === "all" ||
+          (serviceCenterFilter === "unassigned"
+            ? !event.assignedServiceCenter
+            : event.assignedServiceCenter?.id === serviceCenterFilter);
+        const technicianMatches =
+          technicianFilter === "all" ||
+          (technicianFilter === "unassigned"
+            ? !event.assignedTechnician
+            : event.assignedTechnician?.id === technicianFilter);
+
+        return (
+          productMatches &&
+          serviceCenterMatches &&
+          technicianMatches &&
+          matchesVisitStatusFilter(event, statusFilter)
+        );
+      }),
+    [
+      productFilter,
+      serviceCenterFilter,
+      sortedEvents,
+      statusFilter,
+      technicianFilter,
+    ],
+  );
+
+  const hasActiveFilters =
+    productFilter !== "all" ||
+    serviceCenterFilter !== "all" ||
+    technicianFilter !== "all" ||
+    statusFilter !== "all";
+
   const calendarDays = useMemo(
-    () => buildCalendarDays(calendarMonth, sortedEvents),
-    [calendarMonth, sortedEvents],
+    () => buildCalendarDays(calendarMonth, filteredEvents),
+    [calendarMonth, filteredEvents],
   );
 
   const visibleMonthVisits = useMemo(
     () =>
-      sortedEvents.filter((event) => {
+      filteredEvents.filter((event) => {
         const visitDate = getVisitDate(event);
 
         return (
@@ -504,13 +586,13 @@ export function ManufacturerPmWorkbench({
           visitDate.getMonth() === calendarMonth.getMonth()
         );
       }),
-    [calendarMonth, sortedEvents],
+    [calendarMonth, filteredEvents],
   );
 
   const selectedVisit =
-    events.find((event) => event.id === selectedVisitId) ??
+    filteredEvents.find((event) => event.id === selectedVisitId) ??
     visibleMonthVisits[0] ??
-    sortedEvents[0] ??
+    filteredEvents[0] ??
     null;
 
   const technicianWorkload = useMemo(() => {
@@ -728,6 +810,13 @@ export function ManufacturerPmWorkbench({
     } finally {
       setIsSavingEvent(false);
     }
+  };
+
+  const clearVisitFilters = () => {
+    setProductFilter("all");
+    setServiceCenterFilter("all");
+    setTechnicianFilter("all");
+    setStatusFilter("all");
   };
 
   return (
@@ -991,6 +1080,101 @@ export function ManufacturerPmWorkbench({
         />
       </div>
 
+      <Card className="mt-4 min-w-0">
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle>Visit Filters</CardTitle>
+              <CardDescription>
+                Showing {filteredEvents.length.toLocaleString()} of{" "}
+                {events.length.toLocaleString()} company visits.
+              </CardDescription>
+            </div>
+            {hasActiveFilters ? (
+              <Button variant="outline" size="sm" onClick={clearVisitFilters}>
+                Clear Filters
+              </Button>
+            ) : null}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="space-y-2 text-sm font-medium">
+              Product
+              <select
+                value={productFilter}
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                onChange={(event) => setProductFilter(event.target.value)}
+              >
+                <option value="all">All products</option>
+                {productModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                    {model.modelNumber ? ` (${model.modelNumber})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm font-medium">
+              Service center
+              <select
+                value={serviceCenterFilter}
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                onChange={(event) => setServiceCenterFilter(event.target.value)}
+              >
+                <option value="all">All service centers</option>
+                <option value="unassigned">Service center not assigned</option>
+                {serviceCenters.map((center) => (
+                  <option key={center.id} value={center.id}>
+                    {center.name}
+                    {center.city ? ` (${center.city})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm font-medium">
+              Technician
+              <select
+                value={technicianFilter}
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                onChange={(event) => setTechnicianFilter(event.target.value)}
+              >
+                <option value="all">All technicians</option>
+                <option value="unassigned">Technician not assigned</option>
+                {technicians.map((technician) => (
+                  <option key={technician.id} value={technician.id}>
+                    {technician.name}
+                    {technician.serviceCenterName
+                      ? ` (${technician.serviceCenterName})`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm font-medium">
+              Visit status
+              <select
+                value={statusFilter}
+                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                onChange={(event) =>
+                  setStatusFilter(event.target.value as VisitStatusFilter)
+                }
+              >
+                <option value="all">All visit statuses</option>
+                <option value="needs_scheduling">Needs scheduling</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="in_progress">In progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+          </div>
+        </CardContent>
+      </Card>
+
       <Tabs
         value={activeView}
         onValueChange={(value) => setActiveView(value as WorkbenchView)}
@@ -1248,17 +1432,19 @@ export function ManufacturerPmWorkbench({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedEvents.length === 0 ? (
+                    {filteredEvents.length === 0 ? (
                       <TableRow>
                         <TableCell
                           colSpan={5}
                           className="text-muted-foreground"
                         >
-                          No maintenance visits generated yet.
+                          {events.length === 0
+                            ? "No maintenance visits generated yet."
+                            : "No maintenance visits match the selected filters."}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      sortedEvents.map((event) => (
+                      filteredEvents.map((event) => (
                         <TableRow key={event.id}>
                           <TableCell>
                             <div className="space-y-1">
