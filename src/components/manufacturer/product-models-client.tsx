@@ -21,6 +21,7 @@ import {
 
 import { PageHeader } from "@/components/dashboard/page-header";
 import { TagInput } from "@/components/dashboard/tag-input";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -176,6 +177,53 @@ function formatPolicyOption(value: string) {
     .join(" ");
 }
 
+function getMaintenanceSchedules(model: ManufacturerProductModel) {
+  return model.maintenanceSchedules ?? [];
+}
+
+function MaintenanceScheduleSummary({
+  model,
+}: {
+  model: ManufacturerProductModel;
+}) {
+  const schedules = getMaintenanceSchedules(model);
+
+  if (schedules.length === 0) {
+    return (
+      <div className="space-y-1">
+        <Badge
+          variant="outline"
+          className="border-slate-200 bg-slate-50 text-slate-600"
+        >
+          No schedule
+        </Badge>
+        <p className="text-xs text-muted-foreground">
+          Add one from Maintenance.
+        </p>
+      </div>
+    );
+  }
+
+  const primarySchedule = schedules[0];
+
+  return (
+    <div className="min-w-48 space-y-1">
+      <p className="font-medium">{primarySchedule.frequencyLabel}</p>
+      <p className="text-xs text-muted-foreground">
+        {primarySchedule.eventTypeLabel} - {primarySchedule.name}
+      </p>
+      {schedules.length > 1 ? (
+        <Badge
+          variant="outline"
+          className="border-indigo-200 bg-indigo-50 text-indigo-700"
+        >
+          +{schedules.length - 1} more
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
 export function ProductModelsClient({
   initialModels,
   initialPolicyDefaults,
@@ -257,7 +305,7 @@ export function ProductModelsClient({
         const parsed = JSON.parse(formValues.includedKitDefinition) as unknown;
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           throw new Error(
-            "Included kit definition must be a JSON object when provided.",
+            "Included kit must be a valid kit configuration when provided.",
           );
         }
 
@@ -266,7 +314,7 @@ export function ProductModelsClient({
         setFormError(
           error instanceof Error
             ? error.message
-            : "Included kit definition JSON is invalid.",
+            : "Included kit configuration is invalid.",
         );
         return;
       }
@@ -373,11 +421,19 @@ export function ProductModelsClient({
       setModels((current) => {
         if (editingModelId) {
           return current.map((model) =>
-            model.id === editingModelId ? json.model! : model,
+            model.id === editingModelId
+              ? {
+                  ...json.model!,
+                  maintenanceSchedules:
+                    json.model!.maintenanceSchedules ??
+                    model.maintenanceSchedules ??
+                    [],
+                }
+              : model,
           );
         }
 
-        return [json.model!, ...current];
+        return [{ ...json.model!, maintenanceSchedules: [] }, ...current];
       });
 
       setDialogOpen(false);
@@ -461,6 +517,43 @@ export function ProductModelsClient({
                   Capture model details for warranty activation and allocation.
                 </DialogDescription>
               </DialogHeader>
+
+              {editingModel ? (
+                <div className="rounded-md border border-indigo-100 bg-indigo-50/60 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold">
+                        Maintenance schedule
+                      </p>
+                      {getMaintenanceSchedules(editingModel).length > 0 ? (
+                        <div className="space-y-2">
+                          {getMaintenanceSchedules(editingModel).map(
+                            (schedule) => (
+                              <div key={schedule.id} className="text-sm">
+                                <p className="font-medium">
+                                  {schedule.frequencyLabel}
+                                </p>
+                                <p className="text-muted-foreground">
+                                  {schedule.eventTypeLabel} - {schedule.name}
+                                </p>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          No schedule is attached to this product yet.
+                        </p>
+                      )}
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                      <a href="/dashboard/manufacturer/preventive-maintenance">
+                        Manage schedules
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="grid gap-4 py-2 md:grid-cols-2">
                 <div className="space-y-2">
@@ -983,7 +1076,7 @@ export function ProductModelsClient({
                   </div>
 
                   <label className="space-y-1 text-sm">
-                    <span>Included Kit Definition (JSON, optional)</span>
+                    <span>Included installation kit (optional)</span>
                     <Textarea
                       value={formValues.includedKitDefinition}
                       onChange={(event) =>
@@ -992,9 +1085,13 @@ export function ProductModelsClient({
                           includedKitDefinition: event.target.value,
                         }))
                       }
-                      placeholder='{"kitCode":"INSTALL-KIT-01","parts":[{"partCode":"P-1001","quantity":2}]}'
-                      className="min-h-28 font-mono text-xs"
+                      placeholder="Leave empty unless operations has provided a kit configuration."
+                      className="min-h-28"
                     />
+                    <span className="text-xs text-muted-foreground">
+                      Use this only when the model ships with predefined parts
+                      or accessories.
+                    </span>
                   </label>
                 </div>
               </div>
@@ -1035,8 +1132,8 @@ export function ProductModelsClient({
         <CardHeader>
           <CardTitle>Product Catalog</CardTitle>
           <CardDescription>
-            All manufacturer models with warranty metadata and active unit
-            volume.
+            All manufacturer models with warranty coverage, installed units, and
+            attached maintenance schedules.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1048,6 +1145,7 @@ export function ProductModelsClient({
                 <TableHead>Model Number</TableHead>
                 <TableHead>Activation</TableHead>
                 <TableHead>Warranty</TableHead>
+                <TableHead>Maintenance Schedule</TableHead>
                 <TableHead className="text-right">Total Units</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -1055,7 +1153,7 @@ export function ProductModelsClient({
             <TableBody>
               {models.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-muted-foreground">
+                  <TableCell colSpan={8} className="text-muted-foreground">
                     No product models found. Add your first model to begin
                     allocations.
                   </TableCell>
@@ -1072,6 +1170,9 @@ export function ProductModelsClient({
                       {formatPolicyOption(model.activationMode ?? "plug_and_play")}
                     </TableCell>
                     <TableCell>{model.warrantyDurationMonths} months</TableCell>
+                    <TableCell>
+                      <MaintenanceScheduleSummary model={model} />
+                    </TableCell>
                     <TableCell className="text-right">
                       {model.totalUnits.toLocaleString()}
                     </TableCell>

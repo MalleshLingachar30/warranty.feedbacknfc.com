@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { PmEventTimeline } from "@/components/preventive-maintenance/pm-event-timeline";
+import { formatPreventiveMaintenanceFrequency } from "@/lib/preventive-maintenance";
 import type {
   PreventiveMaintenanceCadenceType,
   PreventiveMaintenanceEventStatus,
@@ -197,6 +198,13 @@ function buildCadenceConfig(form: PlanFormState) {
   }
 
   return {};
+}
+
+function formatPlanFrequency(plan: PreventiveMaintenancePlanView) {
+  return formatPreventiveMaintenanceFrequency(
+    plan.cadenceType,
+    plan.cadenceConfig,
+  );
 }
 
 function eventSortRank(event: PreventiveMaintenanceEventView) {
@@ -379,15 +387,15 @@ export function ManufacturerPmWorkbench({
       const body = (await response.json()) as { error?: string };
 
       if (!response.ok) {
-        throw new Error(body.error ?? "Unable to regenerate PM events.");
+        throw new Error(body.error ?? "Unable to refresh maintenance visits.");
       }
 
       await refreshEvents();
     } catch (requestError) {
       setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to regenerate PM events.",
+          requestError instanceof Error
+            ? requestError.message
+          : "Unable to refresh maintenance visits.",
       );
     } finally {
       setIsRegenerating(false);
@@ -443,7 +451,7 @@ export function ManufacturerPmWorkbench({
       };
 
       if (!response.ok || !body.event) {
-        throw new Error(body.error ?? "Unable to update PM event.");
+        throw new Error(body.error ?? "Unable to update maintenance visit.");
       }
 
       setEvents((current) =>
@@ -456,7 +464,7 @@ export function ManufacturerPmWorkbench({
       setError(
         requestError instanceof Error
           ? requestError.message
-          : "Unable to update PM event.",
+          : "Unable to update maintenance visit.",
       );
     } finally {
       setIsSavingEvent(false);
@@ -466,8 +474,8 @@ export function ManufacturerPmWorkbench({
   return (
     <div className="min-w-0 max-w-full overflow-x-hidden">
       <PageHeader
-        title="Preventive Maintenance"
-        description="Create product-model schedules, regenerate events, and dispatch upcoming PM visits."
+        title="Maintenance Schedules"
+        description="Attach service frequency to product models and track the visits created for installed assets."
         actions={
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
@@ -480,20 +488,21 @@ export function ManufacturerPmWorkbench({
               ) : (
                 <RotateCcw className="size-4" />
               )}
-              Regenerate Events
+              Refresh Visits
             </Button>
             <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
               <DialogTrigger asChild>
                 <Button disabled={productModels.length === 0}>
                   <Plus className="size-4" />
-                  New Plan
+                  New Schedule
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Create PM Plan</DialogTitle>
+                  <DialogTitle>Create Product Schedule</DialogTitle>
                   <DialogDescription>
-                    Attach recurring maintenance rules to one product model.
+                    Choose the product model and how often installed assets
+                    should be serviced.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-2">
@@ -519,7 +528,7 @@ export function ManufacturerPmWorkbench({
                       </select>
                     </label>
                     <label className="space-y-2 text-sm font-medium">
-                      Plan name
+                      Schedule name
                       <Input
                         value={planForm.name}
                         onChange={(event) =>
@@ -535,7 +544,7 @@ export function ManufacturerPmWorkbench({
 
                   <div className="grid gap-2 sm:grid-cols-3">
                     <label className="space-y-2 text-sm font-medium">
-                      Event type
+                      Service type
                       <select
                         value={planForm.eventType}
                         className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
@@ -554,7 +563,7 @@ export function ManufacturerPmWorkbench({
                       </select>
                     </label>
                     <label className="space-y-2 text-sm font-medium">
-                      Cadence
+                      Frequency type
                       <select
                         value={planForm.cadenceType}
                         className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
@@ -566,13 +575,15 @@ export function ManufacturerPmWorkbench({
                           }))
                         }
                       >
-                        <option value="interval_days">Interval days</option>
-                        <option value="month_offsets">Month offsets</option>
-                        <option value="manual">Manual only</option>
+                        <option value="interval_days">Every N days</option>
+                        <option value="month_offsets">
+                          Specific months after installation
+                        </option>
+                        <option value="manual">Manual scheduling</option>
                       </select>
                     </label>
                     <label className="space-y-2 text-sm font-medium">
-                      Due soon days
+                      Show as due soon (days before)
                       <Input
                         type="number"
                         min="1"
@@ -589,7 +600,7 @@ export function ManufacturerPmWorkbench({
 
                   {planForm.cadenceType === "interval_days" ? (
                     <label className="space-y-2 text-sm font-medium">
-                      Interval days
+                      Repeat every (days)
                       <Input
                         type="number"
                         min="1"
@@ -606,7 +617,7 @@ export function ManufacturerPmWorkbench({
 
                   {planForm.cadenceType === "month_offsets" ? (
                     <label className="space-y-2 text-sm font-medium">
-                      Month offsets
+                      Service months after installation
                       <Input
                         value={planForm.monthOffsets}
                         onChange={(event) =>
@@ -631,11 +642,11 @@ export function ManufacturerPmWorkbench({
                         }))
                       }
                     />
-                    Customer acknowledgement required
+                    Customer sign-off required
                   </label>
 
                   <label className="space-y-2 text-sm font-medium">
-                    Checklist template
+                    Service checklist
                     <Textarea
                       value={planForm.checklistTemplate}
                       className="min-h-28"
@@ -649,7 +660,7 @@ export function ManufacturerPmWorkbench({
                   </label>
 
                   <label className="space-y-2 text-sm font-medium">
-                    Calibration template
+                    Calibration checklist
                     <Textarea
                       value={planForm.calibrationTemplate}
                       className="min-h-20"
@@ -679,7 +690,7 @@ export function ManufacturerPmWorkbench({
                     onClick={() => void createPlan()}
                     disabled={isSavingPlan || !planForm.productModelId}
                   >
-                    {isSavingPlan ? "Creating..." : "Create Plan"}
+                    {isSavingPlan ? "Creating..." : "Create Schedule"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -696,27 +707,27 @@ export function ManufacturerPmWorkbench({
 
       <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Active Plans"
+          title="Product Schedules"
           value={activePlanCount.toLocaleString()}
-          description="Product model maintenance rules"
+          description="Product models with service frequency"
           icon={SlidersHorizontal}
         />
         <MetricCard
-          title="Due Queue"
+          title="Due Visits"
           value={dueCount.toLocaleString()}
-          description="Due, due soon, or overdue visits"
+          description="Due, due soon, or overdue"
           icon={CalendarClock}
         />
         <MetricCard
           title="Scheduled"
           value={scheduledCount.toLocaleString()}
-          description="Assigned to service execution"
+          description="Assigned to service teams"
           icon={RefreshCw}
         />
         <MetricCard
           title="Completed"
           value={completedCount.toLocaleString()}
-          description="Finished PM events in this view"
+          description="Finished maintenance visits"
           icon={XCircle}
         />
       </div>
@@ -724,9 +735,10 @@ export function ManufacturerPmWorkbench({
       <div className="mt-4 grid min-w-0 gap-4 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)]">
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle>Plans</CardTitle>
+            <CardTitle>Product Maintenance Schedules</CardTitle>
             <CardDescription>
-              Recurring rules used during install completion and regeneration.
+              Each schedule is attached to a product model. Installed assets
+              follow it automatically.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -734,16 +746,16 @@ export function ManufacturerPmWorkbench({
               <Table className="min-w-[560px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Cadence</TableHead>
-                    <TableHead className="text-right">Events</TableHead>
+                    <TableHead>Product Schedule</TableHead>
+                    <TableHead>Frequency</TableHead>
+                    <TableHead className="text-right">Visits</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {plans.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={3} className="text-muted-foreground">
-                        No preventive maintenance plans created yet.
+                        No maintenance schedules created yet.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -769,9 +781,9 @@ export function ManufacturerPmWorkbench({
                         </TableCell>
                         <TableCell>
                           <div className="space-y-1 text-sm">
-                            <p>{plan.eventTypeLabel}</p>
+                            <p>{formatPlanFrequency(plan)}</p>
                             <p className="text-xs text-muted-foreground">
-                              {plan.cadenceTypeLabel}
+                              {plan.eventTypeLabel}
                             </p>
                           </div>
                         </TableCell>
@@ -789,9 +801,9 @@ export function ManufacturerPmWorkbench({
 
         <Card className="min-w-0">
           <CardHeader>
-            <CardTitle>Event Queue</CardTitle>
+            <CardTitle>Scheduled Maintenance Visits</CardTitle>
             <CardDescription>
-              Assign service centers, schedule technicians, or cancel PM events.
+              Visits generated from product schedules for installed assets.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -799,7 +811,7 @@ export function ManufacturerPmWorkbench({
               <Table className="min-w-[820px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Event</TableHead>
+                    <TableHead>Visit</TableHead>
                     <TableHead>Due</TableHead>
                     <TableHead>Assignment</TableHead>
                     <TableHead>Status</TableHead>
@@ -810,7 +822,7 @@ export function ManufacturerPmWorkbench({
                   {sortedEvents.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-muted-foreground">
-                        No generated PM events yet.
+                        No maintenance visits generated yet.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -867,7 +879,7 @@ export function ManufacturerPmWorkbench({
                               event.status === "cancelled"
                             }
                           >
-                            Plan
+                            Schedule Visit
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -886,11 +898,11 @@ export function ManufacturerPmWorkbench({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Plan PM Event</DialogTitle>
+            <DialogTitle>Schedule Maintenance Visit</DialogTitle>
             <DialogDescription>
               {plannerEvent
                 ? `${plannerEvent.eventNumber} for ${plannerEvent.asset.productModel.name}`
-                : "Update assignment and schedule."}
+                : "Update service assignment and visit timing."}
             </DialogDescription>
           </DialogHeader>
           {eventPlanner ? (
@@ -948,7 +960,7 @@ export function ManufacturerPmWorkbench({
               </label>
 
               <label className="space-y-2 text-sm font-medium">
-                Scheduled for
+                Visit date and time
                 <Input
                   type="datetime-local"
                   value={eventPlanner.scheduledFor}
@@ -1003,13 +1015,13 @@ export function ManufacturerPmWorkbench({
               onClick={() => void saveEventPlan("cancelled")}
               disabled={isSavingEvent}
             >
-              Cancel Event
+              Cancel Visit
             </Button>
             <Button
               onClick={() => void saveEventPlan()}
               disabled={isSavingEvent}
             >
-              {isSavingEvent ? "Saving..." : "Save Plan"}
+              {isSavingEvent ? "Saving..." : "Save Visit"}
             </Button>
           </DialogFooter>
         </DialogContent>

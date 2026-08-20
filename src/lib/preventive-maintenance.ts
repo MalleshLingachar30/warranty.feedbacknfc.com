@@ -204,6 +204,43 @@ export function formatPreventiveMaintenanceLabel(value: string) {
     .join(" ");
 }
 
+export function formatPreventiveMaintenanceFrequency(
+  cadenceType: PreventiveMaintenanceCadenceType,
+  cadenceConfig: unknown,
+) {
+  const record = asRecord(cadenceConfig);
+
+  if (cadenceType === "interval_days") {
+    const intervalDays = readPositiveInteger(record.intervalDays);
+
+    if (!intervalDays) {
+      return "Frequency needs setup";
+    }
+
+    return `Every ${intervalDays} days`;
+  }
+
+  if (cadenceType === "month_offsets") {
+    const monthOffsets = Array.isArray(record.monthOffsets)
+      ? uniquePositiveIntegers(record.monthOffsets)
+      : [];
+
+    if (monthOffsets.length === 0) {
+      return "Frequency needs setup";
+    }
+
+    if (monthOffsets.length === 1) {
+      return `Month ${monthOffsets[0]} after installation`;
+    }
+
+    const finalMonth = monthOffsets[monthOffsets.length - 1];
+    const leadingMonths = monthOffsets.slice(0, -1).join(", ");
+    return `Months ${leadingMonths} and ${finalMonth} after installation`;
+  }
+
+  return "Scheduled manually";
+}
+
 export function formatPreventiveMaintenanceEventNumber(sequence: number) {
   if (!Number.isInteger(sequence) || sequence < 1) {
     throw new Error("PM event sequence must be a positive integer.");

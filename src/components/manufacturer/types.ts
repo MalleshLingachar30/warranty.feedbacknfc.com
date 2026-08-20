@@ -2,6 +2,9 @@ import type {
   AssetLifecycleState,
   InstallationJobStatus,
   InstallationReportSubmitterRole,
+  PreventiveMaintenanceCadenceType,
+  PreventiveMaintenanceEventType,
+  PreventiveMaintenancePlanStatus,
   SaleRegistrationChannel,
   SaleRegistrationStatus,
 } from "@prisma/client";
@@ -86,8 +89,21 @@ export type ManufacturerProductModel = {
   requiredGeoCapture?: boolean;
   defaultInstallerSkillTags?: string[];
   includedKitDefinition?: Record<string, unknown>;
+  maintenanceSchedules?: ManufacturerProductMaintenanceSchedule[];
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type ManufacturerProductMaintenanceSchedule = {
+  id: string;
+  name: string;
+  eventType: PreventiveMaintenanceEventType;
+  eventTypeLabel: string;
+  status: PreventiveMaintenancePlanStatus;
+  statusLabel: string;
+  cadenceType: PreventiveMaintenanceCadenceType;
+  frequencyLabel: string;
+  eventCount: number;
 };
 
 export type TagGenerationBatchRow = {

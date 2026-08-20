@@ -5,6 +5,10 @@ import { type ManufacturerProductModel } from "@/components/manufacturer/types";
 import { db } from "@/lib/db";
 import { normalizeManufacturerPolicyDefaults } from "@/lib/manufacturer-policy";
 import { productCatalogSeed } from "@/lib/mock/manufacturer-dashboard";
+import {
+  formatPreventiveMaintenanceFrequency,
+  formatPreventiveMaintenanceLabel,
+} from "@/lib/preventive-maintenance";
 
 import {
   jsonStringArray,
@@ -50,6 +54,7 @@ function seedToProductModel(): ManufacturerProductModel[] {
     requiredGeoCapture: item.requiredGeoCapture,
     defaultInstallerSkillTags: item.defaultInstallerSkillTags,
     includedKitDefinition: item.includedKitDefinition,
+    maintenanceSchedules: [],
   }));
 }
 
@@ -95,6 +100,27 @@ export default async function ManufacturerProductsPage() {
           requiredGeoCapture: true,
           defaultInstallerSkillTags: true,
           includedKitDefinition: true,
+          preventiveMaintenancePlans: {
+            where: {
+              status: "active",
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+            select: {
+              id: true,
+              name: true,
+              eventType: true,
+              status: true,
+              cadenceType: true,
+              cadenceConfig: true,
+              _count: {
+                select: {
+                  events: true,
+                },
+              },
+            },
+          },
           createdAt: true,
           updatedAt: true,
           _count: {
@@ -165,6 +191,20 @@ export default async function ManufacturerProductsPage() {
         row.includedKitDefinition !== null
           ? (row.includedKitDefinition as Record<string, unknown>)
           : {},
+      maintenanceSchedules: row.preventiveMaintenancePlans.map((plan) => ({
+        id: plan.id,
+        name: plan.name,
+        eventType: plan.eventType,
+        eventTypeLabel: formatPreventiveMaintenanceLabel(plan.eventType),
+        status: plan.status,
+        statusLabel: formatPreventiveMaintenanceLabel(plan.status),
+        cadenceType: plan.cadenceType,
+        frequencyLabel: formatPreventiveMaintenanceFrequency(
+          plan.cadenceType,
+          plan.cadenceConfig,
+        ),
+        eventCount: plan._count.events,
+      })),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     }));
